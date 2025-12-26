@@ -7,9 +7,9 @@
 [![Tests](https://img.shields.io/badge/tests-314%20passing-brightgreen)](test/)
 [![Coverage](https://img.shields.io/badge/coverage-89.9%25-brightgreen)](test/)
 
-A TypeScript/Node.js wrapper for the [Kling AI API](https://docs.qingque.cn/d/home/eZQClXt3RYb4VTjqEfcGBIvEG) that provides easy access to video generation, image generation, image expansion, and avatar/talking head creation.
+A TypeScript/Node.js wrapper for the [Kling AI API](https://docs.qingque.cn/d/home/eZQClXt3RYb4VTjqEfcGBIvEG) for video generation, image generation, image expansion, and avatar/talking head creation.
 
-This service follows the data-collection architecture pattern with JWT authentication, organized data storage, automatic polling, retry logic with exponential backoff, and comprehensive validation.
+This service follows the data-collection architecture pattern with JWT authentication, organized data storage, automatic polling, retry logic with exponential backoff, and parameter validation.
 
 ## Quick Start
 
@@ -35,7 +35,7 @@ const result = await api.waitForVideoResult(task.data.task_id);
 console.log('Video URL:', result.data.task_result.videos[0].url);
 ```
 
-Full TypeScript support with exported types for all parameters and responses.
+TypeScript support with exported types for all parameters and responses.
 
 ## Table of Contents
 
@@ -62,19 +62,19 @@ Full TypeScript support with exported types for all parameters and responses.
 
 ## Overview
 
-The Kling AI API provides access to state-of-the-art video and image generation models. This Node.js wrapper implements:
+The Kling AI API provides access to video and image generation models. This Node.js wrapper implements:
 
 - **5 Feature Areas** - Text-to-video, image-to-video, image generation, image expansion, avatar creation
 - **19+ Model Variants** - Multiple versions across all feature areas with different capabilities
-- **JWT Authentication** - Automatic token generation with intelligent caching (30-minute expiry, 5-minute buffer)
-- **Production Security** - API key redaction, error sanitization, HTTPS enforcement, SSRF protection
+- **JWT Authentication** - Automatic token generation with caching (30-minute expiry, 5-minute buffer)
+- **Security** - API key redaction, error sanitization, HTTPS enforcement, SSRF protection
 - **Parameter Validation** - Pre-flight validation catches invalid parameters before API calls
 - **Auto-polling with Spinner** - Automatic result polling with animated progress indicator
 - **Retry Logic** - Exponential backoff for transient errors (502, 503, 504)
 - **Image/Audio Input Support** - Convert local files or URLs to base64 with validation
 - **Organized Storage** - Structured directories with timestamped files and metadata
-- **Full TypeScript Support** - Complete type definitions for all API methods, parameters, and responses
-- **Comprehensive Testing** - 314 tests with 89.9% coverage
+- **TypeScript** - Type definitions for all API methods, parameters, and responses
+- **Testing** - 314 tests with 89.9% coverage
 
 ## Features
 
@@ -162,7 +162,7 @@ echo "KLING_SECRET_KEY=your_secret_key_here" >> ~/.kling/.env
 
 ## TypeScript Support
 
-This package is written in TypeScript and includes full type definitions.
+This package is written in TypeScript and includes type definitions.
 
 ### Exported Types
 
@@ -565,7 +565,7 @@ const task = await api.textToVideo({
 
 ## Examples
 
-### Example 1: Complete Text-to-Video Workflow
+### Example 1: Text-to-Video Workflow
 
 ```typescript
 import { KlingAPI } from 'kling-api';
