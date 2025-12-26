@@ -12,7 +12,7 @@ import {
   saveMetadata,
   ensureDirectory,
   generateFilename,
-} from '../utils.js';
+} from '../utils/index.js';
 import type {
   VideoTaskResult,
   ImageTaskResult,

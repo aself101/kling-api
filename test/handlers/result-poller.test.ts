@@ -16,8 +16,8 @@ import type { VideoTaskResult, ImageTaskResult } from '../../src/types.js';
 import { DEFAULT_POLL_INTERVAL_MS, DEFAULT_POLL_TIMEOUT_MS } from '../test-constants.js';
 
 // Mock the utils module for pollWithSpinner
-vi.mock('../../src/utils.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../src/utils.js')>();
+vi.mock('../../src/utils/index.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../src/utils/index.js')>();
   return {
     ...actual,
     pollWithSpinner: vi.fn(),
@@ -25,7 +25,7 @@ vi.mock('../../src/utils.js', async (importOriginal) => {
 });
 
 // Import the mocked function
-import { pollWithSpinner } from '../../src/utils.js';
+import { pollWithSpinner } from '../../src/utils/index.js';
 
 describe('Result Polling Handlers', () => {
   const mockTaskId = 'task-12345';

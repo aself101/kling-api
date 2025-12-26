@@ -11,7 +11,7 @@ import {
   audioToBase64,
   processMediaSource,
   copyOptionalParams,
-} from '../utils.js';
+} from '../utils/index.js';
 import type {
   AvatarParams,
   TaskResponse,

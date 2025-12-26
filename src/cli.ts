@@ -42,7 +42,7 @@ import {
   generateFilename,
   saveMetadata,
   logger,
-} from './utils.js';
+} from './utils/index.js';
 import type {
   TextToVideoParams,
   ImageToVideoParams,

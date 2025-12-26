@@ -15,7 +15,7 @@ import {
   imageToBase64,
   processMediaSource,
   copyOptionalParams,
-} from '../utils.js';
+} from '../utils/index.js';
 import type {
   ImageGenParams,
   ImageExpandParams,

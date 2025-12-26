@@ -10,7 +10,7 @@ import {
   DEFAULT_POLL_TIMEOUT,
   ERROR_CODES,
 } from '../config/index.js';
-import { pollWithSpinner } from '../utils.js';
+import { pollWithSpinner } from '../utils/index.js';
 import type {
   VideoTaskResult,
   ImageTaskResult,

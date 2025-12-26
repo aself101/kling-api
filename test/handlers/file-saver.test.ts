@@ -14,7 +14,7 @@ import { saveVideoResult, saveImageResult } from '../../src/handlers/file-saver.
 import type { VideoTaskResult, ImageTaskResult } from '../../src/types.js';
 
 // Mock the utils module
-vi.mock('../../src/utils.js', () => ({
+vi.mock('../../src/utils/index.js', () => ({
   downloadVideo: vi.fn(),
   downloadImage: vi.fn(),
   saveMetadata: vi.fn(),
@@ -29,7 +29,7 @@ import {
   saveMetadata,
   ensureDirectory,
   generateFilename,
-} from '../../src/utils.js';
+} from '../../src/utils/index.js';
 
 describe('File Saving Handlers', () => {
   const mockOutputDir = '/tmp/kling-test-output';

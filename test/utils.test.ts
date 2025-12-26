@@ -30,7 +30,7 @@ import {
   audioToBase64,
   downloadVideo,
   downloadImage,
-} from '../src/utils.js';
+} from '../src/utils/index.js';
 
 // Mock axios for download tests
 vi.mock('axios', async () => {

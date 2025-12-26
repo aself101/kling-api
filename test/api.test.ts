@@ -9,7 +9,7 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import { KlingAPI, KlingAPIError } from '../src/api.js';
 import { ERROR_CODES } from '../src/config/index.js';
-import * as utils from '../src/utils.js';
+import * as utils from '../src/utils/index.js';
 
 // Mock axios - isAxiosError must be on both default export and as named export
 // because production code uses axios.isAxiosError() via the default import

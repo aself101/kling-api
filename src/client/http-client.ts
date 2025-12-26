@@ -15,7 +15,7 @@ import {
   ERROR_CODES,
   loadCredentials,
 } from '../config/index.js';
-import { sanitizeError, isProduction, logger, BACKOFF_BASE_MS } from '../utils.js';
+import { sanitizeError, isProduction, logger, BACKOFF_BASE_MS } from '../utils/index.js';
 import type { KlingConfig } from '../types.js';
 
 /**
