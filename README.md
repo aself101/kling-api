@@ -4,10 +4,10 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node.js Version](https://img.shields.io/node/v/kling-api)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
-[![Tests](https://img.shields.io/badge/tests-370%20passing-brightgreen)](test/)
-[![Coverage](https://img.shields.io/badge/coverage-90.68%25-brightgreen)](test/)
+[![Tests](https://img.shields.io/badge/tests-497%20passing-brightgreen)](test/)
+[![Coverage](https://img.shields.io/badge/coverage-91.47%25-brightgreen)](test/)
 
-A TypeScript/Node.js wrapper for the [Kling AI API](https://docs.qingque.cn/d/home/eZQClXt3RYb4VTjqEfcGBIvEG) for video generation, image generation, image expansion, and avatar/talking head creation.
+A TypeScript SDK and CLI tool for the [Kling AI API](https://docs.qingque.cn/d/home/eZQClXt3RYb4VTjqEfcGBIvEG) for video generation, image generation, image expansion, and avatar/talking head creation.
 
 This service follows the data-collection architecture pattern with JWT authentication, organized data storage, automatic polling, retry logic with exponential backoff, and parameter validation.
 
@@ -35,6 +35,22 @@ const result = await api.waitForVideoResult(task.data.task_id);
 console.log('Video URL:', result.data.task_result.videos[0].url);
 ```
 
+### CLI Usage
+
+```bash
+# Install globally
+npm install -g kling-api
+
+# Generate a video from text
+kling video text2video --prompt "A cat playing piano" --model kling-v2-master --wait
+
+# Generate from image
+kling video image2video --image ./photo.jpg --prompt "Make it come alive" --wait
+
+# See all commands
+kling --help
+```
+
 TypeScript support with exported types for all parameters and responses.
 
 ## Table of Contents
@@ -42,6 +58,7 @@ TypeScript support with exported types for all parameters and responses.
 - [Overview](#overview)
 - [Features](#features)
 - [Installation](#installation)
+- [CLI Usage](#cli-usage)
 - [Authentication Setup](#authentication-setup)
 - [TypeScript Support](#typescript-support)
 - [API Methods](#api-methods)
@@ -94,7 +111,7 @@ The Kling AI API provides access to video and image generation models. This Node
 - **Image/Audio Input Support** - Convert local files or URLs to base64 with validation
 - **Organized Storage** - Structured directories with timestamped files and metadata
 - **TypeScript** - Type definitions for all API methods, parameters, and responses
-- **Testing** - 370 tests with 90.68% coverage
+- **Testing** - 497 tests with 91.47% coverage
 
 ## Features
 
@@ -121,14 +138,237 @@ The Kling AI API provides access to video and image generation models. This Node
 ## Installation
 
 ```bash
-# Install from npm
+# Install as a dependency in your project
 npm install kling-api
 
-# Or install locally in your project
-npm install kling-api --save
+# Or install globally for CLI usage
+npm install -g kling-api
 ```
 
 **Requirements**: Node.js >= 18.0.0
+
+## CLI Usage
+
+The `kling` CLI provides a command-line interface for video generation.
+
+### Global Options
+
+```bash
+kling [options] [command]
+
+Options:
+  -V, --version       Output version number
+  --access-key <key>  Kling API access key (overrides env var)
+  --secret-key <key>  Kling API secret key (overrides env var)
+  --output-dir <dir>  Output directory for generated files
+  --debug             Enable debug logging
+  --examples          Show usage examples
+  -h, --help          Display help
+```
+
+### Video Commands
+
+#### Text-to-Video
+
+```bash
+kling video text2video [options]
+# Alias: kling video t2v
+
+Options:
+  -p, --prompt <text...>        Text prompt(s) - can specify multiple
+  -m, --model <name>            Model: kling-v1, kling-v1-6, kling-v2-master,
+                                kling-v2-1-master, kling-v2-5-turbo, kling-v2-6
+  -n, --negative-prompt <text>  Negative prompt
+  --mode <mode>                 Generation mode: std, pro (default: std)
+  -a, --aspect-ratio <ratio>    Aspect ratio: 16:9, 9:16, 1:1
+  -d, --duration <seconds>      Duration: 5, 10
+  --sound <on|off>              Enable sound generation (v2.6 only)
+  --camera-type <type>          Camera preset (v1.6 only)
+  --camera-horizontal <n>       Camera horizontal movement (-10 to 10)
+  --camera-vertical <n>         Camera vertical movement (-10 to 10)
+  --camera-pan <n>              Camera pan (-10 to 10)
+  --camera-tilt <n>             Camera tilt (-10 to 10)
+  --camera-roll <n>             Camera roll (-10 to 10)
+  --camera-zoom <n>             Camera zoom (-10 to 10)
+  -w, --wait                    Wait for generation to complete
+  --no-download                 Do not download the result
+```
+
+**Examples:**
+
+```bash
+# Basic text-to-video
+kling video t2v --prompt "a cat playing piano" --wait
+
+# With model and options
+kling video t2v \
+  --prompt "cinematic landscape" \
+  --model kling-v2-master \
+  --aspect-ratio 16:9 \
+  --duration 10 \
+  --mode pro \
+  --wait
+
+# With sound (v2.6 only)
+kling video t2v \
+  --prompt "ocean waves crashing" \
+  --model kling-v2-6 \
+  --sound on \
+  --wait
+
+# With camera control (v1.6)
+kling video t2v \
+  --prompt "flying through clouds" \
+  --model kling-v1-6 \
+  --camera-type forward_up \
+  --wait
+```
+
+#### Image-to-Video
+
+```bash
+kling video image2video [options]
+# Alias: kling video i2v
+
+Options:
+  -i, --image <path>            Input image path or URL
+  -p, --prompt <text...>        Text prompt(s)
+  -m, --model <name>            Model name
+  -n, --negative-prompt <text>  Negative prompt
+  --mode <mode>                 Generation mode: std, pro
+  -d, --duration <seconds>      Duration: 5, 10
+  --image-tail <path>           End frame image (pro mode only)
+  --camera-*                    Camera control options (same as text2video)
+  -w, --wait                    Wait for generation to complete
+```
+
+**Examples:**
+
+```bash
+# Basic image-to-video
+kling video i2v --image ./photo.jpg --prompt "make it come alive" --wait
+
+# With end frame (pro mode)
+kling video i2v \
+  --image ./start.jpg \
+  --image-tail ./end.jpg \
+  --mode pro \
+  --wait
+```
+
+#### Video Extension
+
+```bash
+kling video extend [options]
+
+Options:
+  --video-id <id>               Video ID to extend
+  -p, --prompt <text>           Prompt for extension
+  -n, --negative-prompt <text>  Negative prompt
+  --cfg-scale <number>          CFG scale (0-1)
+  -w, --wait                    Wait for generation to complete
+```
+
+**Example:**
+
+```bash
+kling video extend --video-id abc123 --prompt "continue with more action" --wait
+```
+
+#### Multi-Image-to-Video
+
+```bash
+kling video multi-image [options]
+# Alias: kling video mi2v
+
+Options:
+  --images <paths...>           Input image paths (2-4 images)
+  -p, --prompt <text>           Text prompt
+  -m, --model <name>            Model name (default: kling-v1-6)
+  --mode <mode>                 Generation mode: std, pro
+  -a, --aspect-ratio <ratio>    Aspect ratio
+  -d, --duration <seconds>      Duration: 5, 10
+  -w, --wait                    Wait for generation to complete
+```
+
+**Example:**
+
+```bash
+kling video mi2v \
+  --images ./img1.jpg --images ./img2.jpg \
+  --prompt "smooth transition between scenes" \
+  --wait
+```
+
+#### Omni Video
+
+```bash
+kling video omni [options]
+
+Options:
+  -p, --prompt <text>           Prompt with template syntax
+                                (use <<<image_1>>>, <<<element_1>>> for refs)
+  --images <paths...>           Reference images
+  --elements <ids...>           Element IDs
+  -m, --model <name>            Model (default: kling-video-o1)
+  -a, --aspect-ratio <ratio>    Aspect ratio
+  -d, --duration <seconds>      Duration: 5, 10
+  -w, --wait                    Wait for generation to complete
+```
+
+**Example:**
+
+```bash
+kling video omni \
+  --prompt "A video featuring <<<image_1>>>" \
+  --images ./reference.jpg \
+  --wait
+```
+
+### CLI Authentication
+
+Credentials can be provided in priority order:
+
+```bash
+# 1. CLI flags (highest priority)
+kling video t2v --access-key YOUR_KEY --secret-key YOUR_SECRET --prompt "test"
+
+# 2. Environment variables
+export KLING_ACCESS_KEY=your_access_key
+export KLING_SECRET_KEY=your_secret_key
+kling video t2v --prompt "test"
+
+# 3. Local .env file
+echo "KLING_ACCESS_KEY=..." > .env
+echo "KLING_SECRET_KEY=..." >> .env
+
+# 4. Global config
+mkdir -p ~/.kling
+echo "KLING_ACCESS_KEY=..." > ~/.kling/.env
+echo "KLING_SECRET_KEY=..." >> ~/.kling/.env
+```
+
+### Batch Processing
+
+Process multiple prompts in a single command:
+
+```bash
+kling video t2v \
+  --prompt "a red car" \
+  --prompt "a blue car" \
+  --prompt "a green car" \
+  --wait
+```
+
+### View Examples
+
+```bash
+# Show all CLI examples
+kling --examples
+
+# Show video command examples
+kling video examples
+```
 
 ## Authentication Setup
 

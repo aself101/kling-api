@@ -12,10 +12,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import axios from 'axios';
 import { KlingHttpClient } from '../../src/client/http-client.js';
 import { KlingAPIError } from '../../src/errors.js';
-import { ERROR_CODES } from '../../src/config/index.js';
 import {
   FIRST_RETRY_DELAY_MS,
   SECOND_RETRY_DELAY_MS,
+  THIRD_RETRY_DELAY_MS,
   MAX_RETRY_ATTEMPTS,
   RETRYABLE_STATUS_CODES,
   NON_RETRYABLE_STATUS_CODES,
@@ -277,6 +277,52 @@ describe('KlingHttpClient', () => {
       expect(client.client.post).toHaveBeenCalledTimes(MAX_RETRY_ATTEMPTS);
     });
 
+    it('should retry exactly 3 times, not 2 or 4', async () => {
+      // This test explicitly verifies the retry boundary behavior
+      const mockError = {
+        response: { status: 503, data: { code: 503, message: 'Service Unavailable' } },
+      };
+      vi.mocked(client.client.post).mockRejectedValue(mockError);
+      vi.mocked(axios.isAxiosError).mockReturnValue(true);
+
+      let promiseResolved = false;
+      let promiseRejected = false;
+      const requestPromise = client
+        .request('POST', '/v1/test', {})
+        .then(() => {
+          promiseResolved = true;
+        })
+        .catch(() => {
+          promiseRejected = true;
+        });
+
+      // After initial request - should have made 1 attempt
+      await vi.advanceTimersByTimeAsync(0);
+      expect(client.client.post).toHaveBeenCalledTimes(1);
+      expect(promiseRejected).toBe(false); // Still retrying
+
+      // After first retry delay (2000ms) - should have made 2 attempts
+      await vi.advanceTimersByTimeAsync(FIRST_RETRY_DELAY_MS);
+      expect(client.client.post).toHaveBeenCalledTimes(2);
+      expect(promiseRejected).toBe(false); // Still retrying
+
+      // After second retry delay (4000ms) - should have made 3 attempts (MAX)
+      await vi.advanceTimersByTimeAsync(SECOND_RETRY_DELAY_MS);
+      expect(client.client.post).toHaveBeenCalledTimes(3);
+
+      await requestPromise;
+
+      // Verify it stopped at exactly 3 attempts
+      expect(client.client.post).toHaveBeenCalledTimes(MAX_RETRY_ATTEMPTS);
+      expect(MAX_RETRY_ATTEMPTS).toBe(3); // Explicit assertion on the constant itself
+      expect(promiseRejected).toBe(true);
+      expect(promiseResolved).toBe(false);
+
+      // Verify no additional calls were made
+      await vi.advanceTimersByTimeAsync(THIRD_RETRY_DELAY_MS);
+      expect(client.client.post).toHaveBeenCalledTimes(3); // Still 3, not 4
+    });
+
     it.each(NON_RETRYABLE_STATUS_CODES)(
       'should NOT retry on %d status code',
       async (statusCode) => {
@@ -341,6 +387,82 @@ describe('KlingHttpClient', () => {
       vi.mocked(axios.isAxiosError).mockReturnValue(false);
 
       await expect(client.request('POST', '/v1/test', {})).rejects.toThrow('Custom error');
+    });
+
+    it('should sanitize error messages in production mode', async () => {
+      // Save original NODE_ENV
+      const originalNodeEnv = process.env.NODE_ENV;
+
+      try {
+        // Set production mode
+        process.env.NODE_ENV = 'production';
+
+        // Create a new client instance after setting production mode
+        const productionClient = new KlingHttpClient();
+
+        // Error with sensitive information that should be sanitized
+        const mockError = {
+          response: {
+            status: 500,
+            data: {
+              code: 500,
+              message: 'Database connection failed at 192.168.1.100:5432',
+            },
+          },
+        };
+        vi.mocked(productionClient.client.post).mockRejectedValue(mockError);
+        vi.mocked(axios.isAxiosError).mockReturnValue(true);
+
+        try {
+          await productionClient.request('POST', '/v1/test', {});
+        } catch (error) {
+          expect(error).toBeInstanceOf(KlingAPIError);
+          // In production, sensitive errors should be sanitized to generic message
+          expect((error as KlingAPIError).message).toBe(
+            'An error occurred while processing your request'
+          );
+        }
+      } finally {
+        // Restore original NODE_ENV
+        process.env.NODE_ENV = originalNodeEnv;
+      }
+    });
+
+    it('should allow validation errors through in production mode', async () => {
+      // Save original NODE_ENV
+      const originalNodeEnv = process.env.NODE_ENV;
+
+      try {
+        // Set production mode
+        process.env.NODE_ENV = 'production';
+
+        // Create a new client instance after setting production mode
+        const productionClient = new KlingHttpClient();
+
+        // Validation error should pass through even in production
+        const mockError = {
+          response: {
+            status: 400,
+            data: {
+              code: 400,
+              message: 'Invalid prompt: must be non-empty',
+            },
+          },
+        };
+        vi.mocked(productionClient.client.post).mockRejectedValue(mockError);
+        vi.mocked(axios.isAxiosError).mockReturnValue(true);
+
+        try {
+          await productionClient.request('POST', '/v1/test', {});
+        } catch (error) {
+          expect(error).toBeInstanceOf(KlingAPIError);
+          // Validation errors should pass through
+          expect((error as KlingAPIError).message).toBe('Invalid prompt: must be non-empty');
+        }
+      } finally {
+        // Restore original NODE_ENV
+        process.env.NODE_ENV = originalNodeEnv;
+      }
     });
   });
 

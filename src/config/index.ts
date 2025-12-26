@@ -47,4 +47,4 @@ export {
   validateOmniVideoParams,
   validateOmniImageParams,
   validateMultiImageToImageParams,
-} from './validators.js';
+} from './validators/index.js';

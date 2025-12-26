@@ -247,6 +247,69 @@ describe('KlingAuth', () => {
       // Verify refreshed token is valid JWT format
       expect(token2).toMatch(JWT_FORMAT_REGEX);
     });
+
+    it('should generate token different from cached one when time advances', () => {
+      const auth = new KlingAuth(testAccessKey, testSecretKey);
+      const originalNow = Date.now;
+
+      try {
+        // Mock time for initial token
+        let mockTime = 1700000000000; // Fixed timestamp
+        Date.now = vi.fn(() => mockTime);
+
+        // Get initial cached token
+        const token1 = auth.getValidToken();
+
+        // Advance time by 1 second to ensure different token
+        mockTime += 1000;
+        Date.now = vi.fn(() => mockTime);
+
+        // Call refreshToken - should generate a new token
+        const token2 = auth.refreshToken();
+
+        // Verify the new token is different from the original
+        expect(token2).not.toBe(token1);
+
+        // Both should be valid JWT format
+        expect(token1).toMatch(JWT_FORMAT_REGEX);
+        expect(token2).toMatch(JWT_FORMAT_REGEX);
+
+        // Verify the tokens have different payloads (due to different iat/exp)
+        const payload1 = JSON.parse(atob(token1.split('.')[1]));
+        const payload2 = JSON.parse(atob(token2.split('.')[1]));
+        expect(payload2.iat).toBeGreaterThan(payload1.iat);
+      } finally {
+        Date.now = originalNow;
+      }
+    });
+
+    it('should return token that differs from subsequent getValidToken calls', () => {
+      const auth = new KlingAuth(testAccessKey, testSecretKey);
+      const originalNow = Date.now;
+
+      try {
+        let mockTime = 1700000000000;
+        Date.now = vi.fn(() => mockTime);
+
+        // Get initial token
+        const initialToken = auth.getValidToken();
+
+        // Advance time
+        mockTime += 1000;
+        Date.now = vi.fn(() => mockTime);
+
+        // refreshToken should generate new token
+        const refreshedToken = auth.refreshToken();
+        expect(refreshedToken).not.toBe(initialToken);
+
+        // The new token should now be cached and returned by getValidToken
+        // (since refreshToken calls generateToken which updates cache)
+        const cachedToken = auth.getValidToken();
+        expect(cachedToken).toBe(refreshedToken);
+      } finally {
+        Date.now = originalNow;
+      }
+    });
   });
 
   describe('getAuthorizationHeader', () => {

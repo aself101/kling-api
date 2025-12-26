@@ -44,7 +44,7 @@ describe('File Saving Handlers', () => {
   });
 
   describe('saveVideoResult', () => {
-    const createVideoResult = (videos: Array<{ id: string; url: string; duration: string }>): VideoTaskResult => ({
+    const createVideoResult = (videos: { id: string; url: string; duration: string }[]): VideoTaskResult => ({
       code: 0,
       message: 'success',
       request_id: 'req-123',
@@ -207,7 +207,7 @@ describe('File Saving Handlers', () => {
   });
 
   describe('saveImageResult', () => {
-    const createImageResult = (images: Array<{ index: number; url: string }>): ImageTaskResult => ({
+    const createImageResult = (images: { index: number; url: string }[]): ImageTaskResult => ({
       code: 0,
       message: 'success',
       request_id: 'req-123',

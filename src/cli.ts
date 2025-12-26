@@ -169,7 +169,7 @@ interface OmniVideoOptions {
  */
 function getOutputDir(globalOptions: GlobalOptions): string {
   const config = loadConfig();
-  return globalOptions.outputDir || config.outputDir || './datasets/kling';
+  return globalOptions.outputDir ?? config.outputDir ?? './datasets/kling';
 }
 
 /**
@@ -222,7 +222,7 @@ async function saveVideoResultToDisk(
 
   ensureDirectory(modelDir);
 
-  const videos = result.data.task_result?.videos || [];
+  const videos = result.data.task_result?.videos ?? [];
   for (const video of videos) {
     const filename = generateFilename(prompt, 'mp4');
     const videoPath = path.join(modelDir, filename);
@@ -350,7 +350,7 @@ async function handleText2Video(options: Text2VideoOptions, globalOptions: Globa
               await saveVideoResultToDisk(api, result, prompt, options.model, params, globalOptions);
             }
           } else {
-            logger.error(`Task failed: ${result.data.task_status_msg || 'Unknown error'}`);
+            logger.error(`Task failed: ${result.data.task_status_msg ?? 'Unknown error'}`);
           }
         } else {
           logger.info('Task submitted. Use --wait to automatically wait for completion.');
@@ -388,7 +388,7 @@ async function handleImage2Video(options: Image2VideoOptions, globalOptions: Glo
 
     const api = initializeApi(globalOptions);
 
-    const prompt = options.prompt?.[0] || '';
+    const prompt = options.prompt?.[0] ?? '';
 
     logger.info('='.repeat(60));
     logger.info('Starting image-to-video generation');
@@ -448,7 +448,7 @@ async function handleImage2Video(options: Image2VideoOptions, globalOptions: Glo
             await saveVideoResultToDisk(api, result, promptText, options.model, params, globalOptions);
           }
         } else {
-          logger.error(`Task failed: ${result.data.task_status_msg || 'Unknown error'}`);
+          logger.error(`Task failed: ${result.data.task_status_msg ?? 'Unknown error'}`);
         }
       } else {
         logger.info('Task submitted. Use --wait to automatically wait for completion.');
@@ -527,11 +527,11 @@ async function handleExtend(options: ExtendOptions, globalOptions: GlobalOptions
           logger.info('Video extension completed!');
 
           if (!options.noDownload) {
-            const promptText = options.prompt || `extended_${options.videoId}`;
+            const promptText = options.prompt ?? `extended_${options.videoId}`;
             await saveVideoResultToDisk(api, result, promptText, 'video-extend', params, globalOptions);
           }
         } else {
-          logger.error(`Task failed: ${result.data.task_status_msg || 'Unknown error'}`);
+          logger.error(`Task failed: ${result.data.task_status_msg ?? 'Unknown error'}`);
         }
       } else {
         logger.info('Task submitted. Use --wait to automatically wait for completion.');
@@ -623,7 +623,7 @@ async function handleMultiImage(options: MultiImageOptions, globalOptions: Globa
             await saveVideoResultToDisk(api, result, options.prompt, options.model, params, globalOptions);
           }
         } else {
-          logger.error(`Task failed: ${result.data.task_status_msg || 'Unknown error'}`);
+          logger.error(`Task failed: ${result.data.task_status_msg ?? 'Unknown error'}`);
         }
       } else {
         logger.info('Task submitted. Use --wait to automatically wait for completion.');
@@ -724,7 +724,7 @@ async function handleOmniVideo(options: OmniVideoOptions, globalOptions: GlobalO
             await saveVideoResultToDisk(api, result, options.prompt, options.model, params, globalOptions);
           }
         } else {
-          logger.error(`Task failed: ${result.data.task_status_msg || 'Unknown error'}`);
+          logger.error(`Task failed: ${result.data.task_status_msg ?? 'Unknown error'}`);
         }
       } else {
         logger.info('Task submitted. Use --wait to automatically wait for completion.');

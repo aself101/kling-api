@@ -460,16 +460,16 @@ export function sanitizeError(error: unknown, isDevelopment = false): string {
     return String(error);
   }
 
-  // Production: return generic message
-  if (error instanceof Error) {
-    // Allow certain safe error types through
-    if (
-      error.message.includes('Invalid') ||
-      error.message.includes('required') ||
-      error.message.includes('must be')
-    ) {
-      return error.message;
-    }
+  // Production: return generic message unless it's a safe validation error
+  const message = error instanceof Error ? error.message : String(error);
+
+  // Allow certain safe error types through (validation messages)
+  if (
+    message.includes('Invalid') ||
+    message.includes('required') ||
+    message.includes('must be')
+  ) {
+    return message;
   }
 
   return 'An error occurred while processing your request';
