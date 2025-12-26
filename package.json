@@ -1,0 +1,107 @@
+{
+  "name": "kling-api",
+  "version": "0.1.0",
+  "description": "Kling AI API wrapper - Video and image generation with JWT authentication for Node.js",
+  "main": "dist/api.js",
+  "types": "dist/api.d.ts",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/api.js",
+      "types": "./dist/api.d.ts"
+    },
+    "./api": {
+      "import": "./dist/api.js",
+      "types": "./dist/api.d.ts"
+    },
+    "./auth": {
+      "import": "./dist/auth.js",
+      "types": "./dist/auth.d.ts"
+    },
+    "./utils": {
+      "import": "./dist/utils.js",
+      "types": "./dist/utils.d.ts"
+    },
+    "./config": {
+      "import": "./dist/config/index.js",
+      "types": "./dist/config/index.d.ts"
+    },
+    "./types": {
+      "import": "./dist/types.js",
+      "types": "./dist/types.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage",
+    "lint": "eslint src test --ext .ts",
+    "lint:fix": "eslint src test --ext .ts --fix",
+    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
+    "prepublishOnly": "npm run build",
+    "semantic-release": "semantic-release"
+  },
+  "keywords": [
+    "kling",
+    "kling-ai",
+    "klingai",
+    "video-generation",
+    "image-generation",
+    "text-to-video",
+    "image-to-video",
+    "avatar",
+    "ai-video",
+    "ai-image",
+    "typescript",
+    "jwt"
+  ],
+  "author": "img-gen Contributors",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/aself101/kling-api.git"
+  },
+  "bugs": {
+    "url": "https://github.com/aself101/kling-api/issues"
+  },
+  "homepage": "https://github.com/aself101/kling-api#readme",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "axios": "^1.6.2",
+    "commander": "^11.1.0",
+    "dotenv": "^16.3.1",
+    "jsonwebtoken": "^9.0.2",
+    "ora": "^8.0.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.17.0",
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/commit-analyzer": "^13.0.1",
+    "@semantic-release/git": "^10.0.1",
+    "@semantic-release/github": "^11.0.6",
+    "@semantic-release/npm": "^12.0.1",
+    "@semantic-release/release-notes-generator": "^14.1.0",
+    "@types/jsonwebtoken": "^9.0.7",
+    "@types/node": "^24.10.1",
+    "@vitest/coverage-v8": "^4.0.10",
+    "eslint": "^9.17.0",
+    "eslint-config-prettier": "^10.0.1",
+    "nock": "^14.0.10",
+    "prettier": "^3.4.2",
+    "semantic-release": "^24.2.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.20.0",
+    "vitest": "^4.0.10"
+  }
+}

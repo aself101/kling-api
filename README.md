@@ -4,8 +4,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node.js Version](https://img.shields.io/node/v/kling-api)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
-[![Tests](https://img.shields.io/badge/tests-293%20passing-brightgreen)](test/)
-[![Coverage](https://img.shields.io/badge/coverage-86.9%25-brightgreen)](test/)
+[![Tests](https://img.shields.io/badge/tests-314%20passing-brightgreen)](test/)
+[![Coverage](https://img.shields.io/badge/coverage-89.9%25-brightgreen)](test/)
 
 A TypeScript/Node.js wrapper for the [Kling AI API](https://docs.qingque.cn/d/home/eZQClXt3RYb4VTjqEfcGBIvEG) that provides easy access to video generation, image generation, image expansion, and avatar/talking head creation.
 
@@ -50,6 +50,7 @@ Full TypeScript support with exported types for all parameters and responses.
   - [Image Generation](#image-generation)
   - [Image Expansion](#image-expansion)
   - [Avatar (Talking Head)](#avatar-talking-head)
+  - [Account & Utilities](#account--utilities)
 - [Models](#models)
 - [Camera Control](#camera-control)
 - [Examples](#examples)
@@ -73,7 +74,7 @@ The Kling AI API provides access to state-of-the-art video and image generation 
 - **Image/Audio Input Support** - Convert local files or URLs to base64 with validation
 - **Organized Storage** - Structured directories with timestamped files and metadata
 - **Full TypeScript Support** - Complete type definitions for all API methods, parameters, and responses
-- **Comprehensive Testing** - 293 tests with 86.9% coverage
+- **Comprehensive Testing** - 314 tests with 89.9% coverage
 
 ## Features
 
@@ -447,6 +448,39 @@ const result = await api.waitForVideoResult(
 | `mode` | 'std' \| 'pro' | No | Quality mode |
 
 **Note:** Provide either `audio_id` OR `sound_file`, not both.
+
+### Account & Utilities
+
+Check account information, credits, and API health.
+
+```typescript
+// Get account information and resource packs
+const now = Date.now();
+const accountInfo = await api.getAccountInfo(
+  now - 86400000,  // startTime: 24 hours ago
+  now              // endTime: now
+);
+console.log('Resource packs:', accountInfo.data.resource_pack_subscribe_infos);
+
+// Check API health (returns true if reachable)
+const isHealthy = await api.healthCheck();
+if (!isHealthy) {
+  throw new Error('Kling API is not reachable');
+}
+
+// Token management (for debugging)
+const token = api.getToken();      // Get current JWT token
+api.refreshToken();                // Force token refresh
+```
+
+**Methods:**
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `getAccountInfo(startTime, endTime)` | `AccountInfoResponse` | Get resource pack subscription info |
+| `healthCheck()` | `boolean` | Check if API is reachable |
+| `getToken()` | `string \| null` | Get current JWT token (debugging) |
+| `refreshToken()` | `void` | Force JWT token refresh |
 
 ## Models
 
