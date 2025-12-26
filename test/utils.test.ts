@@ -8,6 +8,7 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 
 import axios from 'axios';
+import { BASE64_FORMAT_REGEX } from './test-constants.js';
 
 import {
   ensureDirectory,
@@ -468,7 +469,7 @@ describe('Image Conversion Functions', () => {
 
         const result = await imageToBase64('https://example.com/image.png');
 
-        expect(result).toBeTruthy();
+        expect(result).toMatch(BASE64_FORMAT_REGEX);
         expect(typeof result).toBe('string');
 
         // Verify it's valid base64 encoding of the PNG
@@ -546,7 +547,7 @@ describe('Image Conversion Functions', () => {
 
         const result = await imageToBase64('https://example.com/photo.jpg');
 
-        expect(result).toBeTruthy();
+        expect(result).toMatch(BASE64_FORMAT_REGEX);
         const decoded = Buffer.from(result, 'base64');
         expect(decoded[0]).toBe(0xff);
         expect(decoded[1]).toBe(0xd8);
@@ -568,7 +569,7 @@ describe('Image Conversion Functions', () => {
 
         const result = await imageToBase64(testFile);
 
-        expect(result).toBeTruthy();
+        expect(result).toMatch(BASE64_FORMAT_REGEX);
         expect(typeof result).toBe('string');
         // Verify it's valid base64
         const decoded = Buffer.from(result, 'base64');
@@ -613,7 +614,7 @@ describe('Image Conversion Functions', () => {
 
         const result = await imageToBase64(testFile);
 
-        expect(result).toBeTruthy();
+        expect(result).toMatch(BASE64_FORMAT_REGEX);
         const decoded = Buffer.from(result, 'base64');
         expect(decoded[0]).toBe(0xff); // JPEG magic byte
         expect(decoded[1]).toBe(0xd8);
@@ -649,7 +650,7 @@ describe('Image Conversion Functions', () => {
 
         const result = await audioToBase64('https://example.com/audio.mp3');
 
-        expect(result).toBeTruthy();
+        expect(result).toMatch(BASE64_FORMAT_REGEX);
         expect(typeof result).toBe('string');
 
         // Verify it's valid base64 encoding
@@ -707,7 +708,7 @@ describe('Image Conversion Functions', () => {
 
         const result = await audioToBase64(testFile);
 
-        expect(result).toBeTruthy();
+        expect(result).toMatch(BASE64_FORMAT_REGEX);
         expect(typeof result).toBe('string');
 
         rmSync(testDir, { recursive: true, force: true });

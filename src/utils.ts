@@ -397,7 +397,9 @@ export function validateUrl(urlString: string): void {
   try {
     url = new URL(urlString);
   } catch {
-    throw new Error('Invalid URL format');
+    throw new Error(
+      'Invalid URL format. Expected a valid HTTPS URL (e.g., https://example.com/image.jpg)'
+    );
   }
 
   // Enforce HTTPS

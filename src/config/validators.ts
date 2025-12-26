@@ -11,6 +11,11 @@ import type {
   ImageGenParams,
   ImageExpandParams,
   AvatarParams,
+  ExtendVideoParams,
+  MultiImageToVideoParams,
+  OmniVideoParams,
+  OmniImageParams,
+  MultiImageToImageParams,
   CameraType,
   CameraConfig,
 } from '../types.js';
@@ -29,6 +34,11 @@ import {
   HUMAN_FIDELITY_RANGE,
   EXPANSION_RATIO_RANGE,
   MAX_TOTAL_EXPANSION,
+  N_RANGE,
+  MAX_MULTI_IMAGE_VIDEO_COUNT,
+  MAX_SUBJECT_IMAGE_COUNT,
+  VALID_OMNI_IMAGE_ASPECT_RATIOS,
+  VALID_MULTI_IMAGE_TO_IMAGE_MODELS,
   CAMERA_CONFIG_RANGE,
   MAX_CAMERA_CONFIG_NON_ZERO,
 } from './constants.js';
@@ -428,5 +438,232 @@ function validateCameraControl(
         `Only ${MAX_CAMERA_CONFIG_NON_ZERO} config parameter should be non-zero`
       );
     }
+  }
+}
+
+// ============================================================================
+// Video Extension Validation
+// ============================================================================
+
+/**
+ * Validate video extension parameters
+ *
+ * @param params - Parameters to validate
+ * @throws ValidationError if any parameter is invalid
+ */
+export function validateExtendVideoParams(params: ExtendVideoParams): void {
+  validateRequired('video_id', params.video_id, 'Video ID');
+  validatePromptLength('prompt', params.prompt);
+  validatePromptLength('negative_prompt', params.negative_prompt);
+
+  if (params.cfg_scale !== undefined) {
+    validateRange('cfg_scale', params.cfg_scale, CFG_SCALE_RANGE);
+  }
+}
+
+// ============================================================================
+// Multi-Image-to-Video Validation
+// ============================================================================
+
+/**
+ * Validate multi-image-to-video parameters
+ *
+ * @param params - Parameters to validate
+ * @throws ValidationError if any parameter is invalid
+ */
+export function validateMultiImageToVideoParams(params: MultiImageToVideoParams): void {
+  // Validate image_list
+  if (!params.image_list || params.image_list.length === 0) {
+    throw new ValidationError('image_list', 'At least one image is required');
+  }
+  if (params.image_list.length > MAX_MULTI_IMAGE_VIDEO_COUNT) {
+    throw new ValidationError(
+      'image_list',
+      `Maximum ${MAX_MULTI_IMAGE_VIDEO_COUNT} images allowed`
+    );
+  }
+
+  // Validate each image
+  for (let i = 0; i < params.image_list.length; i++) {
+    const item = params.image_list[i];
+    if (!item.image || item.image.trim() === '') {
+      throw new ValidationError(`image_list[${i}].image`, 'Image is required');
+    }
+  }
+
+  // Validate prompt (required for this endpoint)
+  validateRequired('prompt', params.prompt, 'Prompt');
+  validatePromptLength('prompt', params.prompt);
+  validatePromptLength('negative_prompt', params.negative_prompt);
+
+  // Validate model (only kling-v1-6 supported)
+  if (params.model_name && params.model_name !== 'kling-v1-6') {
+    throw new ValidationError(
+      'model_name',
+      'Only kling-v1-6 is supported for multi-image-to-video'
+    );
+  }
+
+  // Validate enum fields
+  if (params.mode) validateEnumValue('mode', params.mode, VALID_VIDEO_MODES);
+  if (params.aspect_ratio)
+    validateEnumValue('aspect_ratio', params.aspect_ratio, VALID_VIDEO_ASPECT_RATIOS);
+  if (params.duration) validateEnumValue('duration', params.duration, VALID_VIDEO_DURATIONS);
+}
+
+// ============================================================================
+// Omni Video Validation
+// ============================================================================
+
+/**
+ * Validate omni video parameters
+ *
+ * @param params - Parameters to validate
+ * @throws ValidationError if any parameter is invalid
+ */
+export function validateOmniVideoParams(params: OmniVideoParams): void {
+  // Validate prompt (required)
+  validateRequired('prompt', params.prompt, 'Prompt');
+  validatePromptLength('prompt', params.prompt);
+
+  // Validate model
+  if (params.model_name && params.model_name !== 'kling-video-o1') {
+    throw new ValidationError('model_name', 'Only kling-video-o1 is supported');
+  }
+
+  // Validate image_list constraints
+  if (params.image_list) {
+    const hasEndFrame = params.image_list.some((img) => img.type === 'end_frame');
+    const hasFirstFrame = params.image_list.some((img) => img.type === 'first_frame');
+
+    // End frame requires first frame
+    if (hasEndFrame && !hasFirstFrame) {
+      throw new ValidationError('image_list', 'End frame image requires a first frame image');
+    }
+
+    // End frame not supported with more than 2 images
+    if (hasEndFrame && params.image_list.length > 2) {
+      throw new ValidationError(
+        'image_list',
+        'End frame is not supported when there are more than 2 images'
+      );
+    }
+
+    // Validate each image has a URL
+    for (let i = 0; i < params.image_list.length; i++) {
+      const item = params.image_list[i];
+      if (!item.image_url || item.image_url.trim() === '') {
+        throw new ValidationError(`image_list[${i}].image_url`, 'Image URL is required');
+      }
+    }
+  }
+
+  // Validate enum fields
+  if (params.aspect_ratio)
+    validateEnumValue('aspect_ratio', params.aspect_ratio, VALID_VIDEO_ASPECT_RATIOS);
+  if (params.duration) validateEnumValue('duration', params.duration, VALID_VIDEO_DURATIONS);
+}
+
+// ============================================================================
+// Omni Image Validation
+// ============================================================================
+
+/**
+ * Validate omni image parameters
+ *
+ * @param params - Parameters to validate
+ * @throws ValidationError if any parameter is invalid
+ */
+export function validateOmniImageParams(params: OmniImageParams): void {
+  // Validate prompt (required)
+  validateRequired('prompt', params.prompt, 'Prompt');
+  validatePromptLength('prompt', params.prompt);
+
+  // Validate model
+  if (params.model_name && params.model_name !== 'kling-image-o1') {
+    throw new ValidationError('model_name', 'Only kling-image-o1 is supported');
+  }
+
+  // Validate image_list
+  if (params.image_list) {
+    for (let i = 0; i < params.image_list.length; i++) {
+      const item = params.image_list[i];
+      if (!item.image || item.image.trim() === '') {
+        throw new ValidationError(`image_list[${i}].image`, 'Image is required');
+      }
+    }
+  }
+
+  // Validate n
+  if (params.n !== undefined) {
+    if (!Number.isInteger(params.n)) {
+      throw new ValidationError('n', 'n must be an integer');
+    }
+    validateRange('n', params.n, N_RANGE);
+  }
+
+  // Validate resolution
+  if (params.resolution) {
+    validateEnumValue('resolution', params.resolution, VALID_IMAGE_RESOLUTIONS);
+  }
+
+  // Validate aspect_ratio (includes 'auto')
+  if (params.aspect_ratio) {
+    validateEnumValue('aspect_ratio', params.aspect_ratio, [...VALID_OMNI_IMAGE_ASPECT_RATIOS]);
+  }
+}
+
+// ============================================================================
+// Multi-Image-to-Image Validation
+// ============================================================================
+
+/**
+ * Validate multi-image-to-image parameters
+ *
+ * @param params - Parameters to validate
+ * @throws ValidationError if any parameter is invalid
+ */
+export function validateMultiImageToImageParams(params: MultiImageToImageParams): void {
+  // Validate subject_image_list (required)
+  if (!params.subject_image_list || params.subject_image_list.length === 0) {
+    throw new ValidationError('subject_image_list', 'At least one subject image is required');
+  }
+  if (params.subject_image_list.length > MAX_SUBJECT_IMAGE_COUNT) {
+    throw new ValidationError(
+      'subject_image_list',
+      `Maximum ${MAX_SUBJECT_IMAGE_COUNT} subject images allowed`
+    );
+  }
+
+  // Validate each subject image
+  for (let i = 0; i < params.subject_image_list.length; i++) {
+    const item = params.subject_image_list[i];
+    if (!item.subject_image || item.subject_image.trim() === '') {
+      throw new ValidationError(
+        `subject_image_list[${i}].subject_image`,
+        'Subject image is required'
+      );
+    }
+  }
+
+  // Validate prompts
+  validatePromptLength('prompt', params.prompt);
+
+  // Validate model
+  if (params.model_name) {
+    validateEnumValue('model_name', params.model_name, [...VALID_MULTI_IMAGE_TO_IMAGE_MODELS]);
+  }
+
+  // Validate n
+  if (params.n !== undefined) {
+    if (!Number.isInteger(params.n)) {
+      throw new ValidationError('n', 'n must be an integer');
+    }
+    validateRange('n', params.n, N_RANGE);
+  }
+
+  // Validate aspect_ratio
+  if (params.aspect_ratio) {
+    validateEnumValue('aspect_ratio', params.aspect_ratio, VALID_IMAGE_ASPECT_RATIOS);
   }
 }

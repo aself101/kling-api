@@ -191,38 +191,45 @@ export interface ImageToVideoParams {
 /**
  * Parameters for extending existing videos
  *
- * @remarks
- * API method not yet implemented. Planned for future release.
- * See: https://docs.qingque.cn/d/home/eZQClXt3RYb4VTjqEfcGBIvEG
+ * Extends a generated video by appending new content.
+ * The source video must be under 3 minutes and within 30 days of generation.
  */
 export interface ExtendVideoParams {
-  /** Task ID of the video to extend */
-  task_id: string;
-  /** Prompt for the extension */
+  /** Video ID from text-to-video, image-to-video, or previous extension */
+  video_id: string;
+  /** Prompt for the extension (max 2500 chars) */
   prompt?: string;
+  /** Negative prompt (max 2500 chars) */
+  negative_prompt?: string;
+  /** CFG scale 0-1 (default: 0.5) - higher = more prompt relevance */
+  cfg_scale?: number;
   /** Webhook URL for status notifications */
   callback_url?: string;
-  /** Custom task ID */
-  external_task_id?: string;
 }
 
 // ============================================================================
 // Multi-Image-to-Video Types
 // ============================================================================
 
+/** Image item for multi-image-to-video */
+export interface MultiImageVideoItem {
+  /** Image (base64 or URL) */
+  image: string;
+}
+
 /**
  * Parameters for multi-image video generation
  *
- * @remarks
- * API method not yet implemented. Planned for future release.
+ * Generate videos from up to 4 reference images. The model will
+ * interpolate between the images to create smooth transitions.
  */
 export interface MultiImageToVideoParams {
-  /** Model version */
-  model_name?: ImageToVideoModel;
-  /** Reference images (base64 or URLs) */
-  images: string[];
-  /** Positive text prompt */
-  prompt?: string;
+  /** Model version (default: kling-v1-6) */
+  model_name?: 'kling-v1-6';
+  /** Reference images (1-4 images, required) */
+  image_list: MultiImageVideoItem[];
+  /** Positive text prompt (required) */
+  prompt: string;
   /** Negative text prompt */
   negative_prompt?: string;
   /** Generation mode */
@@ -317,42 +324,52 @@ export interface AvatarParams {
 // Omni Model Types
 // ============================================================================
 
-/** Image list item for Omni models */
+/** Image list item for Omni video generation */
+export interface OmniVideoImageItem {
+  /** Image URL or base64 */
+  image_url: string;
+  /** Image role: first_frame is the start, end_frame is the end */
+  type?: 'first_frame' | 'end_frame';
+}
+
+/** Image list item for Omni image generation */
 export interface OmniImageListItem {
-  /** Image (base64 or URL) */
+  /** Image URL or base64 */
   image: string;
-  /** Image type for video: first_frame, end_frame, or reference */
-  type?: 'first_frame' | 'end_frame' | 'reference';
 }
 
 /** Video list item for Omni video */
 export interface OmniVideoListItem {
-  /** Video ID or URL */
-  video: string;
+  /** Video URL */
+  video_url: string;
 }
 
 /** Element list item for Omni models */
 export interface OmniElementListItem {
-  /** Element image (base64 or URL) */
-  image: string;
+  /** Element ID from element creation API */
+  element_id: number;
 }
+
+/** Omni image aspect ratio includes 'auto' option */
+export type OmniImageAspectRatio = ImageAspectRatio | 'auto';
 
 /**
  * Parameters for Omni video generation
  *
- * @remarks
- * API method not yet implemented. Planned for future release.
+ * The Omni model supports flexible multi-modal inputs using template syntax
+ * in prompts: <<<element_1>>>, <<<image_1>>>, <<<video_1>>> to reference
+ * items from the respective lists.
  */
 export interface OmniVideoParams {
   /** Model (default: kling-video-o1) */
   model_name?: OmniVideoModel;
-  /** Prompt with template syntax (<<<element_1>>>, <<<image_1>>>, <<<video_1>>>) */
+  /** Prompt with template syntax (max 2500 chars) */
   prompt: string;
-  /** Reference images */
-  image_list?: OmniImageListItem[];
+  /** Reference images (with optional frame type) */
+  image_list?: OmniVideoImageItem[];
   /** Reference videos */
   video_list?: OmniVideoListItem[];
-  /** Element references */
+  /** Element references (by ID) */
   element_list?: OmniElementListItem[];
   /** Video aspect ratio */
   aspect_ratio?: VideoAspectRatio;
@@ -367,20 +384,24 @@ export interface OmniVideoParams {
 /**
  * Parameters for Omni image generation
  *
- * @remarks
- * API method not yet implemented. Planned for future release.
+ * Generate images using multi-modal inputs with template syntax
+ * in prompts: <<<image_1>>> to reference items from image_list.
  */
 export interface OmniImageParams {
   /** Model (default: kling-image-o1) */
   model_name?: OmniImageModel;
-  /** Prompt with template syntax (<<<image_1>>>) */
+  /** Prompt with template syntax (max 2500 chars) */
   prompt: string;
   /** Reference images */
   image_list?: OmniImageListItem[];
+  /** Element references (by ID) */
+  element_list?: OmniElementListItem[];
+  /** Output resolution: 1k standard, 2k high-res */
+  resolution?: ImageResolution;
   /** Number of images to generate (1-9) */
   n?: number;
-  /** Image aspect ratio */
-  aspect_ratio?: ImageAspectRatio;
+  /** Image aspect ratio (includes 'auto' option) */
+  aspect_ratio?: OmniImageAspectRatio;
   /** Webhook URL */
   callback_url?: string;
   /** Custom task ID */
@@ -391,20 +412,33 @@ export interface OmniImageParams {
 // Multi-Image-to-Image Types
 // ============================================================================
 
+/** Multi-image-to-image model names */
+export type MultiImageToImageModel = 'kling-v2' | 'kling-v2-1';
+
+/** Subject image item for multi-image-to-image */
+export interface SubjectImageItem {
+  /** Subject image (base64 or URL) - should be pre-cropped */
+  subject_image: string;
+}
+
 /**
  * Parameters for multi-image-to-image transformation
  *
- * @remarks
- * API method not yet implemented. Planned for future release.
+ * Combines subject images with optional scene and style references
+ * to generate new images. Supports 1-4 subject images.
  */
 export interface MultiImageToImageParams {
-  /** Source images */
-  images: string[];
-  /** Transformation prompt */
-  prompt: string;
-  /** Negative prompt */
-  negative_prompt?: string;
-  /** Number of output images (1-9) */
+  /** Model version (default: kling-v2) */
+  model_name?: MultiImageToImageModel;
+  /** Positive text prompt (max 2500 chars) */
+  prompt?: string;
+  /** Subject reference images (1-4 images, required) */
+  subject_image_list: SubjectImageItem[];
+  /** Scene reference image (base64 or URL) */
+  scene_image?: string;
+  /** Style reference image (base64 or URL) */
+  style_image?: string;
+  /** Number of output images (1-9, default: 1) */
   n?: number;
   /** Output aspect ratio */
   aspect_ratio?: ImageAspectRatio;

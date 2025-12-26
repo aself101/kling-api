@@ -33,9 +33,6 @@ Thumbs.db
 datasets/**/
 !datasets/.gitkeep
 
-# Documentation (generated)
-docs/
-
 # Planning documents
 *-plan.md
 *-task-list.md

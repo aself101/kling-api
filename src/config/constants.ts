@@ -116,6 +116,31 @@ export const EXPANSION_RATIO_RANGE = { min: 0, max: 2 } as const;
 /** Maximum total expansion ratio (area multiplier) */
 export const MAX_TOTAL_EXPANSION = 3;
 
+/** Number of generated images range [min, max] */
+export const N_RANGE = { min: 1, max: 9 } as const;
+
+/** Maximum images for multi-image-to-video */
+export const MAX_MULTI_IMAGE_VIDEO_COUNT = 4;
+
+/** Maximum subject images for multi-image-to-image */
+export const MAX_SUBJECT_IMAGE_COUNT = 4;
+
+/** Valid omni image aspect ratios (includes 'auto') */
+export const VALID_OMNI_IMAGE_ASPECT_RATIOS = [
+  '16:9',
+  '9:16',
+  '1:1',
+  '4:3',
+  '3:4',
+  '3:2',
+  '2:3',
+  '21:9',
+  'auto',
+] as const;
+
+/** Valid multi-image-to-image models */
+export const VALID_MULTI_IMAGE_TO_IMAGE_MODELS = ['kling-v2', 'kling-v2-1'] as const;
+
 /** Camera control config value range [min, max] */
 export const CAMERA_CONFIG_RANGE = { min: -10, max: 10 } as const;
 

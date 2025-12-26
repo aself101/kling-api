@@ -4,8 +4,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node.js Version](https://img.shields.io/node/v/kling-api)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
-[![Tests](https://img.shields.io/badge/tests-314%20passing-brightgreen)](test/)
-[![Coverage](https://img.shields.io/badge/coverage-89.9%25-brightgreen)](test/)
+[![Tests](https://img.shields.io/badge/tests-370%20passing-brightgreen)](test/)
+[![Coverage](https://img.shields.io/badge/coverage-90.68%25-brightgreen)](test/)
 
 A TypeScript/Node.js wrapper for the [Kling AI API](https://docs.qingque.cn/d/home/eZQClXt3RYb4VTjqEfcGBIvEG) for video generation, image generation, image expansion, and avatar/talking head creation.
 
@@ -51,6 +51,12 @@ TypeScript support with exported types for all parameters and responses.
   - [Image Expansion](#image-expansion)
   - [Avatar (Talking Head)](#avatar-talking-head)
   - [Account & Utilities](#account--utilities)
+- [Advanced Features](#advanced-features)
+  - [Video Extension](#video-extension)
+  - [Multi-Image-to-Video](#multi-image-to-video)
+  - [Omni Video](#omni-video)
+  - [Omni Image](#omni-image)
+  - [Multi-Image-to-Image](#multi-image-to-image)
 - [Models](#models)
 - [Camera Control](#camera-control)
 - [Examples](#examples)
@@ -58,13 +64,27 @@ TypeScript support with exported types for all parameters and responses.
 - [Security Features](#security-features)
 - [Error Handling](#error-handling)
 - [Troubleshooting](#troubleshooting)
-- [Future Features](#future-features)
+- [API Reference](#api-reference)
+
+## API Reference
+
+For detailed Kling AI API documentation including all endpoints, parameters, error codes, and model capabilities, see the comprehensive API reference:
+
+**[Kling API Reference](docs/KLING_API_REFERENCE.md)**
+
+The reference covers:
+- JWT authentication details and examples
+- Complete error code reference (20+ codes with solutions)
+- Model capability matrices for video and image generation
+- All API endpoints with request/response schemas
+- Concurrency rules and rate limiting
+- Image input format requirements
 
 ## Overview
 
 The Kling AI API provides access to video and image generation models. This Node.js wrapper implements:
 
-- **5 Feature Areas** - Text-to-video, image-to-video, image generation, image expansion, avatar creation
+- **10 Feature Areas** - Text-to-video, image-to-video, image generation, image expansion, avatar creation, plus advanced features: video extension, multi-image-to-video, omni video, omni image, multi-image-to-image
 - **19+ Model Variants** - Multiple versions across all feature areas with different capabilities
 - **JWT Authentication** - Automatic token generation with caching (30-minute expiry, 5-minute buffer)
 - **Security** - API key redaction, error sanitization, HTTPS enforcement, SSRF protection
@@ -74,7 +94,7 @@ The Kling AI API provides access to video and image generation models. This Node
 - **Image/Audio Input Support** - Convert local files or URLs to base64 with validation
 - **Organized Storage** - Structured directories with timestamped files and metadata
 - **TypeScript** - Type definitions for all API methods, parameters, and responses
-- **Testing** - 314 tests with 89.9% coverage
+- **Testing** - 370 tests with 90.68% coverage
 
 ## Features
 
@@ -176,6 +196,12 @@ import {
   ImageGenParams,
   ImageExpandParams,
   AvatarParams,
+  // Advanced feature parameter types
+  ExtendVideoParams,
+  MultiImageToVideoParams,
+  OmniVideoParams,
+  OmniImageParams,
+  MultiImageToImageParams,
   // Response types
   TaskResponse,
   VideoTaskResult,
@@ -187,6 +213,7 @@ import {
   VideoDuration,
   VideoAspectRatio,
   ImageAspectRatio,
+  OmniImageAspectRatio,
 } from 'kling-api';
 ```
 
@@ -481,6 +508,192 @@ api.refreshToken();                // Force token refresh
 | `healthCheck()` | `boolean` | Check if API is reachable |
 | `getToken()` | `string \| null` | Get current JWT token (debugging) |
 | `refreshToken()` | `void` | Force JWT token refresh |
+
+## Advanced Features
+
+Advanced features for sophisticated video and image generation workflows.
+
+### Video Extension
+
+Extend existing generated videos with additional content.
+
+```typescript
+// Extend a previously generated video
+const task = await api.extendVideo({
+  video_id: 'original-video-id',     // From text-to-video or image-to-video
+  prompt: 'Continue with the camera zooming out',
+  cfg_scale: 0.5                      // 0-1, prompt relevance
+});
+
+// Query task status
+const status = await api.queryExtendVideoTask(task.data.task_id);
+
+// Wait for completion
+const result = await api.waitForVideoResult(
+  task.data.task_id,
+  api.queryExtendVideoTask.bind(api)
+);
+```
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `video_id` | string | Yes | Video ID from previous generation |
+| `prompt` | string | No | Extension prompt (max 2500 chars) |
+| `negative_prompt` | string | No | What to avoid (max 2500 chars) |
+| `cfg_scale` | number | No | CFG scale 0-1 (default: 0.5) |
+| `callback_url` | string | No | Webhook URL |
+
+### Multi-Image-to-Video
+
+Generate videos from multiple reference images with smooth transitions.
+
+```typescript
+const task = await api.multiImageToVideo({
+  image_list: [
+    { image: './scene1.jpg' },
+    { image: './scene2.jpg' },
+    { image: './scene3.jpg' }
+  ],
+  prompt: 'Smooth cinematic transition between scenes',
+  model_name: 'kling-v1-6',
+  mode: 'pro',
+  duration: '5',
+  aspect_ratio: '16:9'
+});
+
+// Wait for result
+const result = await api.waitForVideoResult(
+  task.data.task_id,
+  api.queryMultiImageToVideoTask.bind(api)
+);
+```
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `image_list` | MultiImageVideoItem[] | Yes | 1-4 reference images |
+| `prompt` | string | Yes | Motion/transition description |
+| `model_name` | 'kling-v1-6' | No | Model (only kling-v1-6 supported) |
+| `negative_prompt` | string | No | What to avoid |
+| `mode` | 'std' \| 'pro' | No | Quality mode |
+| `aspect_ratio` | VideoAspectRatio | No | Output aspect ratio |
+| `duration` | '5' \| '10' | No | Video length |
+
+### Omni Video
+
+Advanced video generation with flexible multi-modal inputs using template syntax.
+
+```typescript
+// Using first/end frame control
+const task = await api.omniVideo({
+  prompt: 'A cat walking through <<<image_1>>> and ending at <<<image_2>>>',
+  image_list: [
+    { image_url: './start.jpg', type: 'first_frame' },
+    { image_url: './end.jpg', type: 'end_frame' }
+  ],
+  model_name: 'kling-video-o1',
+  duration: '5',
+  aspect_ratio: '16:9'
+});
+
+// Wait for result
+const result = await api.waitForVideoResult(
+  task.data.task_id,
+  api.queryOmniVideoTask.bind(api)
+);
+```
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `prompt` | string | Yes | Prompt with template syntax (max 2500 chars) |
+| `model_name` | OmniVideoModel | No | Model (default: kling-video-o1) |
+| `image_list` | OmniVideoImageItem[] | No | Images with optional frame type |
+| `video_list` | OmniVideoListItem[] | No | Reference videos |
+| `element_list` | OmniElementListItem[] | No | Element references by ID |
+| `aspect_ratio` | VideoAspectRatio | No | Output aspect ratio |
+| `duration` | '5' \| '10' | No | Video length |
+
+**Template Syntax:** Use `<<<image_1>>>`, `<<<video_1>>>`, `<<<element_1>>>` to reference items from their respective lists.
+
+### Omni Image
+
+Advanced image generation with multi-modal inputs and template syntax.
+
+```typescript
+// Using image reference in prompt
+const task = await api.omniImage({
+  prompt: 'A portrait in the style of <<<image_1>>> featuring a mountain landscape',
+  image_list: [
+    { image: './style-reference.jpg' }
+  ],
+  model_name: 'kling-image-o1',
+  n: 4,
+  resolution: '2k',
+  aspect_ratio: '16:9'
+});
+
+// Wait for result
+const result = await api.waitForImageResult(
+  task.data.task_id,
+  api.queryOmniImageTask.bind(api)
+);
+```
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `prompt` | string | Yes | Prompt with template syntax (max 2500 chars) |
+| `model_name` | OmniImageModel | No | Model (default: kling-image-o1) |
+| `image_list` | OmniImageListItem[] | No | Reference images |
+| `element_list` | OmniElementListItem[] | No | Element references by ID |
+| `n` | number | No | Number of images (1-9) |
+| `resolution` | '1k' \| '2k' | No | Output resolution |
+| `aspect_ratio` | OmniImageAspectRatio | No | Aspect ratio (includes 'auto') |
+
+### Multi-Image-to-Image
+
+Combine multiple subject images with optional scene and style references.
+
+```typescript
+const task = await api.multiImageToImage({
+  subject_image_list: [
+    { subject_image: './subject1.jpg' },
+    { subject_image: './subject2.jpg' }
+  ],
+  scene_image: './background.jpg',
+  style_image: './art-style.jpg',
+  prompt: 'The subjects meeting in this scene with artistic style',
+  model_name: 'kling-v2-1',
+  n: 4,
+  aspect_ratio: '16:9'
+});
+
+// Wait for result
+const result = await api.waitForImageResult(
+  task.data.task_id,
+  api.queryMultiImageToImageTask.bind(api)
+);
+```
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `subject_image_list` | SubjectImageItem[] | Yes | 1-4 subject images |
+| `prompt` | string | No | Generation prompt (max 2500 chars) |
+| `model_name` | 'kling-v2' \| 'kling-v2-1' | No | Model version |
+| `scene_image` | string | No | Scene/background reference |
+| `style_image` | string | No | Style reference image |
+| `n` | number | No | Number of images (1-9) |
+| `aspect_ratio` | ImageAspectRatio | No | Output aspect ratio |
+
+**Note:** Subject images should be pre-cropped to focus on the subject.
 
 ## Models
 
@@ -796,24 +1009,6 @@ Error: camera_control is not supported by kling-v1
 **Solution:** Use a model that supports camera control:
 - Text-to-video: `kling-v1-6`
 - Image-to-video: `kling-v1-5` or `kling-v1-6`
-
-## Future Features
-
-The following Kling AI API features have type definitions but are not yet implemented in this wrapper. They will be added in future releases as the API stabilizes:
-
-| Feature | Type | Description |
-|---------|------|-------------|
-| Video Extension | `ExtendVideoParams` | Extend existing generated videos |
-| Multi-Image-to-Video | `MultiImageToVideoParams` | Generate video from multiple reference images |
-| Omni Video | `OmniVideoParams` | Advanced video generation with template syntax |
-| Omni Image | `OmniImageParams` | Advanced image generation with template syntax |
-| Multi-Image-to-Image | `MultiImageToImageParams` | Transform multiple images together |
-
-The type definitions are available for forward compatibility:
-
-```typescript
-import type { ExtendVideoParams, OmniVideoParams } from 'kling-api';
-```
 
 ## Development
 

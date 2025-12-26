@@ -3,41 +3,17 @@
  *
  * Main API wrapper class for Kling AI services including
  * video generation, image generation, and avatar creation.
+ *
+ * This façade delegates to specialized operation modules while
+ * maintaining a unified interface for consumers.
  */
 
-import axios, { type AxiosInstance, type AxiosError } from 'axios';
-import { join } from 'path';
-
-import { KlingAuth } from './auth.js';
-import {
-  BASE_URL,
-  DEFAULT_TIMEOUT,
-  DEFAULT_POLL_INTERVAL,
-  DEFAULT_POLL_TIMEOUT,
-  ERROR_CODES,
-  loadCredentials,
-  validateTextToVideoParams,
-  validateImageToVideoParams,
-  validateImageGenParams,
-  validateImageExpandParams,
-  validateAvatarParams,
-} from './config/index.js';
-import {
-  sanitizeError,
-  isProduction,
-  pollWithSpinner,
-  downloadVideo,
-  downloadImage,
-  saveMetadata,
-  ensureDirectory,
-  generateFilename,
-  imageToBase64,
-  audioToBase64,
-  logger,
-  processMediaSource,
-  copyOptionalParams,
-  BACKOFF_BASE_MS,
-} from './utils.js';
+import { KlingHttpClient } from './client/http-client.js';
+import * as videoOps from './operations/video.js';
+import * as imageOps from './operations/image.js';
+import * as avatarOps from './operations/avatar.js';
+import * as resultHandlers from './handlers/result-poller.js';
+import * as fileHandlers from './handlers/file-saver.js';
 import type {
   KlingConfig,
   TextToVideoParams,
@@ -45,6 +21,11 @@ import type {
   ImageGenParams,
   ImageExpandParams,
   AvatarParams,
+  ExtendVideoParams,
+  MultiImageToVideoParams,
+  OmniVideoParams,
+  OmniImageParams,
+  MultiImageToImageParams,
   TaskResponse,
   VideoTaskResult,
   ImageTaskResult,
@@ -52,36 +33,8 @@ import type {
   PollOptions,
 } from './types.js';
 
-// ============================================================================
-// API Error Class
-// ============================================================================
-
-/** Custom error class for Kling API errors */
-export class KlingAPIError extends Error {
-  constructor(
-    message: string,
-    public code: number,
-    public requestId?: string,
-    public httpStatus?: number
-  ) {
-    super(message);
-    this.name = 'KlingAPIError';
-  }
-
-  /** Check if error is retryable */
-  isRetryable(): boolean {
-    return (
-      this.code === ERROR_CODES.SERVICE_UNAVAILABLE ||
-      this.httpStatus === 502 ||
-      this.httpStatus === 503 ||
-      this.httpStatus === 504
-    );
-  }
-}
-
-// ============================================================================
-// Main API Class
-// ============================================================================
+// Re-export error class for consumers
+export { KlingAPIError } from './errors.js';
 
 /**
  * Kling API Client
@@ -107,10 +60,13 @@ export class KlingAPIError extends Error {
  * ```
  */
 export class KlingAPI {
-  private auth: KlingAuth;
-  private client: AxiosInstance;
-  private baseUrl: string;
-  private debug: boolean;
+  /** @internal HTTP client exposed for testing only */
+  private httpClient: KlingHttpClient;
+
+  /** @internal Axios client exposed for testing only (use httpClient.client to access) */
+  get client(): import('axios').AxiosInstance {
+    return this.httpClient.client;
+  }
 
   /**
    * Create a new KlingAPI instance
@@ -119,134 +75,7 @@ export class KlingAPI {
    * @throws Error if credentials are not provided
    */
   constructor(config: KlingConfig = {}) {
-    // Load credentials with priority chain
-    const credentials = loadCredentials(config.accessKey, config.secretKey);
-
-    if (!credentials.accessKey || !credentials.secretKey) {
-      throw new Error(
-        'Kling API credentials not found. Provide accessKey and secretKey via:\n' +
-          '1. Constructor parameters\n' +
-          '2. Environment variables (KLING_ACCESS_KEY, KLING_SECRET_KEY)\n' +
-          '3. Local .env file\n' +
-          '4. Global ~/.kling/.env file'
-      );
-    }
-
-    this.auth = new KlingAuth(credentials.accessKey, credentials.secretKey);
-    this.baseUrl = config.baseUrl ?? BASE_URL;
-    this.debug = config.debug ?? false;
-
-    // Validate HTTPS
-    if (!this.baseUrl.startsWith('https://')) {
-      throw new Error('Base URL must use HTTPS protocol');
-    }
-
-    // Create axios instance
-    this.client = axios.create({
-      baseURL: this.baseUrl,
-      timeout: config.timeout ?? DEFAULT_TIMEOUT,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    // Add request interceptor for auth
-    this.client.interceptors.request.use((requestConfig) => {
-      // Ensure headers object exists (use plain object for compatibility)
-      const headers = requestConfig.headers ?? {};
-      headers.Authorization = this.auth.getAuthorizationHeader();
-      requestConfig.headers = headers;
-      return requestConfig;
-    });
-
-    if (this.debug) {
-      logger.debug(`KlingAPI initialized with base URL: ${this.baseUrl}`);
-      logger.debug(`Using access key: ${this.auth.getRedactedAccessKey()}`);
-    }
-  }
-
-  // ==========================================================================
-  // Private Helper Methods
-  // ==========================================================================
-
-  /**
-   * Make an API request with error handling
-   */
-  private async makeRequest<T>(
-    method: 'GET' | 'POST',
-    endpoint: string,
-    data?: Record<string, unknown>,
-    retries = 3
-  ): Promise<T> {
-    let lastError: Error | null = null;
-
-    for (let attempt = 1; attempt <= retries; attempt++) {
-      try {
-        if (this.debug) {
-          logger.debug(`[${method}] ${endpoint} (attempt ${attempt}/${retries})`);
-        }
-
-        const response =
-          method === 'GET'
-            ? await this.client.get<T>(endpoint, { params: data })
-            : await this.client.post<T>(endpoint, data);
-
-        return response.data;
-      } catch (error) {
-        lastError = this.handleError(error);
-
-        // Check if retryable
-        if (lastError instanceof KlingAPIError && lastError.isRetryable() && attempt < retries) {
-          const delay = Math.pow(2, attempt) * BACKOFF_BASE_MS; // Exponential backoff
-          if (this.debug) {
-            logger.debug(`Retrying in ${delay}ms...`);
-          }
-          await new Promise((resolve) => setTimeout(resolve, delay));
-          continue;
-        }
-
-        throw lastError;
-      }
-    }
-
-    throw lastError ?? new Error('Request failed after retries');
-  }
-
-  /**
-   * Handle and transform API errors
-   */
-  private handleError(error: unknown): Error {
-    if (axios.isAxiosError(error)) {
-      const axiosError = error as AxiosError<{
-        code: number;
-        message: string;
-        request_id?: string;
-      }>;
-
-      if (axiosError.response) {
-        const { status, data } = axiosError.response;
-        const code = data?.code || status;
-        const message = data?.message || axiosError.message;
-        const requestId = data?.request_id;
-
-        // Sanitize error in production
-        const finalMessage = isProduction() ? sanitizeError(message, false) : message;
-
-        return new KlingAPIError(finalMessage, code, requestId, status);
-      }
-
-      if (axiosError.code === 'ECONNABORTED') {
-        return new KlingAPIError('Request timeout', ERROR_CODES.SERVICE_UNAVAILABLE);
-      }
-
-      return new KlingAPIError(axiosError.message, ERROR_CODES.INTERNAL_ERROR);
-    }
-
-    if (error instanceof Error) {
-      return error;
-    }
-
-    return new Error(String(error));
+    this.httpClient = new KlingHttpClient(config);
   }
 
   // ==========================================================================
@@ -275,7 +104,7 @@ export class KlingAPI {
       params.resource_pack_name = resourcePackName;
     }
 
-    return this.makeRequest<AccountInfoResponse>('GET', '/account/costs', params);
+    return this.httpClient.request<AccountInfoResponse>('GET', '/account/costs', params);
   }
 
   // ==========================================================================
@@ -289,26 +118,7 @@ export class KlingAPI {
    * @returns Task response with task ID
    */
   async textToVideo(params: TextToVideoParams): Promise<TaskResponse> {
-    validateTextToVideoParams(params);
-
-    const payload: Record<string, unknown> = {
-      model_name: params.model_name ?? 'kling-v1',
-      prompt: params.prompt,
-    };
-
-    copyOptionalParams(params, payload, [
-      'negative_prompt',
-      'sound',
-      'cfg_scale',
-      'mode',
-      'camera_control',
-      'aspect_ratio',
-      'duration',
-      'callback_url',
-      'external_task_id',
-    ]);
-
-    return this.makeRequest<TaskResponse>('POST', '/v1/videos/text2video', payload);
+    return videoOps.textToVideo(this.httpClient, params);
   }
 
   /**
@@ -318,7 +128,7 @@ export class KlingAPI {
    * @returns Task result with status and video URLs
    */
   async queryTextToVideoTask(taskId: string): Promise<VideoTaskResult> {
-    return this.makeRequest<VideoTaskResult>('GET', `/v1/videos/text2video/${taskId}`);
+    return videoOps.queryTextToVideoTask(this.httpClient, taskId);
   }
 
   // ==========================================================================
@@ -332,41 +142,7 @@ export class KlingAPI {
    * @returns Task response with task ID
    */
   async imageToVideo(params: ImageToVideoParams): Promise<TaskResponse> {
-    validateImageToVideoParams(params);
-
-    // Parallelize image processing when both are present
-    const [processedImage, processedImageTail] = await Promise.all([
-      processMediaSource(params.image, imageToBase64),
-      params.image_tail
-        ? processMediaSource(params.image_tail, imageToBase64)
-        : Promise.resolve(undefined),
-    ]);
-
-    const payload: Record<string, unknown> = {
-      model_name: params.model_name ?? 'kling-v1',
-      image: processedImage,
-    };
-
-    if (processedImageTail) {
-      payload.image_tail = processedImageTail;
-    }
-
-    copyOptionalParams(params, payload, [
-      'prompt',
-      'negative_prompt',
-      'voice_list',
-      'dynamic_masks',
-      'static_mask',
-      'cfg_scale',
-      'mode',
-      'camera_control',
-      'aspect_ratio',
-      'duration',
-      'callback_url',
-      'external_task_id',
-    ]);
-
-    return this.makeRequest<TaskResponse>('POST', '/v1/videos/image2video', payload);
+    return videoOps.imageToVideo(this.httpClient, params);
   }
 
   /**
@@ -376,7 +152,7 @@ export class KlingAPI {
    * @returns Task result with status and video URLs
    */
   async queryImageToVideoTask(taskId: string): Promise<VideoTaskResult> {
-    return this.makeRequest<VideoTaskResult>('GET', `/v1/videos/image2video/${taskId}`);
+    return videoOps.queryImageToVideoTask(this.httpClient, taskId);
   }
 
   // ==========================================================================
@@ -390,31 +166,7 @@ export class KlingAPI {
    * @returns Task response with task ID
    */
   async generateImage(params: ImageGenParams): Promise<TaskResponse> {
-    validateImageGenParams(params);
-
-    const payload: Record<string, unknown> = {
-      model_name: params.model_name ?? 'kling-v1',
-      prompt: params.prompt,
-    };
-
-    // Handle image separately as it needs processing
-    if (params.image) {
-      payload.image = await processMediaSource(params.image, imageToBase64);
-    }
-
-    copyOptionalParams(params, payload, [
-      'negative_prompt',
-      'image_reference',
-      'image_fidelity',
-      'human_fidelity',
-      'resolution',
-      'n',
-      'aspect_ratio',
-      'callback_url',
-      'external_task_id',
-    ]);
-
-    return this.makeRequest<TaskResponse>('POST', '/v1/images/generations', payload);
+    return imageOps.generateImage(this.httpClient, params);
   }
 
   /**
@@ -424,7 +176,7 @@ export class KlingAPI {
    * @returns Task result with status and image URLs
    */
   async queryImageGenTask(taskId: string): Promise<ImageTaskResult> {
-    return this.makeRequest<ImageTaskResult>('GET', `/v1/images/generations/${taskId}`);
+    return imageOps.queryImageGenTask(this.httpClient, taskId);
   }
 
   // ==========================================================================
@@ -438,19 +190,7 @@ export class KlingAPI {
    * @returns Task response with task ID
    */
   async expandImage(params: ImageExpandParams): Promise<TaskResponse> {
-    validateImageExpandParams(params);
-
-    const payload: Record<string, unknown> = {
-      image: await processMediaSource(params.image, imageToBase64),
-      up_expansion_ratio: params.up_expansion_ratio,
-      down_expansion_ratio: params.down_expansion_ratio,
-      left_expansion_ratio: params.left_expansion_ratio,
-      right_expansion_ratio: params.right_expansion_ratio,
-    };
-
-    copyOptionalParams(params, payload, ['callback_url', 'external_task_id']);
-
-    return this.makeRequest<TaskResponse>('POST', '/v1/images/expand', payload);
+    return imageOps.expandImage(this.httpClient, params);
   }
 
   /**
@@ -460,7 +200,7 @@ export class KlingAPI {
    * @returns Task result with status and image URLs
    */
   async queryImageExpandTask(taskId: string): Promise<ImageTaskResult> {
-    return this.makeRequest<ImageTaskResult>('GET', `/v1/images/expand/${taskId}`);
+    return imageOps.queryImageExpandTask(this.httpClient, taskId);
   }
 
   // ==========================================================================
@@ -474,22 +214,7 @@ export class KlingAPI {
    * @returns Task response with task ID
    */
   async createAvatar(params: AvatarParams): Promise<TaskResponse> {
-    validateAvatarParams(params);
-
-    const payload: Record<string, unknown> = {
-      image: await processMediaSource(params.image, imageToBase64),
-    };
-
-    // Add audio source (mutually exclusive)
-    if (params.audio_id) {
-      payload.audio_id = params.audio_id;
-    } else if (params.sound_file) {
-      payload.sound_file = await processMediaSource(params.sound_file, audioToBase64);
-    }
-
-    copyOptionalParams(params, payload, ['prompt', 'mode', 'callback_url', 'external_task_id']);
-
-    return this.makeRequest<TaskResponse>('POST', '/v1/avatar', payload);
+    return avatarOps.createAvatar(this.httpClient, params);
   }
 
   /**
@@ -499,51 +224,154 @@ export class KlingAPI {
    * @returns Task result with status and video URLs
    */
   async queryAvatarTask(taskId: string): Promise<VideoTaskResult> {
-    return this.makeRequest<VideoTaskResult>('GET', `/v1/avatar/${taskId}`);
+    return avatarOps.queryAvatarTask(this.httpClient, taskId);
+  }
+
+  // ==========================================================================
+  // Video Extension Methods
+  // ==========================================================================
+
+  /**
+   * Extend an existing video by appending new content
+   *
+   * @param params - Extension parameters
+   * @returns Task response with task ID
+   *
+   * @remarks
+   * The source video must be under 3 minutes and within 30 days of generation.
+   * Videos are cleared 30 days after generation.
+   */
+  async extendVideo(params: ExtendVideoParams): Promise<TaskResponse> {
+    return videoOps.extendVideo(this.httpClient, params);
+  }
+
+  /**
+   * Query a video extension task status
+   *
+   * @param taskId - Task ID to query
+   * @returns Task result with status and video URLs
+   */
+  async queryExtendVideoTask(taskId: string): Promise<VideoTaskResult> {
+    return videoOps.queryExtendVideoTask(this.httpClient, taskId);
+  }
+
+  // ==========================================================================
+  // Multi-Image-to-Video Methods
+  // ==========================================================================
+
+  /**
+   * Generate a video from multiple reference images
+   *
+   * @param params - Generation parameters
+   * @returns Task response with task ID
+   *
+   * @remarks
+   * Supports up to 4 images. The model interpolates between images
+   * to create smooth video transitions.
+   */
+  async multiImageToVideo(params: MultiImageToVideoParams): Promise<TaskResponse> {
+    return videoOps.multiImageToVideo(this.httpClient, params);
+  }
+
+  /**
+   * Query a multi-image-to-video task status
+   *
+   * @param taskId - Task ID to query
+   * @returns Task result with status and video URLs
+   */
+  async queryMultiImageToVideoTask(taskId: string): Promise<VideoTaskResult> {
+    return videoOps.queryMultiImageToVideoTask(this.httpClient, taskId);
+  }
+
+  // ==========================================================================
+  // Omni Video Methods
+  // ==========================================================================
+
+  /**
+   * Generate a video using the Omni model with multi-modal inputs
+   *
+   * @param params - Generation parameters
+   * @returns Task response with task ID
+   *
+   * @remarks
+   * Use template syntax in prompts to reference inputs:
+   * - <<<image_1>>> for images from image_list
+   * - <<<video_1>>> for videos from video_list
+   * - <<<element_1>>> for elements from element_list
+   */
+  async omniVideo(params: OmniVideoParams): Promise<TaskResponse> {
+    return videoOps.omniVideo(this.httpClient, params);
+  }
+
+  /**
+   * Query an omni video task status
+   *
+   * @param taskId - Task ID to query
+   * @returns Task result with status and video URLs
+   */
+  async queryOmniVideoTask(taskId: string): Promise<VideoTaskResult> {
+    return videoOps.queryOmniVideoTask(this.httpClient, taskId);
+  }
+
+  // ==========================================================================
+  // Omni Image Methods
+  // ==========================================================================
+
+  /**
+   * Generate images using the Omni model with multi-modal inputs
+   *
+   * @param params - Generation parameters
+   * @returns Task response with task ID
+   *
+   * @remarks
+   * Use template syntax in prompts to reference inputs:
+   * - <<<image_1>>> for images from image_list
+   */
+  async omniImage(params: OmniImageParams): Promise<TaskResponse> {
+    return imageOps.omniImage(this.httpClient, params);
+  }
+
+  /**
+   * Query an omni image task status
+   *
+   * @param taskId - Task ID to query
+   * @returns Task result with status and image URLs
+   */
+  async queryOmniImageTask(taskId: string): Promise<ImageTaskResult> {
+    return imageOps.queryOmniImageTask(this.httpClient, taskId);
+  }
+
+  // ==========================================================================
+  // Multi-Image-to-Image Methods
+  // ==========================================================================
+
+  /**
+   * Generate images from multiple subject images with optional scene and style
+   *
+   * @param params - Generation parameters
+   * @returns Task response with task ID
+   *
+   * @remarks
+   * Supports 1-4 subject images. Subject images should be pre-cropped.
+   * Scene and style images are optional references.
+   */
+  async multiImageToImage(params: MultiImageToImageParams): Promise<TaskResponse> {
+    return imageOps.multiImageToImage(this.httpClient, params);
+  }
+
+  /**
+   * Query a multi-image-to-image task status
+   *
+   * @param taskId - Task ID to query
+   * @returns Task result with status and image URLs
+   */
+  async queryMultiImageToImageTask(taskId: string): Promise<ImageTaskResult> {
+    return imageOps.queryMultiImageToImageTask(this.httpClient, taskId);
   }
 
   // ==========================================================================
   // Wait for Result Methods
   // ==========================================================================
-
-  /**
-   * Generic method to wait for any task to complete
-   *
-   * @param taskId - Task ID to wait for
-   * @param queryFn - Function to query task status
-   * @param options - Polling options
-   * @param defaultSpinnerText - Default spinner text
-   * @param defaultErrorMsg - Default error message for failed tasks
-   * @returns Completed task result
-   */
-  private async waitForTaskResult<T extends VideoTaskResult | ImageTaskResult>(
-    taskId: string,
-    queryFn: (id: string) => Promise<T>,
-    options: PollOptions,
-    defaultSpinnerText: string,
-    defaultErrorMsg: string
-  ): Promise<T> {
-    const result = await pollWithSpinner<T>(
-      () => queryFn(taskId),
-      (result) => result.data.task_status === 'succeed' || result.data.task_status === 'failed',
-      {
-        interval: options.interval ?? DEFAULT_POLL_INTERVAL,
-        timeout: options.timeout ?? DEFAULT_POLL_TIMEOUT,
-        showSpinner: options.showSpinner,
-        spinnerText: options.spinnerText ?? defaultSpinnerText,
-      }
-    );
-
-    if (result.data.task_status === 'failed') {
-      throw new KlingAPIError(
-        result.data.task_status_msg ?? defaultErrorMsg,
-        ERROR_CODES.INTERNAL_ERROR,
-        result.request_id
-      );
-    }
-
-    return result;
-  }
 
   /**
    * Wait for a video generation task to complete
@@ -558,13 +386,7 @@ export class KlingAPI {
     queryFn: (id: string) => Promise<VideoTaskResult> = this.queryTextToVideoTask.bind(this),
     options: PollOptions = {}
   ): Promise<VideoTaskResult> {
-    return this.waitForTaskResult(
-      taskId,
-      queryFn,
-      options,
-      'Generating video',
-      'Video generation failed'
-    );
+    return resultHandlers.waitForVideoResult(taskId, queryFn, options);
   }
 
   /**
@@ -580,13 +402,7 @@ export class KlingAPI {
     queryFn: (id: string) => Promise<ImageTaskResult> = this.queryImageGenTask.bind(this),
     options: PollOptions = {}
   ): Promise<ImageTaskResult> {
-    return this.waitForTaskResult(
-      taskId,
-      queryFn,
-      options,
-      'Generating image',
-      'Image generation failed'
-    );
+    return resultHandlers.waitForImageResult(taskId, queryFn, options);
   }
 
   // ==========================================================================
@@ -606,33 +422,7 @@ export class KlingAPI {
     outputDir: string,
     prompt?: string
   ): Promise<string[]> {
-    if (!result.data.task_result?.videos?.length) {
-      throw new Error('No videos in result');
-    }
-
-    ensureDirectory(outputDir);
-    const savedPaths: string[] = [];
-
-    for (const video of result.data.task_result.videos) {
-      const filename = generateFilename(prompt ?? 'video', 'mp4');
-      const filePath = join(outputDir, filename);
-
-      await downloadVideo(video.url, filePath);
-
-      // Save metadata
-      saveMetadata(filePath, {
-        task_id: result.data.task_id,
-        video_id: video.id,
-        duration: video.duration,
-        url: video.url,
-        created_at: result.data.created_at,
-        prompt,
-      });
-
-      savedPaths.push(filePath);
-    }
-
-    return savedPaths;
+    return fileHandlers.saveVideoResult(result, outputDir, prompt);
   }
 
   /**
@@ -648,34 +438,7 @@ export class KlingAPI {
     outputDir: string,
     prompt?: string
   ): Promise<string[]> {
-    if (!result.data.task_result?.images?.length) {
-      throw new Error('No images in result');
-    }
-
-    ensureDirectory(outputDir);
-    const savedPaths: string[] = [];
-
-    for (const image of result.data.task_result.images) {
-      // Determine extension from URL or default to png
-      const ext = image.url.includes('.jpg') || image.url.includes('.jpeg') ? 'jpg' : 'png';
-      const filename = generateFilename(prompt ?? 'image', ext);
-      const filePath = join(outputDir, filename);
-
-      await downloadImage(image.url, filePath);
-
-      // Save metadata
-      saveMetadata(filePath, {
-        task_id: result.data.task_id,
-        image_index: image.index,
-        url: image.url,
-        created_at: result.data.created_at,
-        prompt,
-      });
-
-      savedPaths.push(filePath);
-    }
-
-    return savedPaths;
+    return fileHandlers.saveImageResult(result, outputDir, prompt);
   }
 
   // ==========================================================================
@@ -704,14 +467,14 @@ export class KlingAPI {
    * @returns Current JWT token
    */
   getToken(): string {
-    return this.auth.getValidToken();
+    return this.httpClient.getToken();
   }
 
   /**
    * Force refresh the authentication token
    */
   refreshToken(): void {
-    this.auth.refreshToken();
+    this.httpClient.refreshToken();
   }
 }
 

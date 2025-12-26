@@ -42,4 +42,9 @@ export {
   validateImageGenParams,
   validateImageExpandParams,
   validateAvatarParams,
+  validateExtendVideoParams,
+  validateMultiImageToVideoParams,
+  validateOmniVideoParams,
+  validateOmniImageParams,
+  validateMultiImageToImageParams,
 } from './validators.js';

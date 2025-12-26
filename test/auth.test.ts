@@ -5,6 +5,13 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import jwt from 'jsonwebtoken';
 import { KlingAuth, decodeToken, isTokenExpired } from '../src/auth.js';
+import {
+  JWT_EXPIRY_SECONDS,
+  CLOCK_SKEW_SECONDS,
+  JWT_FORMAT_REGEX,
+  BUFFER_BOUNDARY_MS,
+  PAST_EXPIRY_MINUTES,
+} from './test-constants.js';
 
 describe('KlingAuth', () => {
   const testAccessKey = 'test-access-key-12345';
@@ -49,7 +56,7 @@ describe('KlingAuth', () => {
 
     it('should generate valid JWT token', () => {
       const token = auth.generateToken();
-      expect(token).toBeTruthy();
+      expect(token).toMatch(JWT_FORMAT_REGEX);
       expect(typeof token).toBe('string');
       expect(token.split('.')).toHaveLength(3);
     });
@@ -66,8 +73,8 @@ describe('KlingAuth', () => {
       const afterTime = Math.floor(Date.now() / 1000);
 
       const decoded = jwt.decode(token) as { exp: number };
-      expect(decoded.exp).toBeGreaterThanOrEqual(beforeTime + 1800);
-      expect(decoded.exp).toBeLessThanOrEqual(afterTime + 1800 + 1);
+      expect(decoded.exp).toBeGreaterThanOrEqual(beforeTime + JWT_EXPIRY_SECONDS);
+      expect(decoded.exp).toBeLessThanOrEqual(afterTime + JWT_EXPIRY_SECONDS + 1);
     });
 
     it('should include nbf 5 seconds in past (clock skew)', () => {
@@ -75,8 +82,8 @@ describe('KlingAuth', () => {
       const token = auth.generateToken();
 
       const decoded = jwt.decode(token) as { nbf: number };
-      expect(decoded.nbf).toBeGreaterThanOrEqual(beforeTime - 5 - 1);
-      expect(decoded.nbf).toBeLessThanOrEqual(beforeTime - 5 + 1);
+      expect(decoded.nbf).toBeGreaterThanOrEqual(beforeTime - CLOCK_SKEW_SECONDS - 1);
+      expect(decoded.nbf).toBeLessThanOrEqual(beforeTime - CLOCK_SKEW_SECONDS + 1);
     });
 
     it('should use HS256 algorithm', () => {
@@ -142,15 +149,15 @@ describe('KlingAuth', () => {
       Date.now = originalNow;
     });
 
-    // Edge case tests for buffer boundary (5 minutes = 300 seconds)
+    // Edge case tests for buffer boundary (TOKEN_EXPIRY_BUFFER_MINUTES = 5 minutes)
     describe('buffer boundary edge cases', () => {
       it('should return false when token expires in exactly 5 minutes (buffer boundary)', () => {
         auth.generateToken();
 
-        // Token expires at 30 minutes. Move time forward 25 minutes = expires in 5 min exactly
+        // Token expires at JWT_EXPIRY_MINUTES. Move time forward BUFFER_BOUNDARY_MINUTES = expires in 5 min exactly
         // At buffer boundary, token should be refreshed (returns false)
         const originalNow = Date.now;
-        Date.now = vi.fn(() => originalNow() + 25 * 60 * 1000);
+        Date.now = vi.fn(() => originalNow() + BUFFER_BOUNDARY_MS);
 
         expect(auth.isTokenValid()).toBe(false);
 
@@ -160,10 +167,10 @@ describe('KlingAuth', () => {
       it('should return false when token expires in 4 minutes 59 seconds (just under buffer)', () => {
         auth.generateToken();
 
-        // Token expires at 30 minutes. Move forward 25min + 1sec = expires in 4:59
+        // Token expires at JWT_EXPIRY_MINUTES. Move forward BUFFER_BOUNDARY_MINUTES + 1sec = expires in 4:59
         // Under buffer, should refresh (returns false)
         const originalNow = Date.now;
-        Date.now = vi.fn(() => originalNow() + (25 * 60 + 1) * 1000);
+        Date.now = vi.fn(() => originalNow() + BUFFER_BOUNDARY_MS + 1000);
 
         expect(auth.isTokenValid()).toBe(false);
 
@@ -173,10 +180,10 @@ describe('KlingAuth', () => {
       it('should return true when token expires in 5 minutes 1 second (just over buffer)', () => {
         auth.generateToken();
 
-        // Token expires at 30 minutes. Move forward 24min 59sec = expires in 5:01
+        // Token expires at JWT_EXPIRY_MINUTES. Move forward BUFFER_BOUNDARY_MINUTES - 1sec = expires in 5:01
         // Over buffer, should be valid (returns true)
         const originalNow = Date.now;
-        Date.now = vi.fn(() => originalNow() + (24 * 60 + 59) * 1000);
+        Date.now = vi.fn(() => originalNow() + BUFFER_BOUNDARY_MS - 1000);
 
         expect(auth.isTokenValid()).toBe(true);
 
@@ -186,9 +193,9 @@ describe('KlingAuth', () => {
       it('should return false when token is already expired', () => {
         auth.generateToken();
 
-        // Move forward past expiration (31 minutes)
+        // Move forward past expiration (PAST_EXPIRY_MINUTES)
         const originalNow = Date.now;
-        Date.now = vi.fn(() => originalNow() + 31 * 60 * 1000);
+        Date.now = vi.fn(() => originalNow() + PAST_EXPIRY_MINUTES * 60 * 1000);
 
         expect(auth.isTokenValid()).toBe(false);
 
@@ -206,7 +213,7 @@ describe('KlingAuth', () => {
 
     it('should generate new token when none exists', () => {
       const token = auth.getValidToken();
-      expect(token).toBeTruthy();
+      expect(token).toMatch(JWT_FORMAT_REGEX);
     });
 
     it('should return cached token when valid', () => {
@@ -237,8 +244,8 @@ describe('KlingAuth', () => {
       auth.getValidToken();
       const token2 = auth.refreshToken();
 
-      // Verify refreshed token is valid
-      expect(token2).toBeTruthy();
+      // Verify refreshed token is valid JWT format
+      expect(token2).toMatch(JWT_FORMAT_REGEX);
     });
   });
 
@@ -287,8 +294,9 @@ describe('KlingAuth', () => {
       auth.generateToken();
 
       const timeUntil = auth.getTimeUntilExpiry();
-      expect(timeUntil).toBeGreaterThan(1700); // Should be close to 1800
-      expect(timeUntil).toBeLessThanOrEqual(1800);
+      // Allow 100 second margin for test execution time
+      expect(timeUntil).toBeGreaterThan(JWT_EXPIRY_SECONDS - 100);
+      expect(timeUntil).toBeLessThanOrEqual(JWT_EXPIRY_SECONDS);
     });
   });
 

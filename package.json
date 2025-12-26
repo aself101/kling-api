@@ -5,6 +5,9 @@
   "main": "dist/api.js",
   "types": "dist/api.d.ts",
   "type": "module",
+  "bin": {
+    "kling": "./dist/cli.js"
+  },
   "exports": {
     ".": {
       "import": "./dist/api.js",
@@ -47,7 +50,12 @@
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
     "prepublishOnly": "npm run build",
-    "semantic-release": "semantic-release"
+    "semantic-release": "semantic-release",
+    "kling": "node dist/cli.js",
+    "kling:help": "node dist/cli.js --help",
+    "kling:examples": "node dist/cli.js --examples",
+    "kling:video:help": "node dist/cli.js video --help",
+    "kling:video:examples": "node dist/cli.js video examples"
   },
   "keywords": [
     "kling",

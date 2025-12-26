@@ -11,6 +11,11 @@ import {
   validateImageGenParams,
   validateImageExpandParams,
   validateAvatarParams,
+  validateExtendVideoParams,
+  validateMultiImageToVideoParams,
+  validateOmniVideoParams,
+  validateOmniImageParams,
+  validateMultiImageToImageParams,
   ValidationError,
   BASE_URL,
   DEFAULT_TIMEOUT,
@@ -151,11 +156,31 @@ describe('loadCredentials', () => {
     expect(result.secretKey).toBe('env-secret');
   });
 
-  it('should return undefined when no credentials found', () => {
-    const result = loadCredentials();
+  it('should return undefined when no credentials found', async () => {
+    // Reset modules and mock fs.existsSync to return false
+    // This prevents loadCredentials from reading .env files during test
+    vi.resetModules();
+    vi.doMock('fs', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('fs')>();
+      return {
+        ...actual,
+        existsSync: vi.fn(() => false),
+      };
+    });
+
+    // Dynamically import to get the mocked version
+    const { loadCredentials: isolatedLoadCredentials } = await import(
+      '../src/config/loaders.js'
+    );
+
+    const result = isolatedLoadCredentials();
 
     expect(result.accessKey).toBeUndefined();
     expect(result.secretKey).toBeUndefined();
+
+    // Clean up mocks
+    vi.doUnmock('fs');
+    vi.resetModules();
   });
 });
 
@@ -347,6 +372,47 @@ describe('validateTextToVideoParams', () => {
           model_name: 'kling-v1',
           prompt: 'test',
           cfg_scale: 1.1,
+        })
+      ).toThrow('must be between 0 and 1');
+    });
+
+    // Boundary value tests
+    it('should accept cfg_scale at exact lower boundary (0.0)', () => {
+      expect(() =>
+        validateTextToVideoParams({
+          model_name: 'kling-v1',
+          prompt: 'test',
+          cfg_scale: 0.0,
+        })
+      ).not.toThrow();
+    });
+
+    it('should accept cfg_scale at exact upper boundary (1.0)', () => {
+      expect(() =>
+        validateTextToVideoParams({
+          model_name: 'kling-v1',
+          prompt: 'test',
+          cfg_scale: 1.0,
+        })
+      ).not.toThrow();
+    });
+
+    it('should reject cfg_scale just below lower boundary (-0.01)', () => {
+      expect(() =>
+        validateTextToVideoParams({
+          model_name: 'kling-v1',
+          prompt: 'test',
+          cfg_scale: -0.01,
+        })
+      ).toThrow('must be between 0 and 1');
+    });
+
+    it('should reject cfg_scale just above upper boundary (1.01)', () => {
+      expect(() =>
+        validateTextToVideoParams({
+          model_name: 'kling-v1',
+          prompt: 'test',
+          cfg_scale: 1.01,
         })
       ).toThrow('must be between 0 and 1');
     });
@@ -911,6 +977,410 @@ describe('Camera Control Validation', () => {
           },
         })
       ).toThrow('config is only valid when type="simple"');
+    });
+  });
+});
+
+// ============================================================================
+// Phase 5: Advanced Feature Validation Tests
+// ============================================================================
+
+describe('validateExtendVideoParams', () => {
+  describe('video_id validation', () => {
+    it('should require video_id', () => {
+      expect(() =>
+        validateExtendVideoParams({
+          video_id: '',
+        })
+      ).toThrow('Video ID is required');
+    });
+
+    it('should accept valid video_id', () => {
+      expect(() =>
+        validateExtendVideoParams({
+          video_id: 'task-123-abc',
+        })
+      ).not.toThrow();
+    });
+  });
+
+  describe('prompt validation', () => {
+    it('should accept optional prompt', () => {
+      expect(() =>
+        validateExtendVideoParams({
+          video_id: 'task-123',
+          prompt: 'Continue the scene',
+        })
+      ).not.toThrow();
+    });
+
+    it('should reject prompt exceeding 2500 characters', () => {
+      expect(() =>
+        validateExtendVideoParams({
+          video_id: 'task-123',
+          prompt: 'a'.repeat(2501),
+        })
+      ).toThrow('cannot exceed 2500 characters');
+    });
+  });
+
+  describe('cfg_scale validation', () => {
+    it('should accept cfg_scale between 0 and 1', () => {
+      expect(() =>
+        validateExtendVideoParams({
+          video_id: 'task-123',
+          cfg_scale: 0.5,
+        })
+      ).not.toThrow();
+    });
+
+    it('should reject cfg_scale below 0', () => {
+      expect(() =>
+        validateExtendVideoParams({
+          video_id: 'task-123',
+          cfg_scale: -0.1,
+        })
+      ).toThrow('must be between 0 and 1');
+    });
+
+    it('should reject cfg_scale above 1', () => {
+      expect(() =>
+        validateExtendVideoParams({
+          video_id: 'task-123',
+          cfg_scale: 1.5,
+        })
+      ).toThrow('must be between 0 and 1');
+    });
+  });
+});
+
+describe('validateMultiImageToVideoParams', () => {
+  describe('image_list validation', () => {
+    it('should require at least one image', () => {
+      expect(() =>
+        validateMultiImageToVideoParams({
+          image_list: [],
+          prompt: 'Test prompt',
+        })
+      ).toThrow('At least one image is required');
+    });
+
+    it('should reject more than 4 images', () => {
+      expect(() =>
+        validateMultiImageToVideoParams({
+          image_list: [
+            { image: 'img1' },
+            { image: 'img2' },
+            { image: 'img3' },
+            { image: 'img4' },
+            { image: 'img5' },
+          ],
+          prompt: 'Test prompt',
+        })
+      ).toThrow('Maximum 4 images allowed');
+    });
+
+    it('should accept 1-4 images', () => {
+      expect(() =>
+        validateMultiImageToVideoParams({
+          image_list: [
+            { image: 'https://example.com/img1.jpg' },
+            { image: 'https://example.com/img2.jpg' },
+          ],
+          prompt: 'Test prompt',
+        })
+      ).not.toThrow();
+    });
+
+    it('should require image in each item', () => {
+      expect(() =>
+        validateMultiImageToVideoParams({
+          image_list: [{ image: '' }],
+          prompt: 'Test prompt',
+        })
+      ).toThrow('Image is required');
+    });
+  });
+
+  describe('prompt validation', () => {
+    it('should require prompt', () => {
+      expect(() =>
+        validateMultiImageToVideoParams({
+          image_list: [{ image: 'img1' }],
+          prompt: '',
+        })
+      ).toThrow('Prompt is required');
+    });
+  });
+
+  describe('model_name validation', () => {
+    it('should only accept kling-v1-6', () => {
+      expect(() =>
+        validateMultiImageToVideoParams({
+          image_list: [{ image: 'img1' }],
+          prompt: 'Test',
+          model_name: 'kling-v1-6',
+        })
+      ).not.toThrow();
+    });
+  });
+});
+
+describe('validateOmniVideoParams', () => {
+  describe('prompt validation', () => {
+    it('should require prompt', () => {
+      expect(() =>
+        validateOmniVideoParams({
+          prompt: '',
+        })
+      ).toThrow('Prompt is required');
+    });
+
+    it('should accept valid prompt', () => {
+      expect(() =>
+        validateOmniVideoParams({
+          prompt: 'A video featuring <<<image_1>>>',
+        })
+      ).not.toThrow();
+    });
+  });
+
+  describe('image_list validation', () => {
+    it('should accept images with type', () => {
+      expect(() =>
+        validateOmniVideoParams({
+          prompt: 'A video featuring <<<image_1>>>',
+          image_list: [{ image_url: 'https://example.com/img1.jpg', type: 'first_frame' }],
+        })
+      ).not.toThrow();
+    });
+
+    it('should require first frame when end frame is specified', () => {
+      expect(() =>
+        validateOmniVideoParams({
+          prompt: 'Test video',
+          image_list: [{ image_url: 'https://example.com/img.jpg', type: 'end_frame' }],
+        })
+      ).toThrow('End frame image requires a first frame image');
+    });
+
+    it('should reject end frame with more than 2 images', () => {
+      expect(() =>
+        validateOmniVideoParams({
+          prompt: 'Test video',
+          image_list: [
+            { image_url: 'img1', type: 'first_frame' },
+            { image_url: 'img2' },
+            { image_url: 'img3', type: 'end_frame' },
+          ],
+        })
+      ).toThrow('End frame is not supported when there are more than 2 images');
+    });
+
+    it('should require image_url in each item', () => {
+      expect(() =>
+        validateOmniVideoParams({
+          prompt: 'Test video',
+          image_list: [{ image_url: '' }],
+        })
+      ).toThrow('Image URL is required');
+    });
+  });
+
+  describe('aspect_ratio validation', () => {
+    it('should accept valid video aspect ratios', () => {
+      expect(() =>
+        validateOmniVideoParams({
+          prompt: 'Test video',
+          aspect_ratio: '16:9',
+        })
+      ).not.toThrow();
+    });
+
+    it('should reject invalid aspect ratio', () => {
+      expect(() =>
+        validateOmniVideoParams({
+          prompt: 'Test video',
+          aspect_ratio: '21:9' as any,
+        })
+      ).toThrow('must be one of');
+    });
+  });
+});
+
+describe('validateOmniImageParams', () => {
+  describe('prompt validation', () => {
+    it('should require prompt', () => {
+      expect(() =>
+        validateOmniImageParams({
+          prompt: '',
+        })
+      ).toThrow('Prompt is required');
+    });
+  });
+
+  describe('n validation', () => {
+    it('should accept n between 1 and 9', () => {
+      expect(() =>
+        validateOmniImageParams({
+          prompt: 'Test image',
+          n: 5,
+        })
+      ).not.toThrow();
+    });
+
+    it('should reject n below 1', () => {
+      expect(() =>
+        validateOmniImageParams({
+          prompt: 'Test image',
+          n: 0,
+        })
+      ).toThrow('must be between 1 and 9');
+    });
+
+    it('should reject n above 9', () => {
+      expect(() =>
+        validateOmniImageParams({
+          prompt: 'Test image',
+          n: 10,
+        })
+      ).toThrow('must be between 1 and 9');
+    });
+
+    it('should reject non-integer n', () => {
+      expect(() =>
+        validateOmniImageParams({
+          prompt: 'Test image',
+          n: 2.5,
+        })
+      ).toThrow('n must be an integer');
+    });
+  });
+
+  describe('resolution validation', () => {
+    it('should accept valid resolutions', () => {
+      expect(() =>
+        validateOmniImageParams({
+          prompt: 'Test image',
+          resolution: '2k',
+        })
+      ).not.toThrow();
+    });
+  });
+
+  describe('aspect_ratio validation', () => {
+    it('should accept auto aspect ratio', () => {
+      expect(() =>
+        validateOmniImageParams({
+          prompt: 'Test image',
+          aspect_ratio: 'auto',
+        })
+      ).not.toThrow();
+    });
+
+    it('should accept standard image aspect ratios', () => {
+      expect(() =>
+        validateOmniImageParams({
+          prompt: 'Test image',
+          aspect_ratio: '21:9',
+        })
+      ).not.toThrow();
+    });
+  });
+});
+
+describe('validateMultiImageToImageParams', () => {
+  describe('subject_image_list validation', () => {
+    it('should require at least one subject image', () => {
+      expect(() =>
+        validateMultiImageToImageParams({
+          subject_image_list: [],
+        })
+      ).toThrow('At least one subject image is required');
+    });
+
+    it('should reject more than 4 subject images', () => {
+      expect(() =>
+        validateMultiImageToImageParams({
+          subject_image_list: [
+            { subject_image: 'img1' },
+            { subject_image: 'img2' },
+            { subject_image: 'img3' },
+            { subject_image: 'img4' },
+            { subject_image: 'img5' },
+          ],
+        })
+      ).toThrow('Maximum 4 subject images allowed');
+    });
+
+    it('should accept 1-4 subject images', () => {
+      expect(() =>
+        validateMultiImageToImageParams({
+          subject_image_list: [
+            { subject_image: 'https://example.com/subject1.jpg' },
+            { subject_image: 'https://example.com/subject2.jpg' },
+          ],
+        })
+      ).not.toThrow();
+    });
+
+    it('should require subject_image in each item', () => {
+      expect(() =>
+        validateMultiImageToImageParams({
+          subject_image_list: [{ subject_image: '' }],
+        })
+      ).toThrow('Subject image is required');
+    });
+  });
+
+  describe('model_name validation', () => {
+    it('should accept kling-v2', () => {
+      expect(() =>
+        validateMultiImageToImageParams({
+          subject_image_list: [{ subject_image: 'img1' }],
+          model_name: 'kling-v2',
+        })
+      ).not.toThrow();
+    });
+
+    it('should accept kling-v2-1', () => {
+      expect(() =>
+        validateMultiImageToImageParams({
+          subject_image_list: [{ subject_image: 'img1' }],
+          model_name: 'kling-v2-1',
+        })
+      ).not.toThrow();
+    });
+  });
+
+  describe('n validation', () => {
+    it('should accept n between 1 and 9', () => {
+      expect(() =>
+        validateMultiImageToImageParams({
+          subject_image_list: [{ subject_image: 'img1' }],
+          n: 3,
+        })
+      ).not.toThrow();
+    });
+
+    it('should reject n outside range', () => {
+      expect(() =>
+        validateMultiImageToImageParams({
+          subject_image_list: [{ subject_image: 'img1' }],
+          n: 15,
+        })
+      ).toThrow('must be between 1 and 9');
+    });
+  });
+
+  describe('aspect_ratio validation', () => {
+    it('should accept valid image aspect ratios', () => {
+      expect(() =>
+        validateMultiImageToImageParams({
+          subject_image_list: [{ subject_image: 'img1' }],
+          aspect_ratio: '4:3',
+        })
+      ).not.toThrow();
     });
   });
 });

@@ -65,11 +65,42 @@ describe('KlingAPI', () => {
       expect(customApi).toBeInstanceOf(KlingAPI);
     });
 
-    it('should throw error when credentials not found', () => {
+    it('should throw error when credentials not found', async () => {
       delete process.env.KLING_ACCESS_KEY;
       delete process.env.KLING_SECRET_KEY;
 
-      expect(() => new KlingAPI()).toThrow('credentials not found');
+      // Reset modules and mock fs.existsSync to return false
+      // This prevents loadCredentials from reading .env files during test
+      vi.resetModules();
+      vi.doMock('fs', async (importOriginal) => {
+        const actual = await importOriginal<typeof import('fs')>();
+        return {
+          ...actual,
+          existsSync: vi.fn(() => false),
+        };
+      });
+
+      // Re-mock axios since we reset modules
+      vi.doMock('axios', () => {
+        const mockAxios = {
+          create: vi.fn(() => mockAxios),
+          get: vi.fn(),
+          post: vi.fn(),
+          interceptors: { request: { use: vi.fn() } },
+          isAxiosError: vi.fn(),
+        };
+        return { default: mockAxios, isAxiosError: vi.fn() };
+      });
+
+      // Dynamically import to get the mocked version
+      const { KlingAPI: IsolatedKlingAPI } = await import('../src/api.js');
+
+      expect(() => new IsolatedKlingAPI()).toThrow('credentials not found');
+
+      // Clean up mocks
+      vi.doUnmock('fs');
+      vi.doUnmock('axios');
+      vi.resetModules();
     });
 
     it('should throw error for HTTP base URL', () => {
@@ -1760,6 +1791,343 @@ describe('Save Result Methods', () => {
       expect(results[1][0]).toContain('same_prompt');
 
       downloadImageSpy.mockRestore();
+    });
+  });
+});
+
+// ============================================================================
+// Phase 5: Advanced Features API Tests
+// ============================================================================
+
+describe('Phase 5: Advanced Features', () => {
+  let api: KlingAPI;
+  let mockPost: ReturnType<typeof vi.fn>;
+  let mockGet: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    vi.stubEnv('KLING_ACCESS_KEY', 'test-access-key');
+    vi.stubEnv('KLING_SECRET_KEY', 'test-secret-key');
+    api = new KlingAPI();
+
+    // @ts-expect-error - accessing private client for testing
+    const client = api.client;
+    mockPost = vi.fn().mockResolvedValue({
+      data: {
+        code: 0,
+        message: 'success',
+        request_id: 'req-phase5',
+        data: {
+          task_id: 'phase5-task-123',
+          task_status: 'submitted',
+          created_at: Date.now(),
+          updated_at: Date.now(),
+        },
+      },
+    });
+    mockGet = vi.fn().mockResolvedValue({
+      data: {
+        code: 0,
+        message: 'success',
+        request_id: 'req-phase5',
+        data: {
+          task_id: 'phase5-task-123',
+          task_status: 'succeed',
+          created_at: Date.now(),
+          updated_at: Date.now(),
+          task_result: {
+            videos: [{ id: 'v1', url: 'https://example.com/video.mp4', duration: '5' }],
+          },
+        },
+      },
+    });
+    client.post = mockPost;
+    client.get = mockGet;
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.clearAllMocks();
+  });
+
+  describe('extendVideo', () => {
+    it('should create video extension task', async () => {
+      const result = await api.extendVideo({
+        video_id: 'existing-video-123',
+      });
+
+      expect(mockPost).toHaveBeenCalledWith('/v1/videos/video-extend', {
+        video_id: 'existing-video-123',
+      });
+      expect(result.data.task_id).toBe('phase5-task-123');
+    });
+
+    it('should include optional parameters', async () => {
+      await api.extendVideo({
+        video_id: 'existing-video-123',
+        prompt: 'Continue with more action',
+        negative_prompt: 'No blur',
+        cfg_scale: 0.7,
+        callback_url: 'https://callback.example.com',
+      });
+
+      expect(mockPost).toHaveBeenCalledWith('/v1/videos/video-extend', {
+        video_id: 'existing-video-123',
+        prompt: 'Continue with more action',
+        negative_prompt: 'No blur',
+        cfg_scale: 0.7,
+        callback_url: 'https://callback.example.com',
+      });
+    });
+
+    it('should require video_id', async () => {
+      await expect(api.extendVideo({ video_id: '' })).rejects.toThrow('Video ID is required');
+    });
+  });
+
+  describe('queryExtendVideoTask', () => {
+    it('should query correct endpoint', async () => {
+      await api.queryExtendVideoTask('extend-task-123');
+      expect(mockGet).toHaveBeenCalledWith('/v1/videos/video-extend/extend-task-123', {
+        params: undefined,
+      });
+    });
+  });
+
+  describe('multiImageToVideo', () => {
+    it('should create multi-image video task', async () => {
+      const result = await api.multiImageToVideo({
+        image_list: [
+          { image: 'https://example.com/img1.jpg' },
+          { image: 'https://example.com/img2.jpg' },
+        ],
+        prompt: 'Create a smooth transition video',
+      });
+
+      expect(mockPost).toHaveBeenCalledWith(
+        '/v1/videos/multi-image2video',
+        expect.objectContaining({
+          model_name: 'kling-v1-6',
+          prompt: 'Create a smooth transition video',
+          image_list: expect.any(Array),
+        })
+      );
+      expect(result.data.task_id).toBe('phase5-task-123');
+    });
+
+    it('should reject empty image_list', async () => {
+      await expect(
+        api.multiImageToVideo({
+          image_list: [],
+          prompt: 'Test',
+        })
+      ).rejects.toThrow('At least one image is required');
+    });
+  });
+
+  describe('queryMultiImageToVideoTask', () => {
+    it('should query correct endpoint', async () => {
+      await api.queryMultiImageToVideoTask('multi-task-123');
+      expect(mockGet).toHaveBeenCalledWith('/v1/videos/multi-image2video/multi-task-123', {
+        params: undefined,
+      });
+    });
+  });
+
+  describe('omniVideo', () => {
+    it('should create omni video task', async () => {
+      const result = await api.omniVideo({
+        prompt: 'Generate a video featuring <<<image_1>>>',
+      });
+
+      expect(mockPost).toHaveBeenCalledWith(
+        '/v1/videos/omni-video',
+        expect.objectContaining({
+          model_name: 'kling-video-o1',
+          prompt: 'Generate a video featuring <<<image_1>>>',
+        })
+      );
+      expect(result.data.task_id).toBe('phase5-task-123');
+    });
+
+    it('should include image_list when provided', async () => {
+      await api.omniVideo({
+        prompt: 'A video featuring <<<image_1>>>',
+        image_list: [{ image_url: 'https://example.com/img.jpg', type: 'first_frame' }],
+      });
+
+      expect(mockPost).toHaveBeenCalledWith(
+        '/v1/videos/omni-video',
+        expect.objectContaining({
+          image_list: expect.arrayContaining([expect.objectContaining({ type: 'first_frame' })]),
+        })
+      );
+    });
+
+    it('should include element_list when provided', async () => {
+      await api.omniVideo({
+        prompt: 'A video featuring <<<element_1>>>',
+        element_list: [{ element_id: 12345 }],
+      });
+
+      expect(mockPost).toHaveBeenCalledWith(
+        '/v1/videos/omni-video',
+        expect.objectContaining({
+          element_list: [{ element_id: 12345 }],
+        })
+      );
+    });
+  });
+
+  describe('queryOmniVideoTask', () => {
+    it('should query correct endpoint', async () => {
+      await api.queryOmniVideoTask('omni-video-123');
+      expect(mockGet).toHaveBeenCalledWith('/v1/videos/omni-video/omni-video-123', {
+        params: undefined,
+      });
+    });
+  });
+
+  describe('omniImage', () => {
+    it('should create omni image task', async () => {
+      // Update mock to return image result
+      mockPost.mockResolvedValueOnce({
+        data: {
+          code: 0,
+          message: 'success',
+          request_id: 'req-omni-img',
+          data: {
+            task_id: 'omni-img-123',
+            task_status: 'submitted',
+            created_at: Date.now(),
+            updated_at: Date.now(),
+          },
+        },
+      });
+
+      const result = await api.omniImage({
+        prompt: 'Generate an image with <<<image_1>>>',
+      });
+
+      expect(mockPost).toHaveBeenCalledWith(
+        '/v1/images/omni-image',
+        expect.objectContaining({
+          model_name: 'kling-image-o1',
+          prompt: 'Generate an image with <<<image_1>>>',
+        })
+      );
+      expect(result.data.task_id).toBe('omni-img-123');
+    });
+
+    it('should include optional parameters', async () => {
+      await api.omniImage({
+        prompt: 'Generate multiple images',
+        n: 4,
+        resolution: '2k',
+        aspect_ratio: 'auto',
+      });
+
+      expect(mockPost).toHaveBeenCalledWith(
+        '/v1/images/omni-image',
+        expect.objectContaining({
+          n: 4,
+          resolution: '2k',
+          aspect_ratio: 'auto',
+        })
+      );
+    });
+  });
+
+  describe('queryOmniImageTask', () => {
+    it('should query correct endpoint', async () => {
+      mockGet.mockResolvedValueOnce({
+        data: {
+          code: 0,
+          message: 'success',
+          request_id: 'req-omni-img-query',
+          data: {
+            task_id: 'omni-img-123',
+            task_status: 'succeed',
+            created_at: Date.now(),
+            updated_at: Date.now(),
+            task_result: { images: [{ index: 0, url: 'https://example.com/omni.png' }] },
+          },
+        },
+      });
+
+      await api.queryOmniImageTask('omni-img-123');
+      expect(mockGet).toHaveBeenCalledWith('/v1/images/omni-image/omni-img-123', {
+        params: undefined,
+      });
+    });
+  });
+
+  describe('multiImageToImage', () => {
+    it('should create multi-image-to-image task', async () => {
+      const result = await api.multiImageToImage({
+        subject_image_list: [
+          { subject_image: 'https://example.com/subject1.jpg' },
+          { subject_image: 'https://example.com/subject2.jpg' },
+        ],
+      });
+
+      expect(mockPost).toHaveBeenCalledWith(
+        '/v1/images/multi-image2image',
+        expect.objectContaining({
+          model_name: 'kling-v2',
+          subject_image_list: expect.any(Array),
+        })
+      );
+      expect(result.data.task_id).toBe('phase5-task-123');
+    });
+
+    it('should include optional scene and style images', async () => {
+      await api.multiImageToImage({
+        subject_image_list: [{ subject_image: 'https://example.com/subject.jpg' }],
+        scene_image: 'https://example.com/scene.jpg',
+        style_image: 'https://example.com/style.jpg',
+        prompt: 'Combine subject with scene and style',
+      });
+
+      expect(mockPost).toHaveBeenCalledWith(
+        '/v1/images/multi-image2image',
+        expect.objectContaining({
+          scene_image: expect.any(String),
+          style_image: expect.any(String),
+          prompt: 'Combine subject with scene and style',
+        })
+      );
+    });
+
+    it('should reject empty subject_image_list', async () => {
+      await expect(
+        api.multiImageToImage({
+          subject_image_list: [],
+        })
+      ).rejects.toThrow('At least one subject image is required');
+    });
+  });
+
+  describe('queryMultiImageToImageTask', () => {
+    it('should query correct endpoint', async () => {
+      mockGet.mockResolvedValueOnce({
+        data: {
+          code: 0,
+          message: 'success',
+          request_id: 'req-multi-img-query',
+          data: {
+            task_id: 'multi-img-123',
+            task_status: 'succeed',
+            created_at: Date.now(),
+            updated_at: Date.now(),
+            task_result: { images: [{ index: 0, url: 'https://example.com/result.png' }] },
+          },
+        },
+      });
+
+      await api.queryMultiImageToImageTask('multi-img-123');
+      expect(mockGet).toHaveBeenCalledWith('/v1/images/multi-image2image/multi-img-123', {
+        params: undefined,
+      });
     });
   });
 });
