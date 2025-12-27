@@ -60,7 +60,7 @@ export const PAST_EXPIRY_MINUTES = JWT_EXPIRY_MINUTES + 1; // 31 min
 export const DEFAULT_TIMEOUT_MS = 30000;
 
 /** Default poll timeout in milliseconds - aligns with DEFAULT_POLL_TIMEOUT */
-export const DEFAULT_POLL_TIMEOUT_MS = 600000;
+export const DEFAULT_POLL_TIMEOUT_MS = 900000;
 
 /** Default poll interval in milliseconds - aligns with DEFAULT_POLL_INTERVAL */
 export const DEFAULT_POLL_INTERVAL_MS = 3000;

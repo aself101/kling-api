@@ -20,8 +20,8 @@ export const TEXT_TO_VIDEO_MODELS: Record<
     supportsCameraControl: boolean;
   }
 > = {
-  'kling-v1': { supportsCfgScale: true, supportsSound: false, supportsCameraControl: false },
-  'kling-v1-6': { supportsCfgScale: true, supportsSound: false, supportsCameraControl: true },
+  'kling-v1': { supportsCfgScale: true, supportsSound: false, supportsCameraControl: true },
+  'kling-v1-6': { supportsCfgScale: true, supportsSound: false, supportsCameraControl: false },
   'kling-v2-master': {
     supportsCfgScale: false,
     supportsSound: false,

@@ -245,7 +245,7 @@ describe('KlingAPI', () => {
     it('should include camera_control when provided', async () => {
       await api.textToVideo({
         prompt: 'test',
-        model_name: 'kling-v1-6',
+        model_name: 'kling-v1',
         camera_control: {
           type: 'down_back',
         },
@@ -344,7 +344,7 @@ describe('KlingAPI', () => {
       const result = await api.queryImageExpandTask('task-expand-123');
 
       expect(result.data.task_status).toBe('succeed');
-      expect(axios.create().get).toHaveBeenCalledWith('/v1/images/expand/task-expand-123', {
+      expect(axios.create().get).toHaveBeenCalledWith('/v1/images/editing/expand/task-expand-123', {
         params: undefined,
       });
     });
@@ -371,7 +371,7 @@ describe('KlingAPI', () => {
       const result = await api.queryAvatarTask('task-avatar-123');
 
       expect(result.data.task_status).toBe('succeed');
-      expect(axios.create().get).toHaveBeenCalledWith('/v1/avatar/task-avatar-123', {
+      expect(axios.create().get).toHaveBeenCalledWith('/v1/videos/avatar/image2video/task-avatar-123', {
         params: undefined,
       });
     });

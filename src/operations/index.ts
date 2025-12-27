@@ -29,7 +29,4 @@ export {
 } from './image.js';
 
 // Avatar operations
-export {
-  createAvatar,
-  queryAvatarTask,
-} from './avatar.js';
+export { createAvatar, queryAvatarTask } from './avatar.js';

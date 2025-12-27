@@ -4,8 +4,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node.js Version](https://img.shields.io/node/v/kling-api)](https://nodejs.org)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue.svg)](https://www.typescriptlang.org/)
-[![Tests](https://img.shields.io/badge/tests-497%20passing-brightgreen)](test/)
-[![Coverage](https://img.shields.io/badge/coverage-91.47%25-brightgreen)](test/)
+[![Tests](https://img.shields.io/badge/tests-534%20passing-brightgreen)](test/)
+[![Coverage](https://img.shields.io/badge/coverage-95.29%25-brightgreen)](test/)
 
 A TypeScript SDK and CLI tool for the [Kling AI API](https://docs.qingque.cn/d/home/eZQClXt3RYb4VTjqEfcGBIvEG) for video generation, image generation, image expansion, and avatar/talking head creation.
 
@@ -111,7 +111,7 @@ The Kling AI API provides access to video and image generation models. This Node
 - **Image/Audio Input Support** - Convert local files or URLs to base64 with validation
 - **Organized Storage** - Structured directories with timestamped files and metadata
 - **TypeScript** - Type definitions for all API methods, parameters, and responses
-- **Testing** - 497 tests with 91.47% coverage
+- **Testing** - 534 tests with 95.29% coverage
 
 ## Features
 
@@ -149,7 +149,7 @@ npm install -g kling-api
 
 ## CLI Usage
 
-The `kling` CLI provides a command-line interface for video generation.
+The `kling` CLI provides a command-line interface for video generation, image generation, avatar creation, and account management.
 
 ### Global Options
 
@@ -368,6 +368,239 @@ kling --examples
 
 # Show video command examples
 kling video examples
+
+# Show image command examples
+kling image examples
+
+# Show avatar command examples
+kling avatar examples
+
+# Show account command examples
+kling account examples
+```
+
+### Image Commands
+
+#### Generate Images
+
+Generate images from text prompts with optional reference images.
+
+```bash
+kling image generate [options]
+# Alias: kling image gen
+
+Options:
+  -p, --prompt <text...>        Text prompt(s) - can specify multiple
+  -m, --model <name>            Model: kling-v1, kling-v1-5, kling-v2,
+                                kling-v2-new, kling-v2-1 (default: kling-v1)
+  -n, --negative-prompt <text>  Negative prompt
+  -i, --image <path>            Reference image for style transfer
+  --image-reference <type>      Reference type: subject, face (requires --image)
+  --image-fidelity <number>     Image fidelity 0-1 (requires --image-reference)
+  --human-fidelity <number>     Human face fidelity 0-1 (requires face reference)
+  -r, --resolution <res>        Resolution: 1k, 2k (default: 1k)
+  -a, --aspect-ratio <ratio>    Aspect ratio: 16:9, 9:16, 1:1, 4:3, 3:4, 3:2, 2:3, 21:9
+  -c, --count <number>          Number of images to generate (1-9, default: 1)
+  -w, --wait                    Wait for generation to complete
+  --no-download                 Do not download the result
+```
+
+**Examples:**
+
+```bash
+# Basic image generation
+kling image gen --prompt "a majestic lion in the savanna" --wait
+
+# With reference image (style transfer)
+kling image gen \
+  --prompt "portrait in the same style" \
+  --image ./reference.jpg \
+  --image-reference subject \
+  --image-fidelity 0.8 \
+  --wait
+
+# Multiple high-res images
+kling image gen \
+  --prompt "futuristic cityscape" \
+  --count 4 \
+  --resolution 2k \
+  --aspect-ratio 21:9 \
+  --wait
+```
+
+#### Expand Images (Outpainting)
+
+Expand image boundaries in any direction.
+
+```bash
+kling image expand [options]
+
+Options:
+  -i, --image <path>    Input image path or URL
+  --up <ratio>          Upward expansion ratio (0-2)
+  --down <ratio>        Downward expansion ratio (0-2)
+  --left <ratio>        Left expansion ratio (0-2)
+  --right <ratio>       Right expansion ratio (0-2)
+  -w, --wait            Wait for generation to complete
+  --no-download         Do not download the result
+```
+
+Note: Total expanded area cannot exceed 3x the original size.
+
+**Examples:**
+
+```bash
+# Expand to landscape
+kling image expand \
+  --image ./portrait.jpg \
+  --left 1 \
+  --right 1 \
+  --wait
+
+# Expand upward
+kling image expand \
+  --image ./photo.jpg \
+  --up 0.5 \
+  --wait
+```
+
+#### Omni Image
+
+Generate images using the Omni model with template syntax for multi-modal inputs.
+
+```bash
+kling image omni [options]
+
+Options:
+  -p, --prompt <text>         Prompt with template syntax (use <<<image_1>>>)
+  --images <paths...>         Reference images
+  --elements <ids...>         Element IDs
+  -m, --model <name>          Model (default: kling-image-o1)
+  -r, --resolution <res>      Resolution: 1k, 2k
+  -a, --aspect-ratio <ratio>  Aspect ratio (includes 'auto')
+  -c, --count <number>        Number of images (1-9)
+  -w, --wait                  Wait for generation to complete
+```
+
+**Examples:**
+
+```bash
+kling image omni \
+  --prompt "A portrait in the style of <<<image_1>>>" \
+  --images ./art-reference.jpg \
+  --count 4 \
+  --wait
+```
+
+#### Multi-Image-to-Image
+
+Combine multiple subject images with optional scene and style references.
+
+```bash
+kling image multi [options]
+# Alias: kling image mi2i
+
+Options:
+  --subject-images <paths...>  Subject images (1-4 images, required)
+  --scene-image <path>         Scene/background reference image
+  --style-image <path>         Style reference image
+  -p, --prompt <text>          Generation prompt
+  -m, --model <name>           Model: kling-v2, kling-v2-1 (default: kling-v2)
+  -a, --aspect-ratio <ratio>   Output aspect ratio
+  -c, --count <number>         Number of images (1-9)
+  -w, --wait                   Wait for generation to complete
+```
+
+**Examples:**
+
+```bash
+kling image multi \
+  --subject-images ./person1.jpg ./person2.jpg \
+  --scene-image ./background.jpg \
+  --prompt "The subjects meeting in this scene" \
+  --count 4 \
+  --wait
+```
+
+### Avatar Commands
+
+Create talking head videos from portrait images with audio.
+
+```bash
+kling avatar create [options]
+
+Options:
+  -i, --image <path>    Portrait image path or URL
+  --audio-id <id>       Pre-uploaded audio ID (mutually exclusive with --audio-file)
+  --audio-file <path>   Audio file path or URL (mutually exclusive with --audio-id)
+  -p, --prompt <text>   Expression/mood guidance prompt
+  --mode <mode>         Generation mode: std, pro (default: std)
+  -w, --wait            Wait for generation to complete
+  --no-download         Do not download the result
+```
+
+Note: Provide either `--audio-id` OR `--audio-file`, not both.
+
+**Examples:**
+
+```bash
+# With audio file
+kling avatar create \
+  --image ./portrait.jpg \
+  --audio-file ./speech.mp3 \
+  --prompt "Professional, confident expression" \
+  --mode pro \
+  --wait
+
+# With pre-uploaded audio ID
+kling avatar create \
+  --image ./portrait.jpg \
+  --audio-id audio_12345 \
+  --wait
+```
+
+### Account Commands
+
+#### Check Credits
+
+Display credit balance summary.
+
+```bash
+kling account credits [options]
+
+Options:
+  -d, --days <number>  Query period in days (default: 30)
+```
+
+**Examples:**
+
+```bash
+# Show current credit balance (last 30 days)
+kling account credits
+
+# Check usage for specific period
+kling account credits --days 7
+```
+
+#### Account Info
+
+Display detailed account information including all resource packs.
+
+```bash
+kling account info [options]
+
+Options:
+  -d, --days <number>  Query period in days (default: 90)
+```
+
+**Examples:**
+
+```bash
+# Show all account info
+kling account info
+
+# Show info for shorter period
+kling account info --days 30
 ```
 
 ## Authentication Setup

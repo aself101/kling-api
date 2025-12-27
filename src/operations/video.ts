@@ -12,11 +12,7 @@ import {
   validateMultiImageToVideoParams,
   validateOmniVideoParams,
 } from '../config/index.js';
-import {
-  imageToBase64,
-  processMediaSource,
-  copyOptionalParams,
-} from '../utils/index.js';
+import { imageToBase64, processMediaSource, copyOptionalParams } from '../utils/index.js';
 import type {
   TextToVideoParams,
   ImageToVideoParams,

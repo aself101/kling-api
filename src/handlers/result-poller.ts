@@ -5,17 +5,9 @@
  */
 
 import { KlingAPIError } from '../errors.js';
-import {
-  DEFAULT_POLL_INTERVAL,
-  DEFAULT_POLL_TIMEOUT,
-  ERROR_CODES,
-} from '../config/index.js';
+import { DEFAULT_POLL_INTERVAL, DEFAULT_POLL_TIMEOUT, ERROR_CODES } from '../config/index.js';
 import { pollWithSpinner } from '../utils/index.js';
-import type {
-  VideoTaskResult,
-  ImageTaskResult,
-  PollOptions,
-} from '../types.js';
+import type { VideoTaskResult, ImageTaskResult, PollOptions } from '../types.js';
 
 /**
  * Generic method to wait for any task to complete
@@ -69,13 +61,7 @@ export async function waitForVideoResult(
   queryFn: (id: string) => Promise<VideoTaskResult>,
   options: PollOptions = {}
 ): Promise<VideoTaskResult> {
-  return waitForTaskResult(
-    taskId,
-    queryFn,
-    options,
-    'Generating video',
-    'Video generation failed'
-  );
+  return waitForTaskResult(taskId, queryFn, options, 'Generating video', 'Video generation failed');
 }
 
 /**
@@ -91,11 +77,5 @@ export async function waitForImageResult(
   queryFn: (id: string) => Promise<ImageTaskResult>,
   options: PollOptions = {}
 ): Promise<ImageTaskResult> {
-  return waitForTaskResult(
-    taskId,
-    queryFn,
-    options,
-    'Generating image',
-    'Image generation failed'
-  );
+  return waitForTaskResult(taskId, queryFn, options, 'Generating image', 'Image generation failed');
 }

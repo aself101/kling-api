@@ -59,7 +59,9 @@ describe('Avatar Operations', () => {
           created_at: Date.now(),
           updated_at: Date.now(),
           task_result: {
-            videos: [{ id: 'avatar-video-1', url: 'https://example.com/avatar.mp4', duration: '10' }],
+            videos: [
+              { id: 'avatar-video-1', url: 'https://example.com/avatar.mp4', duration: '10' },
+            ],
           },
         },
       },
@@ -81,7 +83,7 @@ describe('Avatar Operations', () => {
       });
 
       expect(mockPost).toHaveBeenCalledWith(
-        '/v1/avatar',
+        '/v1/videos/avatar/image2video',
         expect.objectContaining({
           image: expect.any(String),
           audio_id: 'audio-12345',
@@ -97,7 +99,7 @@ describe('Avatar Operations', () => {
       });
 
       expect(mockPost).toHaveBeenCalledWith(
-        '/v1/avatar',
+        '/v1/videos/avatar/image2video',
         expect.objectContaining({
           image: expect.any(String),
           sound_file: expect.any(String),
@@ -114,7 +116,7 @@ describe('Avatar Operations', () => {
       });
 
       expect(mockPost).toHaveBeenCalledWith(
-        '/v1/avatar',
+        '/v1/videos/avatar/image2video',
         expect.objectContaining({
           prompt: 'Speak naturally',
           mode: 'pro',
@@ -146,7 +148,7 @@ describe('Avatar Operations', () => {
 
       expect(result.data.task_status).toBe('succeed');
       expect(result.data.task_result?.videos).toHaveLength(1);
-      expect(mockGet).toHaveBeenCalledWith('/v1/avatar/avatar-task-123', {
+      expect(mockGet).toHaveBeenCalledWith('/v1/videos/avatar/image2video/avatar-task-123', {
         params: undefined,
       });
     });

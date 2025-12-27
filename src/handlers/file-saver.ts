@@ -13,10 +13,7 @@ import {
   ensureDirectory,
   generateFilename,
 } from '../utils/index.js';
-import type {
-  VideoTaskResult,
-  ImageTaskResult,
-} from '../types.js';
+import type { VideoTaskResult, ImageTaskResult } from '../types.js';
 
 /**
  * Download and save video result to disk

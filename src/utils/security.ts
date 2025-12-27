@@ -105,11 +105,7 @@ export function sanitizeError(error: unknown, isDevelopment = false): string {
   const message = error instanceof Error ? error.message : String(error);
 
   // Allow certain safe error types through (validation messages)
-  if (
-    message.includes('Invalid') ||
-    message.includes('required') ||
-    message.includes('must be')
-  ) {
+  if (message.includes('Invalid') || message.includes('required') || message.includes('must be')) {
     return message;
   }
 

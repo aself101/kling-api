@@ -136,7 +136,7 @@ describe('Video Operations', () => {
     it('should include camera_control when provided', async () => {
       await api.textToVideo({
         prompt: 'test',
-        model_name: 'kling-v1-6',
+        model_name: 'kling-v1',
         camera_control: {
           type: 'down_back',
         },

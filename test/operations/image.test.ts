@@ -147,7 +147,7 @@ describe('Image Operations', () => {
       });
 
       expect(mockPost).toHaveBeenCalledWith(
-        '/v1/images/expand',
+        '/v1/images/editing/expand',
         expect.objectContaining({
           image: expect.any(String),
           up_expansion_ratio: 0.2,
@@ -175,7 +175,7 @@ describe('Image Operations', () => {
   describe('queryImageExpandTask', () => {
     it('should query correct endpoint', async () => {
       await api.queryImageExpandTask('expand-task-123');
-      expect(mockGet).toHaveBeenCalledWith('/v1/images/expand/expand-task-123', {
+      expect(mockGet).toHaveBeenCalledWith('/v1/images/editing/expand/expand-task-123', {
         params: undefined,
       });
     });

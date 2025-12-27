@@ -37,3 +37,7 @@ datasets/**/
 *-plan.md
 *-task-list.md
 *-features-list.md
+
+# Test audio files
+docs/*.mp3
+*:Zone.Identifier

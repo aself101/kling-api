@@ -1,0 +1,50 @@
+# Note: package.json "files" field takes precedence
+# This file is a fallback - only dist/, README.md, LICENSE are published
+
+# Source TypeScript files (compiled to dist/)
+src/
+
+# Test files
+test/
+*.test.ts
+vitest.config.ts
+coverage/
+.nyc_output/
+
+# Config files
+tsconfig.json
+.releaserc.json
+
+# Development files
+.env
+.env.*
+
+# Output directories
+datasets/
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git files
+.git/
+.gitignore
+.github/
+
+# Documentation (README.md and LICENSE are in package.json files)
+docs/
+CLAUDE.md
+
+# Dependencies (never published)
+node_modules/

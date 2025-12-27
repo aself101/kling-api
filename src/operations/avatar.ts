@@ -12,11 +12,7 @@ import {
   processMediaSource,
   copyOptionalParams,
 } from '../utils/index.js';
-import type {
-  AvatarParams,
-  TaskResponse,
-  VideoTaskResult,
-} from '../types.js';
+import type { AvatarParams, TaskResponse, VideoTaskResult } from '../types.js';
 
 /**
  * Create an avatar (talking head) generation task
@@ -44,7 +40,7 @@ export async function createAvatar(
 
   copyOptionalParams(params, payload, ['prompt', 'mode', 'callback_url', 'external_task_id']);
 
-  return client.request<TaskResponse>('POST', '/v1/avatar', payload);
+  return client.request<TaskResponse>('POST', '/v1/videos/avatar/image2video', payload);
 }
 
 /**
@@ -58,5 +54,5 @@ export async function queryAvatarTask(
   client: KlingHttpClient,
   taskId: string
 ): Promise<VideoTaskResult> {
-  return client.request<VideoTaskResult>('GET', `/v1/avatar/${taskId}`);
+  return client.request<VideoTaskResult>('GET', `/v1/videos/avatar/image2video/${taskId}`);
 }

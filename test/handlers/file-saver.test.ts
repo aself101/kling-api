@@ -44,7 +44,9 @@ describe('File Saving Handlers', () => {
   });
 
   describe('saveVideoResult', () => {
-    const createVideoResult = (videos: { id: string; url: string; duration: string }[]): VideoTaskResult => ({
+    const createVideoResult = (
+      videos: { id: string; url: string; duration: string }[]
+    ): VideoTaskResult => ({
       code: 0,
       message: 'success',
       request_id: 'req-123',
@@ -285,9 +287,7 @@ describe('File Saving Handlers', () => {
     });
 
     it('should default to png for URLs without extension', async () => {
-      const result = createImageResult([
-        { index: 0, url: 'https://example.com/api/image?id=123' },
-      ]);
+      const result = createImageResult([{ index: 0, url: 'https://example.com/api/image?id=123' }]);
       vi.mocked(generateFilename).mockReturnValue('image-1234.png');
 
       await saveImageResult(result, mockOutputDir, mockPrompt);
@@ -302,10 +302,7 @@ describe('File Saving Handlers', () => {
 
       await saveImageResult(result, mockOutputDir, mockPrompt);
 
-      expect(downloadImage).toHaveBeenCalledWith(
-        imageUrl,
-        '/tmp/kling-test-output/image-1234.png'
-      );
+      expect(downloadImage).toHaveBeenCalledWith(imageUrl, '/tmp/kling-test-output/image-1234.png');
     });
 
     it('should save metadata with image_index', async () => {

@@ -53,9 +53,12 @@ describe('Result Polling Handlers', () => {
         task_status_msg: statusMsg,
         created_at: 1234567890,
         updated_at: 1234567900,
-        task_result: status === 'succeed' ? {
-          videos: [{ id: 'v1', url: 'https://example.com/video.mp4', duration: '5' }],
-        } : undefined,
+        task_result:
+          status === 'succeed'
+            ? {
+                videos: [{ id: 'v1', url: 'https://example.com/video.mp4', duration: '5' }],
+              }
+            : undefined,
       },
     });
 
@@ -205,9 +208,12 @@ describe('Result Polling Handlers', () => {
         task_status_msg: statusMsg,
         created_at: 1234567890,
         updated_at: 1234567900,
-        task_result: status === 'succeed' ? {
-          images: [{ index: 0, url: 'https://example.com/image.png' }],
-        } : undefined,
+        task_result:
+          status === 'succeed'
+            ? {
+                images: [{ index: 0, url: 'https://example.com/image.png' }],
+              }
+            : undefined,
       },
     });
 

@@ -2,12 +2,6 @@
  * Handlers module barrel export
  */
 
-export {
-  waitForVideoResult,
-  waitForImageResult,
-} from './result-poller.js';
+export { waitForVideoResult, waitForImageResult } from './result-poller.js';
 
-export {
-  saveVideoResult,
-  saveImageResult,
-} from './file-saver.js';
+export { saveVideoResult, saveImageResult } from './file-saver.js';

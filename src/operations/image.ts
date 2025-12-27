@@ -11,11 +11,7 @@ import {
   validateOmniImageParams,
   validateMultiImageToImageParams,
 } from '../config/index.js';
-import {
-  imageToBase64,
-  processMediaSource,
-  copyOptionalParams,
-} from '../utils/index.js';
+import { imageToBase64, processMediaSource, copyOptionalParams } from '../utils/index.js';
 import type {
   ImageGenParams,
   ImageExpandParams,
@@ -108,7 +104,7 @@ export async function expandImage(
 
   copyOptionalParams(params, payload, ['callback_url', 'external_task_id']);
 
-  return client.request<TaskResponse>('POST', '/v1/images/expand', payload);
+  return client.request<TaskResponse>('POST', '/v1/images/editing/expand', payload);
 }
 
 /**
@@ -122,7 +118,7 @@ export async function queryImageExpandTask(
   client: KlingHttpClient,
   taskId: string
 ): Promise<ImageTaskResult> {
-  return client.request<ImageTaskResult>('GET', `/v1/images/expand/${taskId}`);
+  return client.request<ImageTaskResult>('GET', `/v1/images/editing/expand/${taskId}`);
 }
 
 // ==========================================================================

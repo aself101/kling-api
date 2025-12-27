@@ -169,9 +169,7 @@ describe('loadCredentials', () => {
     });
 
     // Dynamically import to get the mocked version
-    const { loadCredentials: isolatedLoadCredentials } = await import(
-      '../src/config/loaders.js'
-    );
+    const { loadCredentials: isolatedLoadCredentials } = await import('../src/config/loaders.js');
 
     const result = isolatedLoadCredentials();
 
@@ -720,17 +718,17 @@ describe('Camera Control Validation', () => {
       expect(() =>
         validateTextToVideoParams({
           prompt: 'test',
-          model_name: 'kling-v1', // Does not support camera_control
+          model_name: 'kling-v1-6', // Does not support camera_control
           camera_control: { type: 'simple' },
         })
       ).toThrow('Camera control is not supported by this model');
     });
 
-    it('should accept camera_control on supported model (kling-v1-6)', () => {
+    it('should accept camera_control on supported model (kling-v1)', () => {
       expect(() =>
         validateTextToVideoParams({
           prompt: 'test',
-          model_name: 'kling-v1-6',
+          model_name: 'kling-v1',
           camera_control: { type: 'simple' },
         })
       ).not.toThrow();
@@ -740,7 +738,7 @@ describe('Camera Control Validation', () => {
       expect(() =>
         validateTextToVideoParams({
           prompt: 'test',
-          model_name: 'kling-v1-6',
+          model_name: 'kling-v1',
           camera_control: { type: 'invalid_type' as any },
         })
       ).toThrow('must be one of:');
@@ -758,7 +756,7 @@ describe('Camera Control Validation', () => {
         expect(() =>
           validateTextToVideoParams({
             prompt: 'test',
-            model_name: 'kling-v1-6',
+            model_name: 'kling-v1',
             camera_control: { type: type as any },
           })
         ).not.toThrow();
@@ -769,7 +767,7 @@ describe('Camera Control Validation', () => {
       expect(() =>
         validateTextToVideoParams({
           prompt: 'test',
-          model_name: 'kling-v1-6',
+          model_name: 'kling-v1',
           camera_control: {
             type: 'down_back',
             config: { horizontal: 5 },
@@ -782,7 +780,7 @@ describe('Camera Control Validation', () => {
       expect(() =>
         validateTextToVideoParams({
           prompt: 'test',
-          model_name: 'kling-v1-6',
+          model_name: 'kling-v1',
           camera_control: {
             type: 'simple',
             config: { horizontal: 5 },
@@ -795,7 +793,7 @@ describe('Camera Control Validation', () => {
       expect(() =>
         validateTextToVideoParams({
           prompt: 'test',
-          model_name: 'kling-v1-6',
+          model_name: 'kling-v1',
           camera_control: {
             config: { zoom: 3 },
           },
@@ -807,7 +805,7 @@ describe('Camera Control Validation', () => {
       expect(() =>
         validateTextToVideoParams({
           prompt: 'test',
-          model_name: 'kling-v1-6',
+          model_name: 'kling-v1',
           camera_control: {
             type: 'simple',
             config: { invalid_key: 5 } as any,
@@ -822,7 +820,7 @@ describe('Camera Control Validation', () => {
         expect(() =>
           validateTextToVideoParams({
             prompt: 'test',
-            model_name: 'kling-v1-6',
+            model_name: 'kling-v1',
             camera_control: {
               type: 'simple',
               config: { [key]: 5 } as any,
@@ -836,7 +834,7 @@ describe('Camera Control Validation', () => {
       expect(() =>
         validateTextToVideoParams({
           prompt: 'test',
-          model_name: 'kling-v1-6',
+          model_name: 'kling-v1',
           camera_control: {
             type: 'simple',
             config: { horizontal: -11 },
@@ -849,7 +847,7 @@ describe('Camera Control Validation', () => {
       expect(() =>
         validateTextToVideoParams({
           prompt: 'test',
-          model_name: 'kling-v1-6',
+          model_name: 'kling-v1',
           camera_control: {
             type: 'simple',
             config: { zoom: 11 },
@@ -862,7 +860,7 @@ describe('Camera Control Validation', () => {
       expect(() =>
         validateTextToVideoParams({
           prompt: 'test',
-          model_name: 'kling-v1-6',
+          model_name: 'kling-v1',
           camera_control: {
             type: 'simple',
             config: { pan: -10 },
@@ -873,7 +871,7 @@ describe('Camera Control Validation', () => {
       expect(() =>
         validateTextToVideoParams({
           prompt: 'test',
-          model_name: 'kling-v1-6',
+          model_name: 'kling-v1',
           camera_control: {
             type: 'simple',
             config: { tilt: 10 },
@@ -886,7 +884,7 @@ describe('Camera Control Validation', () => {
       expect(() =>
         validateTextToVideoParams({
           prompt: 'test',
-          model_name: 'kling-v1-6',
+          model_name: 'kling-v1',
           camera_control: {
             type: 'simple',
             config: { horizontal: 5, vertical: 3 },
@@ -899,7 +897,7 @@ describe('Camera Control Validation', () => {
       expect(() =>
         validateTextToVideoParams({
           prompt: 'test',
-          model_name: 'kling-v1-6',
+          model_name: 'kling-v1',
           camera_control: {
             type: 'simple',
             config: { horizontal: 5, vertical: 0, zoom: 0 },
@@ -912,7 +910,7 @@ describe('Camera Control Validation', () => {
       expect(() =>
         validateTextToVideoParams({
           prompt: 'test',
-          model_name: 'kling-v1-6',
+          model_name: 'kling-v1',
           camera_control: {
             type: 'simple',
             config: { horizontal: 2, vertical: 3, zoom: 4 },
@@ -925,7 +923,7 @@ describe('Camera Control Validation', () => {
       expect(() =>
         validateTextToVideoParams({
           prompt: 'test',
-          model_name: 'kling-v1-6',
+          model_name: 'kling-v1',
           camera_control: {
             type: 'simple',
             config: { horizontal: 1, vertical: 2, pan: 3, tilt: 4, roll: 5, zoom: 6 },

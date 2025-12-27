@@ -26,8 +26,8 @@ export const DEFAULT_TIMEOUT = 30000;
 /** Default polling interval in milliseconds */
 export const DEFAULT_POLL_INTERVAL = 3000;
 
-/** Default polling timeout in milliseconds (10 minutes for video) */
-export const DEFAULT_POLL_TIMEOUT = 600000;
+/** Default polling timeout in milliseconds (15 minutes for video, accommodates pro mode) */
+export const DEFAULT_POLL_TIMEOUT = 900000;
 
 // ============================================================================
 // Size Limits

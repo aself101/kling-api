@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - JWT authentication with automatic token management and 5-minute buffer
 - Camera control support (presets and fine-grained 6-axis configuration)
 - Comprehensive TypeScript type definitions (118+ exported types)
-- 314 tests with 89.93% statement coverage
+- 534 tests with 95.29% statement coverage
 - Production security features:
   - API key redaction in logs
   - SSRF protection with IPv4-mapped IPv6 bypass prevention
