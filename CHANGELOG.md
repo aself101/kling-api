@@ -1,3 +1,16 @@
+# 1.0.0 (2025-12-27)
+
+
+### Bug Fixes
+
+* **api:** correct image expansion and avatar endpoints ([72e54e2](https://github.com/aself101/kling-api/commit/72e54e22dbbff0b26bc02517c955f42cf109719f))
+
+
+### Features
+
+* **kling-api:** add CLI, modular architecture, and comprehensive tests ([bf197c8](https://github.com/aself101/kling-api/commit/bf197c8a3490adab34f77497a6990ecd9e8a0255))
+* **kling-api:** initial release v0.1.0 ([a8237cd](https://github.com/aself101/kling-api/commit/a8237cdee1fd307e72117aecac8abca8cd2d3ff4))
+
 # Changelog
 
 All notable changes to this project will be documented in this file.

@@ -1,6 +1,6 @@
 {
   "name": "kling-api",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Kling AI API wrapper - Video and image generation with JWT authentication for Node.js",
   "main": "dist/api.js",
   "types": "dist/api.d.ts",
