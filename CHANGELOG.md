@@ -1,6 +1,6 @@
 ## [Unreleased]
 
-2.0.0 is in specification — see `docs/specs/kling-api-2.0-migration-spec-v0_4_1.md`. The vendor
+2.0.0 is in specification — see `docs/specs/kling-api-2.0-migration-spec-v0_4_2.md`. The vendor
 discontinued every model 1.x defaults to, moved video generation to a new API standard, and made a
 static API Key the only credential for it; 1.x cannot generate video against the current API.
 

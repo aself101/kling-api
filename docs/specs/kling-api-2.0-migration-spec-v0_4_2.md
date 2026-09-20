@@ -2,12 +2,12 @@
 
 | | |
 |---|---|
-| **Version** | v0.4.1 (draft — run #3 PROCEED; this patch folds in run #3's pre-1a items) |
+| **Version** | v0.4.2 (approved for implementation — run #3 PROCEED; §10 decisions closed 2026-09-20) |
 | **Date** | 2026-09-20 |
 | **Target repo** | `kling-api` (`misc/npm-packages/kling-api`, published as `kling-api` on npm) |
 | **From → To** | `1.0.0` (2025-12-27, `264da22`) → `2.0.0` |
 | **Decision owner** | Alex |
-| **Settled decisions** | Major bump; API Key is the only credential; JWT (AccessKey/SecretKey) removed; full reboot of the public surface rather than an incremental patch. Default video model `kling-3.0-turbo` *(pending §10.11 — the premise it was settled on was corrected in v0.3.0)*; default omni-image `kling-v3-omni`; native `fetch` replaces axios; `engines.node >=20`; elements/voices/avatar/TTS ship in 2.0.0. **semantic-release removed; publishing is manual.** *(Alex, 2026-09-20.)* |
+| **Settled decisions** | Major bump; API Key is the only credential; JWT (AccessKey/SecretKey) removed; full reboot of the public surface rather than an incremental patch. Default video model `kling-3.0-turbo` *(re-confirmed §10.11 on the corrected premise: cheapest current-gen with native audio)*; default omni-image `kling-v3-omni`; native `fetch` replaces axios; `engines.node >=20`; elements/voices/avatar/TTS ship in 2.0.0. **semantic-release removed; publishing is manual.** *(Alex, 2026-09-20.)* |
 | **Companion** | [Implementation checklist](kling-api-2.0-migration-checklist.md) — sub-phase work items, LOC budgets, and the check that closes each |
 | **Appendices** | [A — v1 surface map](appendices/A-v1-surface-map.md) · [B — new-standard contracts](appendices/B-new-standard-contracts.md) · [C — legacy and platform contracts](appendices/C-legacy-and-platform-contracts.md) |
 | **Review record** | Tracker project `kling-api`, pre-implementation runs (2026-09-20): **#1** architect 65 REVISE · excavator 80 · docs 69 (49 findings); **#2** on v0.3.0: architect 79 REVISE · excavator 83 · docs 83 DOCUMENTED (39 findings); **#3** on v0.4.0: architect 86 **PROCEED** · excavator 79 · docs 93 · anxiety-reader 86 CONFIDENCE_WARRANTED · synthesis 84 INTEGRATED — all gates passed (59 findings). §13 maps every finding of all three runs to where it is answered. |
@@ -282,7 +282,7 @@ Escape hatches — named by *what the caller holds*, not by vendor standard, so 
 
 Rejected: a `getTask(id)` that tries `/tasks` then probes each legacy product. Up to 6 round trips for a legacy id, and `/tasks` returns `200 data: []` for unknown ids **[LIVE]**, so "not here" is indistinguishable from "nowhere".
 
-### D6. Video surface (new standard only) (default video model pending §10.11)
+### D6. Video surface (new standard only) (default settled §10.11)
 
 | Method | Endpoint | Default model | Notes |
 |---|---|---|---|
@@ -743,7 +743,7 @@ Each item names the check and how it can fail.
 12. **Import graph** — `madge --circular src` → none; the `no-restricted-paths` rules in §5 pass; **control:** a fixture with an illegal import fails the lint.
 13. **Webhook** — with `now` pinned to the vector's timestamp: vendor test vector passes; flipped body byte → `KlingWebhookError('bad-signature')`; `now` + 301 s → `'stale-timestamp'`; no headers with a secret → `'missing-headers'`; no secret → `verified: null`.
 14. **Real-undici integration** — three tests **through `HttpCore`** against a local `https.createServer` (self-signed; injected fetch with a permissive undici Agent; `validateUrl` test double), Node 20 and 22: manual-redirect `Location` exposure; `cause.code` on a refused connection to a *hostname*; abort mid-body.
-15. **Release-blocking live items** (run #2 A34) — before 6c publishes, these checklist blanks must be filled: V5 smoke, V6 t2v, V10 `image.generate`, Q2, Q11, Q13, and the Phase 0 write probes. V10 omni/motion, Q1, and Q9-revoked are *not* release-blocking and are marked so in the checklist.
+15. **Release-blocking live items** (run #2 A34; §10.15 settled) — before 6c publishes, these checklist blanks must be filled: V5 smoke, V6 t2v (with audio-track check), V10 `image.generate`, Q2, Q11, Q13, Q15, and all five Phase 0 write probes (image, TTS, voice, element, avatar — the resource creates are release-blocking per §10.15). V10 omni/motion, Q1, and Q9-revoked are *not* release-blocking and are marked so in the checklist.
 
 ---
 
@@ -790,13 +790,13 @@ Each item names the check and how it can fail.
 | 10.8 | Release mechanics (D19) | — | **Settled — manual publish; semantic-release removed** (2026-09-20). |
 | 10.9 | Unknown model ids (D9) | Pass through with warning; `unknownModels: 'reject'` opt-in | Recommendation — proceeding unless overruled. |
 | 10.10 | Local-file media via `{ path }` only (D12) | Yes — bare strings never touch the filesystem | Recommendation — proceeding unless overruled. |
-| 10.11 | Default video model, re-put after pricing was fetched (D6): 10.1 rested on "Turbo is cheapest", which the price list contradicts (`kling-3.0` silent 0.6/s vs Turbo 0.8/s). | Keep `kling-3.0-turbo` — cheapest current-gen *with audio*; a silent default surprises more consumers than a 0.2 unit/s premium | **Open — Alex to confirm or switch to `kling-3.0`.** Spec, header, D6 and checklist all proceed with Turbo *pending*; closes in 2a₂/6a₁. |
+| 10.11 | Default video model, re-put after pricing was fetched (D6): 10.1 rested on "Turbo is cheapest", which the price list contradicts (`kling-3.0` silent 0.6/s vs Turbo 0.8/s). | Keep `kling-3.0-turbo` — cheapest current-gen *with audio*; a silent default surprises more consumers than a 0.2 unit/s premium | **Settled — `kling-3.0-turbo`** (Alex, 2026-09-20, with the corrected premise in front of him; alternatives offered: `kling-3.0` silent at 0.6/s, `kling-3.0` with audio at 0.9/s). Policy in D6/README: "cheapest current-generation model whose output includes native audio". |
 | 10.12 | `isRetryable()` on creates (D10, run #2 A17) | Write-aware: `false` for creates/deletes; `isTransient()` exposes the vendor signal | Recommendation — proceeding unless overruled. |
 | 10.13 | `parseCallback` on failed verification (D16, run #2 A21) | Throw `KlingWebhookError`; never return the task | Recommendation — proceeding unless overruled. |
 | 10.14 | Auto-generated `external_task_id` on every create (D10, run #2 A20) | Yes — UUID when the caller supplies none; `externalTaskId: false` opts out | Recommendation — proceeding unless overruled. |
-| 10.15 | Are live *creates* for elements/voices/avatar release-blocking (V15), or does transcription fidelity + a presets read suffice? (run #3 excavator A47) | Blocking — the Phase 0 probes now exercise each family once, so V15 gains them at no extra spend | **Open — Alex.** |
-| 10.16 | Does §12's "concurrency limiting out of scope" stand, given the double-bill corridor lands on the consumer's re-submit decision? (run #3 synthesis CMP-1) | Stands for 2.0 — `taskState` + `recover()` give the consumer the two facts a queue would need; a queue is a 2.x feature | **Open — Alex.** |
-| 10.17 | Live-programme budget: Phase 0 (5 probes), V6, V10 image/omni, Q11 (spends twice by design), Q13 — roughly 8–10 units total against a 100-unit trial pack (run #3 synthesis SCP-2) | Authorise as a block | **Open — Alex.** |
+| 10.15 | Are live *creates* for elements/voices/avatar release-blocking (V15), or does transcription fidelity + a presets read suffice? (run #3 excavator A47) | Blocking — the Phase 0 probes now exercise each family once, so V15 gains them at no extra spend | **Settled — blocking** (Alex, 2026-09-20). V15 includes the three Phase 0 resource probes. |
+| 10.16 | Does §12's "concurrency limiting out of scope" stand, given the double-bill corridor lands on the consumer's re-submit decision? (run #3 synthesis CMP-1) | Stands for 2.0 — `taskState` + `recover()` give the consumer the two facts a queue would need; a queue is a 2.x feature | **Settled — out of scope for 2.0** (Alex, 2026-09-20). |
+| 10.17 | Live-programme budget: Phase 0 (5 probes), V6, V10 image/omni, Q11 (spends twice by design), Q13 — roughly 8–10 units total against a 100-unit trial pack (run #3 synthesis SCP-2) | Authorise as a block | **Settled — up to ~20 units authorised as a block** (Alex, 2026-09-20: ~10 planned, a further ~10 if needed without asking). The trial pack is use-it-or-lose-it and expires **2026-10-20** (`invalid_time` 1792530513975 from the live `/account/costs` probe), so unspent units have no value after that date — the live programme should run before then. Each spend is recorded in its checklist blank. |
 
 ---
 
@@ -918,3 +918,4 @@ Client-side edge cases now specified: concurrent `wait()` (D5, shared loop); `su
 | v0.3.0 | 2026-09-20 | Revised on run #1's 49 findings (§13.1). |
 | v0.4.0 | 2026-09-20 | Revised on run #2's 39 findings (§13.2). |
 | v0.4.1 | 2026-09-20 | Run #3 PROCEED (architect 86, docs 93, anxiety 86, synthesis 84, excavator 79). Folds in run #3's 59 findings (§13.3): `taskState` on write errors; `tasks.recover()` across both standards, TTS stated unrecoverable; https-through-`HttpCore` undici tests and loopback SSRF control; `lintText` virtual-path lint control; per-caller `wait()` semantics; `unattempted` on `KlingBatchError`; `extraOptions`/`extraContents` with known-key rejection; `[shape]`/`[capability]` rule labels; aggregate 40 MB cap and body-scaled create timeout; DNS fail-closed + TOCTOU stated; `now` injection for webhooks; per-file src/test budgets with 1a → 1a₁/1a₂/1c and 2a₂ → 2a₂/2a₃; §3.1 rows for barrels, `constants.ts`, `media.ts`, vitest, `./api`; Phase 0 probes one per shipped legacy write family; §10.15–10.17 for Alex. |
+| v0.4.2 | 2026-09-20 | §10.11 (Turbo, on the corrected premise), §10.15 (resource creates release-blocking), §10.16 (queue out of scope), §10.17 (~10 units authorised) settled by Alex interactively. Approved for implementation; Phase 0 next. |

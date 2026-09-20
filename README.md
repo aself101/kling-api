@@ -3,7 +3,7 @@
 > **⚠️ 1.x is broken against the current Kling API (2026-09).** Kling discontinued every model this
 > version defaults to, moved video generation to a new API design standard, and replaced
 > AccessKey/SecretKey JWT auth with API Keys. A 2.0 rewrite is specified in
-> [`docs/specs/kling-api-2.0-migration-spec-v0_4_1.md`](docs/specs/kling-api-2.0-migration-spec-v0_4_1.md)
+> [`docs/specs/kling-api-2.0-migration-spec-v0_4_2.md`](docs/specs/kling-api-2.0-migration-spec-v0_4_2.md)
 > (companion [checklist](docs/specs/kling-api-2.0-migration-checklist.md)). The vendor's own API
 > documentation is snapshotted under [`docs/api/`](docs/api/README.md). Everything below this
 > notice describes 1.x and is retained until the 2.0 README replaces it.

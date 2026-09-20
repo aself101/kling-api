@@ -1,6 +1,6 @@
 # kling-api 2.0 — Implementation Checklist
 
-Companion to [`kling-api-2.0-migration-spec-v0_4_1.md`](kling-api-2.0-migration-spec-v0_4_1.md). The spec holds the *why*; this file holds the *what*, in commit order, with the check that closes each item. Decision references (`D3`, `§8.4`) point into the spec; `V<n>` are the spec's §8 verification items. Tick a box only when its check has been run and observed to pass — and, where a control is listed, observed to fail on the control.
+Companion to [`kling-api-2.0-migration-spec-v0_4_2.md`](kling-api-2.0-migration-spec-v0_4_2.md). The spec holds the *why*; this file holds the *what*, in commit order, with the check that closes each item. Decision references (`D3`, `§8.4`) point into the spec; `V<n>` are the spec's §8 verification items. Tick a box only when its check has been run and observed to pass — and, where a control is listed, observed to fail on the control.
 
 Conventions: `[ ]` open · `[x]` done · `[-]` deliberately skipped (write why inline). Each sub-phase is one commit with a ≤ 500 LOC budget (source + tests, fixture JSON excluded but listed); **an overrun of more than 20 % splits the sub-phase before it merges into `release/2.0`** (D20). Commit messages are suggested, not mandated. **Branch:** Phase 0 and 6c on `main`; 1a–6b on `release/2.0` (D19); sub-phase work happens on `feat/<id>` branches PR'd into `release/2.0` so CI runs before merge. **Nothing 1.x is deleted before 2a₀** (spec §3.1).
 
@@ -187,7 +187,7 @@ Gate: **both Phase 0 write probes ticked.** This is the commit where the JWT pat
 - [ ] `buildTextToVideo(params)` → `{ prompt, settings{resolution,aspect_ratio,duration,audio?,multi_shot?, ...extraSettings}, options{callback_url?,external_task_id,watermark_info?{enabled}, ...extraOptions} }`; unset optionals **omitted** (never `null`); `external_task_id` present unless opted out
 - [ ] `products/video.ts` redacts media fields of `request` to `{ kind, bytes, sha256 }` **before** `createHandle` (t2v has none; the helper lands here for 2a₃)
 - [ ] `video.textToVideo` → `POST /text-to-video/<model>` with `kind: 'write'`, `externalId` on the request → `TaskHandle`
-- [ ] Default model `DEFAULT_VIDEO_MODEL = 'kling-3.0-turbo'` *(pending §10.11 — one constant, so a flip is one line)*
+- [ ] Default model `DEFAULT_VIDEO_MODEL = 'kling-3.0-turbo'` (§10.11 settled; one constant regardless)
 - [ ] **(V1 build half)** built body deep-equals the vendor *Request Example* for 3.0-turbo, 3.0, 2.6, 2.5-turbo t2v (4 fixtures) given the example's inputs, with the example's `external_task_id` supplied so the auto-UUID does not perturb the comparison
 
 ### `config/models.ts` + validators (D9) **(V3)**
@@ -337,7 +337,7 @@ Gate: **both Phase 0 write probes ticked.** This is the commit where the JWT pat
 
 - [ ] `src/cli/index.ts` (replaces the 2a₀ stub): commander program; global `--api-key`, `--output-dir`, `--json`, `--debug`, `-q`; credential chain `--api-key` → `KLING_API_KEY` → `./.env` → `~/.kling/.env` (dotenv lives **here** only); `pollWithSpinner` (`ora`) wrapping `handle.wait()` unless `--json`/`-q`
 - [ ] `cli/video.ts`: `t2v | i2v | omni | motion-control`; flags mirror §6.1 in kebab-case (`--first-frame`, `--last-frame`, `--refer-image` (repeatable), `--feature-video`, `--base-video`, `--element id:alias` (repeatable), `--voice`, `--character-orientation`, `--audio`, `--multi-shot/--no-multi-shot`, `-r/--resolution`, `-a/--aspect-ratio`, `-d/--duration`, `-m/--model`); file arguments are wrapped as `{ path }` by the CLI; `--wait`, `--no-download`, `--with-watermark`, `--callback-url`, `--external-task-id`
-- [ ] Defaults printed in `--help`: `DEFAULT_VIDEO_MODEL` (`kling-3.0-turbo` pending §10.11), `kling-3.0-omni` (omni), `kling-3.0` (motion)
+- [ ] Defaults printed in `--help`: `kling-3.0-turbo` (t2v, i2v — §10.11), `kling-3.0-omni` (omni), `kling-3.0` (motion)
 - [ ] Removed flags absent from help: `--access-key`, `--secret-key`, `--mode`, `--cfg-scale`, `--negative-prompt` (video), `--camera-*`, `--image-tail`
 - [ ] Video subcommand tests against built `dist/cli/index.js`: help contents, defaults, required-option errors, no dead flags
 
@@ -380,7 +380,7 @@ Gate: **both Phase 0 write probes ticked.** This is the commit where the JWT pat
 - [ ] **(V7)** `grep -rnE "kling-v1\b|kling-v1-5|kling-v1-6|kling-v2-master|kling-v2-1-master|kling-v2-5-turbo|kling-v2-6|kling-v2-new|kling-video-o1|'kling-v2'" src` → 0
 - [ ] **(V8)** `npm pack --dry-run` lists `dist/index.js`, `dist/cli/index.js`; no `dist/auth.*`, `dist/api.js`, `dist/cli.js`; `node -e "import('./dist/index.js').then(m=>console.log(Object.keys(m).sort().join('\n')))"` prints every value export in spec §6.4
 - [ ] **(V5)** smoke script passes against `dist/`
-- [ ] **(V15) Release-blocking blanks filled** in this file: Phase 0 all five probes, 1c smoke `code`, 2a₁ Q2 and Q13, 2a₂ V6 (incl. audio-track check) and Q11, 3a V10 image, Q15 per legacy product. (Not blocking: 2b V10 omni, 5 Q1, Q9-revoked. §10.15 may add resource creates.)
+- [ ] **(V15) Release-blocking blanks filled** in this file: Phase 0 all five probes, 1c smoke `code`, 2a₁ Q2 and Q13, 2a₂ V6 (incl. audio-track check) and Q11, 3a V10 image, Q15 per legacy product. (Not blocking: 2b V10 omni, 5 Q1, Q9-revoked. The three Phase 0 resource probes ARE blocking — §10.15.)
 - [ ] Push `main`; `npm publish` (Alex); `npm view kling-api version` → `2.0.0`
 - [ ] Install into a consumer; one `video.textToVideo` end-to-end
 
@@ -405,10 +405,10 @@ Gate: **both Phase 0 write probes ticked.** This is the commit where the JWT pat
 | Q1 callback shape / signing for 3.0-omni | Phase 5 | `________` |
 | Q2 `POST /tasks` time field type | Phase 2a | `________` |
 | Q3 3.0-turbo `audio` | 2a₂ V6 audio-track check | inferred always-on (pricing); confirm: `________` |
-| §10.11 default video model | 2a₂ / 6a₁ (`DEFAULT_VIDEO_MODEL` constant) | `________` (Alex: Turbo or `kling-3.0`) |
-| §10.15 resource live creates release-blocking? | Phase 0 probes / V15 | `________` (Alex) |
-| §10.16 concurrency queue stays out of scope? | — | `________` (Alex) |
-| §10.17 live-programme budget (~8–10 units) | Phase 0 | `________` (Alex) |
+| §10.11 default video model | settled 2026-09-20 | `kling-3.0-turbo` (Alex) |
+| §10.15 resource live creates release-blocking? | settled 2026-09-20 | blocking — the three Phase 0 resource probes are in V15 (Alex) |
+| §10.16 concurrency queue stays out of scope? | settled 2026-09-20 | out of scope for 2.0 (Alex) |
+| §10.17 live-programme budget (~8–10 units) | settled 2026-09-20 | up to ~20 units authorised as a block; pack expires **2026-10-20** — run the live items before then; record each spend in its blank (Alex) |
 | Q15 legacy `GET /v1/<product>/{external_task_id}` per product | 2a₁ live / V10 blanks | `________` |
 | Q14 undici behaviours on Node 20/22 | Phase 1a (V14) | `________` |
 | Q4 omni `duration` with reference video; `shot_type` | Phase 2b (document only) | `________` |
