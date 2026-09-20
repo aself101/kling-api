@@ -1,5 +1,14 @@
 # Kling AI API Wrapper
 
+> **⚠️ 1.x is broken against the current Kling API (2026-09).** Kling discontinued every model this
+> version defaults to, moved video generation to a new API design standard, and replaced
+> AccessKey/SecretKey JWT auth with API Keys. A 2.0 rewrite is specified in
+> [`docs/specs/kling-api-2.0-migration-spec-v0_3_0.md`](docs/specs/kling-api-2.0-migration-spec-v0_3_0.md)
+> (companion [checklist](docs/specs/kling-api-2.0-migration-checklist.md)). The vendor's own API
+> documentation is snapshotted under [`docs/api/`](docs/api/README.md). Everything below this
+> notice describes 1.x and is retained until the 2.0 README replaces it.
+
+
 [![npm version](https://img.shields.io/npm/v/kling-api.svg)](https://www.npmjs.com/package/kling-api)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Node.js Version](https://img.shields.io/node/v/kling-api)](https://nodejs.org)
@@ -84,14 +93,6 @@ TypeScript support with exported types for all parameters and responses.
 - [API Reference](#api-reference)
 
 ## API Reference
-
-> **⚠️ 1.x is broken against the current Kling API (2026-09).** Kling discontinued every model this
-> version defaults to, moved video generation to a new API design standard, and replaced
-> AccessKey/SecretKey JWT auth with API Keys. A 2.0 rewrite is specified in
-> [`docs/specs/kling-api-2.0-migration-spec-v0_2_0.md`](docs/specs/kling-api-2.0-migration-spec-v0_2_0.md)
-> (companion [checklist](docs/specs/kling-api-2.0-migration-checklist.md)). The vendor's own API
-> documentation is snapshotted under [`docs/api/`](docs/api/README.md). Everything below this
-> notice describes 1.x and is retained until the 2.0 README replaces it.
 
 ## Overview
 
@@ -1506,7 +1507,7 @@ This package is part of the img-gen ecosystem:
 
 ## License
 
-MIT License - see [LICENSE](../LICENSE) for details.
+MIT License - see [LICENSE](LICENSE) for details.
 
 ---
 

@@ -3,22 +3,22 @@
 **Fetched:** 2026-09-20
 **Index:** `https://kling.ai/document-api/llms.txt` — every page there is served as raw Markdown at `<page-url>.md`.
 **Purpose:** the pinned source from which the `kling-api` 2.0 surface was derived
-(`docs/specs/kling-api-2.0-migration-spec-v0_2_0.md`). Diff this directory against a fresh
+(`docs/specs/kling-api-2.0-migration-spec-v0_3_0.md`). Diff this directory against a fresh
 fetch to see what the vendor changed.
 
 ## Coverage
 
 | `llms.txt` section | Fetched | Notes |
 |---|---|---|
-| Docs (guides + get-started) | all 11 | `kling-guide-*`, `kling-get-started-*` |
+| Docs (guides + get-started) | all 8 | `kling-guide-*`, `kling-get-started-*` |
 | Video APIs | all 26 | model-family pages plus the shared resource pages (avatar, lip-sync, audio, elements, voices, multi-elements, recognition) |
 | Image APIs | all 9 | `kling-image-*` — all still legacy `/v1/` endpoints |
 | Effects & Solutions | `video-effects` only | the four e-commerce pages (apparel, goods studio, video commerce, virtual try-on) were not fetched — out of scope |
 | Assets & Billing | all 3 | `kling-assets-*` |
-| Pricing | none | out of scope |
+| Pricing | `base/video`, `base/image` | `kling-pricing-*` — the two solutions-pricing pages (effects, ecommerce) were not fetched |
 | Updates | `api` | `kling-updates-api.md` — the vendor's change log; the only place deprecations are announced |
 
-48 files. The vendor mounts several pages under more than one navigation path; each such
+50 files (48 fetched 2026-09-20 morning; the two pricing pages added the same day during spec revision v0.3.0). The vendor mounts several pages under more than one navigation path; each such
 page was fetched once. Known multi-mount pairs whose bodies were verified byte-identical on
 2026-09-20 (only the `> Source:` / `Current Tab` header lines differ) and which are both kept
 because their `Source:` URLs differ: `kling-2.6-motion-control.md` ≡ `kling-motion-control-2.6.md`,

@@ -1,3 +1,18 @@
+## [Unreleased]
+
+2.0.0 is in specification — see `docs/specs/kling-api-2.0-migration-spec-v0_3_0.md`. The vendor
+discontinued every model 1.x defaults to, moved video generation to a new API standard, and made a
+static API Key the only credential for it; 1.x cannot generate video against the current API.
+
+### Removed
+- *(2.0.0, pending)* AccessKey/SecretKey JWT authentication; `extendVideo`; `multiImageToVideo`; the `./auth`, `./utils`, `./config`, `./types` subpath exports; semantic-release automation.
+
+### Changed
+- *(2.0.0, pending)* `TaskStatus` value `succeed` → `succeeded` (same type, different value — a semantics-without-signature change); every default model; a bare-string media argument is a URL or Base64, never a filesystem path.
+
+### Added
+- *(2.0.0, pending)* Kling 3.0 / 3.0 Turbo / 3.0 Omni / O1 / 2.6 / 2.5 Turbo video via the new API standard; motion control; elements and voices; TTS; normalized `Task`/`TaskHandle`; webhook signature verification.
+
 # 1.0.0 (2025-12-27)
 
 

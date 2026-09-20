@@ -6,7 +6,7 @@ Files read (platform): `kling-get-started-authentication.md`, `kling-get-started
 
 Files read (legacy resources): `kling-avatar.md`, `kling-text-to-speech.md`, `kling-lip-sync.md`, `kling-face-recog.md`, `kling-img-recog.md`, `kling-multi-element-video-editing.md`, `kling-text-to-audio.md`, `kling-video-to-audio.md`, `kling-o1-element-mgt.md`, `kling-omni-3.0-element-mgt.md`, `kling-image-o1-elements.md`, `kling-image-omni-3.0-elements.md`, `kling-2.6-voice-mgt.md`, `kling-omni-3.0-voice-mgt.md`, `kling-effects-video-effects.md`.
 
-Sibling duplicates noted but not primary: `kling-auth.md`, `kling-callback-protocol.md`, `kling-error-codes.md`, `kling-concurrency.md` are byte-identical to their `kling-get-started-*` counterparts except for a leading BOM and the `> Current Tab:` header line (`diff` run 2026-09-20; only lines 1 and 9/10 differ in each pair). They introduce no conflicting content.
+Sibling duplicates noted but not primary: `kling-auth.md`, `kling-callback-protocol.md`, `kling-error-codes.md`, `kling-concurrency.md` are byte-identical to their `kling-get-started-*` counterparts except for a leading BOM and the `> Current Tab:` header line (`diff` run 2026-09-20; only lines 1 and 9/10 differ in each pair). They introduce no conflicting content. *(These four hand-copied files were removed before the snapshot was committed — the `kling-get-started-*` names are canonical; see the checklist, Phase 0.)*
 
 ---
 
