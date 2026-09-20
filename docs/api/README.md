@@ -3,7 +3,7 @@
 **Fetched:** 2026-09-20
 **Index:** `https://kling.ai/document-api/llms.txt` — every page there is served as raw Markdown at `<page-url>.md`.
 **Purpose:** the pinned source from which the `kling-api` 2.0 surface was derived
-(`docs/specs/kling-api-2.0-migration-spec-v0_4_0.md`). Diff this directory against a fresh
+(`docs/specs/kling-api-2.0-migration-spec-v0_4_1.md`). Diff this directory against a fresh
 fetch to see what the vendor changed.
 
 ## Coverage
