@@ -16,7 +16,7 @@ Source: `kling-get-started-authentication.md`.
 
 ### Base URL
 
-```
+```text
 https://api-singapore.klingai.com
 ```
 
@@ -356,8 +356,10 @@ The **only** explicit discontinuations in the entire log are video-effect scene 
 | `kling-v2-new` | 08/15/2025 (image-to-image) | **Log does not say.** |
 | `kling-video-o1` | 12/15/2025 (`Omni-Video model launched — New API`); 03/11/2026 behavior notes | **Log does not say.** Still listed as supported in `kling-get-started-kling-skills.md` (`kling-v3 / kling-v2-6 / kling-v3-omni / kling-video-o1`). 02/25/2026 launched `3.0 Omni and V3` which functionally supersedes it, but the log makes no supersession statement. |
 | `kling-image-o1` | 12/15/2025 (`Omni-Image model launched — New API`) | **Log does not say.** Still listed in the Skill page (`kling-v3 / kling-v3-omni / kling-image-o1`). |
+| `kling-v2-5-turbo` | 10/20/2025, 11/11/2025, 11/17/2025 (V2.5-Turbo entries) | **Log does not say.** Superseded in practice by the new-standard path id `kling-2.5-turbo` (07/15/2026), but no supersession statement. |
+| `kling-v2-6` | 12/15/2025 (V2.6), 12/16/2025 (`voice_list`) | **Log does not say.** Superseded in practice by the new-standard path id `kling-2.6` (07/15/2026); still the documented default for legacy V3.0 Motion Control (03/04/2026). |
 
-Summary: **the log records no discontinuation or supersession for any `kling-*` model_name.** The single forward-looking policy statement is 07/15/2026: `The legacy API will continue to be available with no current plans for deprecation.`
+Summary: **the log records no discontinuation or supersession for any of the twelve `kling-*` model_name literals in App. A §3.** The single forward-looking policy statement is 07/15/2026: `The legacy API will continue to be available with no current plans for deprecation.`
 
 ### 5d. When the path-per-model / API-Key design was introduced
 
@@ -397,7 +399,7 @@ Constraints (verbatim): `start_time`/`end_time` are `Unix timestamp, in millisec
 
 Response (`data` object):
 
-```
+```text
 data.result.detail[]:
   task_id string; api_key_name string; product_function string ("e.g. Image to Video");
   model_name string ("Model version used for the task");
@@ -434,7 +436,7 @@ Query params:
 
 Response (`data`): **double-wrapped** — `data.code int`, `data.msg string` (note `msg`, not `message`), `data.resource_pack_subscribe_infos[]`:
 
-```
+```text
 resource_pack_name string; resource_pack_id string;
 resource_pack_type string — "decreasing_total" | "constant_period";
 total_quantity number; remaining_quantity number ("remaining quantity statistics have a 12h delay");

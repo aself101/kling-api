@@ -307,7 +307,7 @@ Verified by extracting the tail of each video doc from `## Query Task (By task I
 
 ### 3.1 Create-task response (all 14 docs; only comment wording differs)
 
-```
+```text
 code         int     // 0 on success; see Error Codes
 message      string
 request_id   string
@@ -332,7 +332,7 @@ Note the key is `external_id` on responses but `options.external_task_id` on req
 The field notes call both "Request path parameter, fill the value directly in the request path", but the example is a query string: `GET /tasks?external_task_ids=123`. Treat as query-string.
 
 Response:
-```
+```text
 code, message, request_id
 data[]                         // array (one entry per task)
 data[].id             string
@@ -356,7 +356,7 @@ data[].billing[]
 | `element` | `id`, `name`, `description`, `element_type` (enum: `video_character_elements`, `multi_image_elements`), `references[]` (each `{type ∈ image|video|voice, role, url}`; image `role` ∈ `frontal`, `reference`; video/voice `role` fixed `refer`; voice refs add `id`, `name`, `owned_by`), `owned_by`, `status` (`succeeded`, `deleted`), `tags[]` (`{id:int, name, description}`) |
 
 `billing[]` entries:
-```
+```text
 charge_type   string  // "cash" (balance) | "unit" (resource package)
 cash_type     string  // only when charge_type=cash: "balance" | "test_balance"
 amount        string  // decimal; discount price (cash) or units (unit)
@@ -384,7 +384,7 @@ Request body:
 The 3.0-turbo examples send `"start_time": 1781193600000` (number); the other 12 send `"start_time": "1781193600000"` (quoted string). Flagged in §6.
 
 Response:
-```
+```text
 code, message, request_id
 data.result[]      // same per-task object as GET /tasks data[] (id, status, message, create_time, update_time, external_id, outputs[], billing[])
 data.count         int      // "Number of query results"

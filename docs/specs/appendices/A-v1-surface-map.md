@@ -208,7 +208,7 @@ Search used: `grep -rn "'/v1\|\`/v1\|'/account" src/` and `grep -rn "client.requ
 
 Every one of the above is **flat top-level body** (no nested `settings`/`options` object anywhere in `src/`) — confirmed by `grep -rn "payload = {" src/operations` and manual read of all 4 operations files. None uses a `settings:`/`options:` nesting key (`grep -rn "settings:\|options:" src/operations src/api.ts` → no matches).
 
-**All 18 task-creating/querying endpoints are under `/v1/...` except `/account/costs`.** This means the vendor's stated migration (unified `GET /tasks?task_ids=`, path-per-model `POST /text-to-video/{model}`) requires touching **every** function in `src/operations/video.ts`, `src/operations/image.ts`, `src/operations/avatar.ts`, plus `src/api.ts:107` if `/account/costs` also moves off `/v1` (not stated in the task, but worth flagging as `[VERIFY]` against current vendor docs).
+**All 20 task-creating/querying endpoints are under `/v1/...`; only `/account/costs` is not.** This means the vendor's stated migration (unified `GET /tasks?task_ids=`, path-per-model `POST /text-to-video/{model}`) requires touching **every** function in `src/operations/video.ts`, `src/operations/image.ts`, `src/operations/avatar.ts`, plus `src/api.ts:107` if `/account/costs` also moves off `/v1` (not stated in the task, but worth flagging as `[VERIFY]` against current vendor docs).
 
 ### 2.1 Response property-path dependencies (exact strings the code reads)
 
@@ -566,10 +566,10 @@ No model concept for avatar — `AvatarParams` has no `model_name` field at all 
 
 ## Summary of migration touch points (cross-reference, not exhaustive by itself — see full sections above)
 
-1. **Endpoints**: 18 flat-body `/v1/...` POST/GET pairs across `src/operations/video.ts`, `src/operations/image.ts`, `src/operations/avatar.ts` (§2) — every `client.request('POST'|'GET', '/v1/...', ...)` call site is a rewrite target for path-per-model + `settings`/`options` nesting.
+1. **Endpoints**: 20 flat-body `/v1/...` POST/GET endpoints (10 create/query pairs) across `src/operations/video.ts`, `src/operations/image.ts`, `src/operations/avatar.ts` (§2) — every `client.request('POST'|'GET', '/v1/...', ...)` call site is a rewrite target for path-per-model + `settings`/`options` nesting.
 2. **Response shape**: `data.task_id`→`data.id` and `data.task_status`→`data.status` (values `succeed`→`succeeded`) ripple through `src/types.ts` (5 interfaces), `src/handlers/result-poller.ts` (2 comparisons), `src/handlers/file-saver.ts` (4 reads), and `src/cli.ts` (22+ reads) (§2.1, §5).
 3. **Query mechanism**: per-endpoint `GET .../{id}` (18 call sites, §2) → unified `GET /tasks?task_ids=` is an architectural change, not a per-line edit — likely collapses all 9 `query*Task` operation functions into one.
 4. **Model registry**: `src/types.ts` unions, `src/config/models.ts` capability tables, `src/config/constants.ts:142`, and hard-coded single-model checks in validators (§3) all enumerate exclusively discontinued models; none contain any new-style model name today.
 5. **Auth**: JWT-only end-to-end from `KlingConfig` through `KlingAuth` to the unconditional interceptor in `KlingHttpClient` (§4) — introducing a static-key path is a multi-file change, and the interceptor has no per-endpoint branching today.
-6. **CLI defaults**: 7 of 8 subcommands default to a discontinued model (§6.5).
+6. **CLI defaults**: 7 of 10 generating subcommands default to a discontinued model (§6.5).
 7. **Docs**: `README.md` and `docs/KLING_API_REFERENCE.md` are already stale relative to `src/` in three endpoint paths (multi-image-to-image, image-expansion, avatar — §8.2) *before* accounting for the vendor migration; the migration adds JWT-auth staleness, model-list staleness, and lifecycle/field-name staleness on top.
