@@ -85,17 +85,13 @@ TypeScript support with exported types for all parameters and responses.
 
 ## API Reference
 
-For detailed Kling AI API documentation including all endpoints, parameters, error codes, and model capabilities, see the comprehensive API reference:
-
-**[Kling API Reference](docs/KLING_API_REFERENCE.md)**
-
-The reference covers:
-- JWT authentication details and examples
-- Complete error code reference (20+ codes with solutions)
-- Model capability matrices for video and image generation
-- All API endpoints with request/response schemas
-- Concurrency rules and rate limiting
-- Image input format requirements
+> **⚠️ 1.x is broken against the current Kling API (2026-09).** Kling discontinued every model this
+> version defaults to, moved video generation to a new API design standard, and replaced
+> AccessKey/SecretKey JWT auth with API Keys. A 2.0 rewrite is specified in
+> [`docs/specs/kling-api-2.0-migration-spec-v0_2_0.md`](docs/specs/kling-api-2.0-migration-spec-v0_2_0.md)
+> (companion [checklist](docs/specs/kling-api-2.0-migration-checklist.md)). The vendor's own API
+> documentation is snapshotted under [`docs/api/`](docs/api/README.md). Everything below this
+> notice describes 1.x and is retained until the 2.0 README replaces it.
 
 ## Overview
 
