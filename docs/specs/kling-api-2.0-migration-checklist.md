@@ -409,35 +409,35 @@ Gate: **both Phase 0 write probes ticked.** This is the commit where the JWT pat
 
 ---
 
-## Phase 6a₁ — CLI core + video — budget ~360 src + ~120 test
+## Phase 6a₁ — CLI core + video — budget ~360 src + ~120 test — **delivered together in `39bf034`: ≈700 src + ≈160 test against a combined budget of 800 + 440 — inside budget. 416 tests. CLI live: `account usage`, `tasks list`, `voices presets --json`, `tasks get-by-product`, `audio tts --json` (0.05 units).**
 
 `feat(cli)!: 2.0 command tree — program, credentials, video`
 
-- [ ] `src/cli/index.ts` (replaces the 2a₀ stub): commander program; global `--api-key`, `--output-dir`, `--json`, `--debug`, `-q`; credential chain `--api-key` → `KLING_API_KEY` → `./.env` → `~/.kling/.env` (dotenv lives **here** only); `pollWithSpinner` (`ora`) wrapping `handle.wait()` unless `--json`/`-q`
-- [ ] `cli/video.ts`: `t2v | i2v | omni | motion-control`; flags mirror §6.1 in kebab-case (`--first-frame`, `--last-frame`, `--refer-image` (repeatable), `--feature-video`, `--base-video`, `--element id:alias` (repeatable), `--voice`, `--character-orientation`, `--audio`, `--multi-shot/--no-multi-shot`, `-r/--resolution`, `-a/--aspect-ratio`, `-d/--duration`, `-m/--model`); file arguments are wrapped as `{ path }` by the CLI; `--wait`, `--no-download`, `--with-watermark`, `--callback-url`, `--external-task-id`
-- [ ] Defaults printed in `--help`: `kling-3.0-turbo` (t2v, i2v — §10.11), `kling-3.0-omni` (omni), `kling-3.0` (motion)
-- [ ] Removed flags absent from help: `--access-key`, `--secret-key`, `--mode`, `--cfg-scale`, `--negative-prompt` (video), `--camera-*`, `--image-tail`
-- [ ] Video subcommand tests against built `dist/cli/index.js`: help contents, defaults, required-option errors, no dead flags
+- [x] `src/cli/index.ts` (replaces the 2a₀ stub) + `cli/program.ts` (the tree, built so tests drive it in-process) + `cli/shared.ts`: commander program; global `--api-key`, `--output-dir`, `--json`, `--debug`, `-q`; credential chain `--api-key` → `KLING_API_KEY` → `./.env` → `~/.kling/.env` (dotenv lives **here** only); `pollWithSpinner` (`ora`) wrapping `handle.wait()` unless `--json`/`-q`
+- [x] `cli/video.ts`: `t2v | i2v | omni | motion-control`; flags mirror §6.1 in kebab-case (`--first-frame`, `--last-frame`, `--refer-image` (repeatable), `--feature-video`, `--base-video`, `--element id:alias` (repeatable), `--voice`, `--character-orientation`, `--audio`, `--multi-shot/--no-multi-shot`, `-r/--resolution`, `-a/--aspect-ratio`, `-d/--duration`, `-m/--model`); file arguments are wrapped as `{ path }` by the CLI; `--wait`, `--no-download`, `--with-watermark`, `--callback-url`, `--external-task-id`
+- [x] Defaults printed in `--help`: `kling-3.0-turbo` (t2v, i2v — §10.11), `kling-3.0-omni` (omni), `kling-3.0` (motion)
+- [x] Removed flags absent from help: `--access-key`, `--secret-key`, `--mode`, `--cfg-scale`, `--negative-prompt` (video), `--camera-*`, `--image-tail`
+- [x] Video subcommand tests: in-process against `buildProgram()` with `exitOverride` (help, defaults, required-option errors, dead-flag census) plus a `dist/cli/index.js` smoke (`--version`, `--help`, garbage key → exit 1 with the error and its cause)
 
 ---
 
-## Phase 6a₂ — CLI image + test suite — budget ~200 src + ~160 test
+## Phase 6a₂ — CLI image + test suite — budget ~200 src + ~160 test — **delivered in `39bf034` (see 6a₁).**
 
 `feat(cli): image commands; CLI test suite`
 
-- [ ] `cli/image.ts`: `generate | omni | multi | outpaint | subject-completion`; defaults `kling-v3` (generate), `kling-v3-omni` (omni)
-- [ ] `test/2.0/cli.test.ts`: all video + image subcommands — help, defaults, required options, dead-flag absence, `--json` output shape
+- [x] `cli/image.ts`: `generate | omni | multi | outpaint | subject-completion`; defaults `kling-v3` (generate), `kling-v3-omni` (omni)
+- [x] `test/2.0/cli.test.ts`: every group and subcommand — help, defaults, required options, dead-flag absence; `--json` output shape verified live (`voices presets --json`, `audio tts --json`) rather than unit-tested (the shape is the library's `Task`/outputs objects)
 
 ---
 
-## Phase 6b — CLI resources / tasks / account — budget ~240 src + ~160 test
+## Phase 6b — CLI resources / tasks / account — budget ~240 src + ~160 test — **delivered in `39bf034` (see 6a₁).**
 
 `feat(cli): elements, voices, avatar, audio, tasks, account`
 
-- [ ] `cli/resources.ts`: `elements create|get|list|presets|delete [--kind]`, `voices …`, `avatar create`, `audio tts`
-- [ ] `cli/tasks.ts`: `tasks get <ids…> [--by-external-id]`, `tasks list [--cursor] [--status] [--product-type] [--limit]`, `tasks get-by-product <product> <id>`
-- [ ] `cli/account.ts`: `account usage [--days 30]`, `account balance`, `account packages`
-- [ ] CLI tests extended
+- [x] `cli/resources.ts`: `elements create|get|list|presets|delete [--kind]`, `voices …`, `avatar create`, `audio tts`
+- [x] `cli/tasks.ts`: `tasks get <ids…> [--by-external-id]`, `tasks list [--cursor] [--status] [--product-type] [--limit] [--days]`, `tasks get-by-product <product> <id>`, plus `list-by-product` and `recover` (not in D15's list; they expose two library methods the CLI would otherwise hide)
+- [x] `account usage [--days 30] [--pack]`, `account balance`, `account packages` — in `cli/tasks.ts` beside the task queries (two small groups, one file)
+- [x] CLI tests extended
 
 ---
 
