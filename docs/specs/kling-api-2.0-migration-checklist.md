@@ -242,15 +242,21 @@ Gate: **both Phase 0 write probes ticked.** This is the commit where the JWT pat
 
 ---
 
-## Phase 2a₃ — Video image-to-video — budget ~170 src + ~130 test
+## Phase 2a₃ — Video image-to-video — budget ~170 src + ~130 test — **actual: ≈330 src + ≈250 test in one commit `dac9f16` (not split — the media resolver and the first media-bearing create cannot be tested apart). 257 tests.**
 
 `feat(video): image-to-video on the new standard`
 
-- [ ] `buildImageToVideo(params)` → `contents[]` = `[{type:'prompt',text}, {type:'first_frame',url}, {type:'last_frame',url}?, {type:'element',element_id,id}*, {type:'voice',voice_id,id}*, ...extraContents]`; `settings` without `aspect_ratio`
-- [ ] `video.imageToVideo` → `POST /image-to-video/<model>` `kind: 'write'` → `TaskHandle`; `firstFrame`/`lastFrame` via `resolveMediaSource(kind:'image', standard:'new')` (stub until 2c: URL and Base64 strings only); `request` redacted before `createHandle`
-- [ ] **(V1)** 4 i2v fixtures (3.0-turbo, 3.0, 2.6, 2.5-turbo) deep-equal
-- [ ] i2v rules with labels and pass/fail tests: `[shape]` `firstFrame` required; `[shape]` `lastFrame` without `firstFrame` rejected; `[shape]` `voices` ≤ 2 and `elements` ≤ 3 (array bounds); `[capability]` 2.6/2.5-turbo `lastFrame` ⇒ `1080p`; `[capability]` 3.0-turbo rejects `lastFrame`; `[capability]` `voices` 2.6 only and `audio !== 'off'`; `[capability]` `elements` 3.0 only
-- [ ] Create `timeout` scales with body size: `max(config.timeout, 30_000 + bodyBytes / 250_000)` (spec D11; test with a 20 MB fake body → ≥ 110 s)
+**Deviations, recorded:**
+- **`media/source.ts` landed here, not as a stub** — the URL/Base64 half is complete (caps per standard, aggregate `MediaBudget`, `kind: 'video'` URL-only, the never-a-path rule with a test that resolves `package.json` and `/etc/hosts`); `{ path }` / `Buffer` / `Uint8Array` throw a message naming Phase 2c. 2c adds those three inputs plus download/save; its `source.ts` rows below are partly done.
+- **Redaction shape:** a URL input is recorded as `{ kind: 'url', url }` (what the vendor was told; not secret), not `{ kind, bytes, sha256 }` — there are no bytes to hash. Inline data is `{ kind: 'base64' | 'buffer' | 'path', bytes, sha256 }`.
+- **Auto ids** for `@`-references: `element_1…`, `voice_1…` (the element *name* is not known client-side; D6 said "element name").
+- **Deadline formula** read as `30 s + 4 s per MB` (`bodyBytes / 250 000` seconds), since `30_000 + bodyBytes / 250_000` in ms would give 30.08 s for 20 MB and the checklist test demands ≥ 110 s.
+
+- [x] `buildImageToVideo(params)` → `contents[]` = `[{type:'prompt',text}, {type:'first_frame',url}, {type:'last_frame',url}?, {type:'element',element_id,id}*, {type:'voice',voice_id,id}*, ...extraContents]`; `settings` without `aspect_ratio`
+- [x] `video.imageToVideo` → `POST /image-to-video/<model>` `kind: 'write'` → `TaskHandle`; `firstFrame`/`lastFrame` via `resolveMediaSource(kind:'image', standard:'new', budget)` (URL / Base64 complete; `{path}`/Buffer → 2c); `request` redacted before `createHandle`
+- [x] **(V1)** 4 i2v fixtures (3.0-turbo, 3.0, 2.6, 2.5-turbo) deep-equal
+- [x] i2v rules with labels and pass/fail tests: `[shape]` `firstFrame` required; `[shape]` `lastFrame` without `firstFrame` rejected; `[shape]` `voices` ≤ 2 and `elements` ≤ 3 (array bounds); `[capability]` 2.6/2.5-turbo `lastFrame` ⇒ `1080p`; `[capability]` 3.0-turbo rejects `lastFrame`; `[capability]` `voices` 2.6 only and `audio !== 'off'`; `[capability]` `elements` 3.0 only
+- [x] Create `timeout` scales with body size: `max(config.timeout, 30 s + bodyBytes / 250 000 s)` (spec D11; 20 MB → 110 s, tested)
 
 ---
 
