@@ -1,6 +1,6 @@
 {
   "name": "kling-api",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Kling AI API wrapper for Node.js — video (new API standard), image, elements, voices, avatar and TTS with a static API Key",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -33,7 +33,8 @@
     "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\"",
     "prepublishOnly": "npm run build",
     "check:cycles": "madge --circular --extensions ts src",
-    "kling": "node dist/cli/index.js"
+    "kling": "node dist/cli/index.js",
+    "verify": "npm run lint && npm run check:cycles && npm run build && npm test && npx tsc --noEmit && test -f dist/index.js && test -f dist/cli/index.js"
   },
   "keywords": [
     "kling",

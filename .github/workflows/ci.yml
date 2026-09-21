@@ -35,6 +35,12 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Package layout (spec V8)
+        run: |
+          test -f dist/index.js && test -f dist/cli/index.js
+          test ! -e dist/api.js && test ! -e dist/auth.js && test ! -e dist/cli.js
+          npm pack --dry-run 2>&1 | grep -q 'dist/index.js'
+
       - name: Run tests
         run: npm test
 
