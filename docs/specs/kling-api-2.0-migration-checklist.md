@@ -208,30 +208,37 @@ Gate: **both Phase 0 write probes ticked.** This is the commit where the JWT pat
 
 ---
 
-## Phase 2a₂ — Video text-to-video — budget ~170 src + ~130 test (i2v is 2a₃)
+## Phase 2a₂ — Video text-to-video — budget ~170 src + ~130 test (i2v is 2a₃) — **actual: src ≈550 (params 96, models 161, validators 150, video 82, builder +60); test ≈360. Split per D20: 2a₂ᵃ `ed78cd6` (params, registry, validators), 2a₂ᵇ `babc952` (builder, VideoApi, client, V6 live). 225 tests. Spend: 2.4 video units (V6); Q11's duplicate was rejected, so 0.**
 
 `feat(video)!: text-to-video and image-to-video on the new standard`
 
+**Deviations, recorded:**
+- **`src/codecs/params.ts` added** (types only) — §6.1's types had no file in the §5 table. Codecs build from them, validators rule on them, products expose them, and codecs may not import `config/models`, so the vocabulary is the leaf and `models.ts` imports *it*. Zones: `config` and `media` may import `codecs/params`.
+- **`VideoModelCaps` shape differs from the D9 sketch:** `durations` and `audio` are per product (like `resolutions`) — `kling-3.0` is `native|off` on t2v/i2v and `original|off` on motion-control, and motion-control has no duration setting; `multiShot` → `multiShotSetting` (whether `settings.multi_shot` *exists* — 3.0-turbo does multi-shot via prompt syntax and has no field); `maxPromptLength` added.
+- **`MODELED_SETTINGS` / `MODELED_OPTIONS` live in `config/constants.ts`**, not the codec — the validator needs them and may not import the codec (the zones caught the first draft).
+- **Unknown model prompt cap = 3072** (the loosest documented), so passthrough is never stricter than the newest known model.
+- **`externalTaskId: string | false`** (§6.1 said `string`); an empty string is sent as-is — it is the caller's value, not "absent".
+
 ### `products/video.ts` + `codecs/new-standard.ts` builders
-- [ ] `buildTextToVideo(params)` → `{ prompt, settings{resolution,aspect_ratio,duration,audio?,multi_shot?, ...extraSettings}, options{callback_url?,external_task_id,watermark_info?{enabled}, ...extraOptions} }`; unset optionals **omitted** (never `null`); `external_task_id` present unless opted out
-- [ ] `products/video.ts` redacts media fields of `request` to `{ kind, bytes, sha256 }` **before** `createHandle` (t2v has none; the helper lands here for 2a₃)
-- [ ] `video.textToVideo` → `POST /text-to-video/<model>` with `kind: 'write'`, `externalId` on the request → `TaskHandle`
-- [ ] Default model `DEFAULT_VIDEO_MODEL = 'kling-3.0-turbo'` (§10.11 settled; one constant regardless)
-- [ ] **(V1 build half)** built body deep-equals the vendor *Request Example* for 3.0-turbo, 3.0, 2.6, 2.5-turbo t2v (4 fixtures) given the example's inputs, with the example's `external_task_id` supplied so the auto-UUID does not perturb the comparison
+- [x] `buildTextToVideo(params)` → `{ prompt, settings{resolution,aspect_ratio,duration,audio?,multi_shot?, ...extraSettings}, options{callback_url?,external_task_id,watermark_info?{enabled}, ...extraOptions} }`; unset optionals **omitted** (never `null`); `external_task_id` present unless opted out
+- [x] `products/video.ts` records `recordOf(params)` on the handle (signal / externalTaskId / undefined dropped); the media redaction helper lands with i2v in 2a₃ (t2v has no media)
+- [x] `video.textToVideo` → `POST /text-to-video/<model>` with `kind: 'write'`, `externalId` on the request → `TaskHandle`
+- [x] Default model `DEFAULT_VIDEO_MODEL = 'kling-3.0-turbo'` (§10.11 settled; one constant regardless) — in `config/models.ts`
+- [x] **(V1 build half)** built body deep-equals the vendor *Request Example* for 3.0-turbo, 3.0, 2.6, 2.5-turbo t2v (4 fixtures) given the example's inputs, with the example's `external_task_id` supplied so the auto-UUID does not perturb the comparison
 
 ### `config/models.ts` + validators (D9) **(V3)**
-- [ ] `VIDEO_MODELS` for the six ids per spec §2.2, each row commented with its `docs/api/` source
-- [ ] Test: every enum value in the table appears verbatim in the cited doc file (grep-based)
-- [ ] `model` typing `KnownVideoModel | (string & {})`; unknown id + `unknownModels: 'passthrough'` (default) → logger warning, shape-only validation, request built; `'reject'` → `KlingValidationError`
-- [ ] `capabilityValidation: 'warn'` turns every capability-rule failure below into a warning and still sends; shape rules (required fields, types) throw regardless (test both modes on one rule)
-- [ ] `extraSettings`/`extraOptions` merged after validation (test: an unknown key reaches the body untouched); **a key the library models (e.g. `resolution`) in `extra*` → `KlingValidationError`** (test) (run #3 A41)
-- [ ] Every rule below carries a `[shape]` or `[capability]` label in the test name; `[shape]` rules throw under both `capabilityValidation` modes (run #3 A42)
-- [ ] t2v rules, each with pass + fail test, fail message naming the field: `[shape]` `prompt` required, ≤ 3072 (3.0, 3.0-turbo) / 2500 (else); `[shape]` `duration` integer; `[capability]` model ∈ products; `[capability]` `resolution` ∈ model×product set; `[capability]` `duration` ∈ model set; `[capability]` `audio` only where the model has the field (3.0-turbo message: "native audio is always on for kling-3.0-turbo (inferred from pricing; pass capabilityValidation: 'warn' to send anyway)"); `[capability]` 2.6 `native` ⇒ `1080p`
-- [ ] `@name` in prompt with no matching content `id` → logger **warning**, not error
+- [x] `VIDEO_MODELS` for the six ids per spec §2.2, each row commented with its `docs/api/` source
+- [x] Test: every resolution / audio / duration value appears in the cited page (`VIDEO_MODEL_SOURCES`), durations compared against the page's enum row; control: `4k` and `3` are absent from the 2.6 page
+- [x] `model` typing `KnownVideoModel | (string & {})`; unknown id + `unknownModels: 'passthrough'` (default) → logger warning, shape-only validation, request built; `'reject'` → `KlingValidationError`
+- [x] `capabilityValidation: 'warn'` turns every capability-rule failure below into a warning and still sends; shape rules (required fields, types) throw regardless (test both modes on one rule)
+- [x] `extraSettings`/`extraOptions` merged after validation (test: an unknown key reaches the body untouched); **a key the library models (e.g. `resolution`) in `extra*` → `KlingValidationError`** (test) (run #3 A41)
+- [x] Every rule below carries a `[shape]` or `[capability]` label in the test name; `[shape]` rules throw under both `capabilityValidation` modes (run #3 A42)
+- [x] t2v rules, each with pass + fail test, fail message naming the field: `[shape]` `prompt` required, ≤ 3072 (3.0, 3.0-turbo) / 2500 (else); `[shape]` `duration` integer; `[capability]` model ∈ products; `[capability]` `resolution` ∈ model×product set; `[capability]` `duration` ∈ model set; `[capability]` `audio` only where the model has the field (3.0-turbo message: "native audio is always on for kling-3.0-turbo (inferred from pricing; pass capabilityValidation: 'warn' to send anyway)"); `[capability]` 2.6 `native` ⇒ `1080p`
+- [x] `@name` in prompt with no matching content `id` → logger **warning**, not error — **deferred to 2a₃**: t2v has no `contents[]`, so there is nothing for `@name` to resolve against; the check lands with i2v `elements`
 
 ### Live (opt-in, spends units)
-- [ ] **V6 (release-blocking):** `video.textToVideo({ model:'kling-3.0-turbo', prompt, duration:3, resolution:'720p' })` via a temporary script → `succeeded`, one `video` output; **inspect the mp4 for an audio track** (`ffprobe`) and record — this closes §11 Q3's inference: `________`. Record `task.id` `________`, billing `________`
-- [ ] **§11 Q11:** submit the same `externalTaskId` twice (cheapest t2v) → record second response: `________`
+- [x] **V6 (release-blocking):** `scripts/live-t2v.mjs` (kept, not temporary — Phase 7 reuses it) → `kling-3.0-turbo`, 3 s, 720p → **`succeeded` in 28 s**, one `video` output (3.041 s). **Audio track: present** — no `ffprobe` on this machine, so the MP4 `hdlr` boxes were read directly: handlers `soun,vide`, codec atoms `mp4a,avc1`. §11 Q3 closed: native audio is always on for 3.0-turbo. `task.id` **`930831534075682845`**, billing **`[{ unit, 2.4, video }]`** = 3 s × 0.8 (2026-09-20)
+- [x] **§11 Q11:** same `externalTaskId` (`v6-1789956049929`) re-submitted → **HTTP 400 / `1201` "External_task_id v6-… already exists"**, `taskState 'not-created'`, no second task, no second charge. **The vendor treats `external_task_id` as an idempotency key** — a consumer that re-submits after `may-exist` with the same id is refused, never double-billed (README: say so; it makes `recover()` the *only* thing to do after `may-exist`)
 
 ---
 
@@ -449,7 +456,7 @@ Not part of the 2.0.0 publish gate (V15 is). Runs after 6c, against the package 
 |---|---|---|
 | Q1 callback shape / signing for 3.0-omni | Phase 5 | `________` |
 | Q2 `POST /tasks` time field type | Phase 2a | **closed 2026-09-20 [LIVE]** — numeric ms (`start_time: 1758…`) → 200, count 4; the same window as strings → also 200. The library sends numbers, as the vendor table types them (`long`). |
-| Q3 3.0-turbo `audio` | 2a₂ V6 audio-track check | inferred always-on (pricing); confirm: `________` |
+| Q3 3.0-turbo `audio` | 2a₂ V6 audio-track check | **closed 2026-09-20 [LIVE]** — 3 s / 720p with no `audio` field → mp4 with `soun` handler, `mp4a` (AAC) atom; billed 2.4 = the with-audio rate. Always on, as inferred. |
 | §10.11 default video model | settled 2026-09-20 | `kling-3.0-turbo` (Alex) |
 | §10.15 resource live creates release-blocking? | settled 2026-09-20 | blocking — the three Phase 0 resource probes are in V15 (Alex) |
 | §10.16 concurrency queue stays out of scope? | settled 2026-09-20 | out of scope for 2.0 (Alex) |
@@ -459,7 +466,7 @@ Not part of the 2.0.0 publish gate (V15 is). Runs after 6c, against the package 
 | Q4 omni `duration` with reference video; `shot_type` | Phase 2b (document only) | `________` |
 | Q7 element delete path / shared library | Phase 4a | `________` |
 | Q9 code for a garbage key; revoked key | Phase 1a smoke control | `________` |
-| Q11 `external_task_id` idempotency | Phase 2a | `________` |
+| Q11 `external_task_id` idempotency | Phase 2a | **closed 2026-09-20 [LIVE]** — duplicate → 400 / `1201` "External_task_id … already exists"; not-created, no charge. It IS an idempotency key. |
 | Q12 legacy image timestamps ms | Phase 1b fixtures (normalise-and-warn) | **closed 2026-09-20 [LIVE]** — `GET /v1/images/generations/930810057590833241` → `outputsExpireAt 1792542950357`, i.e. `updated_at` was ms (a seconds value would have produced a warning and a 1970s expiry). Normalise-and-warn stays as the guard. |
 | Q13 `/tasks` id cap | Phase 2a | **closed 2026-09-20 [LIVE]** — 20 ids → 200; 21 ids → HTTP 400 / `1201` "task_ids and external_task_ids cannot exceed 20 in total". The docs state no cap and the spec assumed 50; `TASKS_CHUNK_SIZE = 20`. |
 | A5 API Key on legacy writes | **Phase 0 gate** (image + TTS) | image `________` · tts `________` |
