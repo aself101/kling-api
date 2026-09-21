@@ -260,16 +260,24 @@ Gate: **both Phase 0 write probes ticked.** This is the commit where the JWT pat
 
 ---
 
-## Phase 2b — Video omni + motion-control — budget ~200 src (builders ~90, validators ~110) + ~220 test (4 fixtures, count matrices)
+## Phase 2b — Video omni + motion-control — budget ~200 src (builders ~90, validators ~110) + ~220 test (4 fixtures, count matrices) — **actual: ≈385 src + ≈250 test, 10 fixtures; split per D20: 2bᵃ `0cc4905` (params, builders, fixtures), 2bᵇ `1754b66` (rules, VideoApi, V10 live). 288 tests. Spend: 1.8 video units.**
 
 `feat(video): omni-video and motion-control`
 
-- [ ] `buildOmni(params)` → seven content types + `extraContents`; auto `id`s (`image_1`, `video_1`, element name) when omitted; `settings.aspect_ratio` only when set
-- [ ] `buildMotionControl(params)` → `contents[]` prompt?, `{type:'image',url}`, `{type:'video',url}`, element?; `settings{character_orientation,audio,resolution}`; no `duration`
-- [ ] `video.omni` (default `kling-3.0-omni`), `video.motionControl` (default `kling-3.0`)
-- [ ] **(V1)** body deep-equals vendor examples: `/omni-video/kling-3.0-omni` (t2v, first-frame, feature_video, base_video examples), `/omni-video/kling-o1`, `/motion-control/kling-3.0`, `/motion-control/kling-2.6`
-- [ ] **(V3)** rules with labels and pass/fail tests: `[shape]` omni `aspectRatio` required when no `firstFrame` and no reference video; `[shape]` 3.0-omni `baseVideo` ⇒ no frames, `multiShot` not `true`, `audio !== 'native'` (paid-request-shaping — never warned past); `featureVideo` ⇒ `audio === 'off'`, `multiShot !== false`; ≤1 reference video; refer-image + element count matrices (App. B §2.5, each cell a test); O1: multi-image elements only, `firstFrame` with no other refs ⇒ `duration ∈ {5,10}`, ref video 3–10 s (message: uncheckable client-side); motion: `characterOrientation` required, `element` 3.0 only ≤1, `video` must be `{url}`/https string, ref-video duration bound stated in the message as uncheckable; 3.0 motion excludes `4k`
-- [ ] **V10 opt-in (not release-blocking):** `video.omni` first-frame-only with a hosted image → `succeeded`. Record: `________`
+**Deviations, recorded:**
+- **`elements[].kind?: 'video_character' | 'multi_image'` added** to omni element refs (not in §6.1). The vendor's count matrices are per kind and the library cannot learn the kind from an `elementId`. With `kind` on every element the exact §2.5 cells are checked; without it only the kind-independent envelopes (refs + elements ≤ 7 without a reference video, ≤ 4 with one; ≤ 3 elements with a first frame on 3.0-omni) apply — no false rejections.
+- **Omni `aspectRatio` "required when no first frame and no reference video" is a WARNING, not a `[shape]` rule** (checklist said `[shape]`). The vendor's field note says required, its table says No, and its own "Only prompt" example omits it (App. B §6). A throw would refuse the vendor's example; the warning names the contradiction.
+- **Reference-video duration/format bounds are not checked** (3–15.5 s / 3–10 s omni; ≤ 10 s / ≤ 30 s motion) — the library never fetches a URL to inspect it. The bounds are stated in the params' JSDoc rather than in a message that fires on every call.
+- **Content order in the V1 test is set-compared for omni** — the vendor's own examples hold no fixed order (the O1 element example puts `element` before `first_frame`). Motion fixtures compare exactly.
+- **Auto ids** for omni frames: `image_1`, `image_2`, … counted across first frame, last frame, then reference images (matches every vendor example); frames take no explicit id.
+- **Motion prompt cap** uses the model's `maxPromptLength` (3072 on 3.0) — the motion page says 2500 but the 3.0 row is shared with t2v/i2v; recorded, not split into a per-product cap.
+
+- [x] `buildOmni(params)` → seven content types + `extraContents`; auto `id`s (`image_1`, `video_1`, element name) when omitted; `settings.aspect_ratio` only when set
+- [x] `buildMotionControl(params)` → `contents[]` prompt?, `{type:'image',url}`, `{type:'video',url}`, element?; `settings{character_orientation,audio,resolution}`; no `duration`
+- [x] `video.omni` (default `kling-3.0-omni`), `video.motionControl` (default `kling-3.0`)
+- [x] **(V1)** body deep-equals vendor examples: `/omni-video/kling-3.0-omni` (only-prompt, first+refer, frames+elements, feature_video, base_video), `/omni-video/kling-o1` (first+refer, element+first+feature_video, base+refer), `/motion-control/kling-3.0`, `/motion-control/kling-2.6` — 10 fixtures
+- [x] **(V3)** rules with labels and pass/fail tests: `[shape]` omni `aspectRatio` required when no `firstFrame` and no reference video; `[shape]` 3.0-omni `baseVideo` ⇒ no frames, `multiShot` not `true`, `audio !== 'native'` (paid-request-shaping — never warned past); `featureVideo` ⇒ `audio === 'off'`, `multiShot !== false`; ≤1 reference video; refer-image + element count matrices (App. B §2.5, each cell a test); O1: multi-image elements only, `firstFrame` with no other refs ⇒ `duration ∈ {5,10}`, ref video 3–10 s (message: uncheckable client-side); motion: `characterOrientation` required, `element` 3.0 only ≤1, `video` must be `{url}`/https string, ref-video duration bound stated in the message as uncheckable; 3.0 motion excludes `4k`
+- [x] **V10 opt-in (not release-blocking):** `video.omni` first-frame-only with the vendor's sample image (`image_25.png`), 3 s / 720p / `audio: 'off'` → **`succeeded` in 83 s**, task **`930835328712843329`**, one video (3.041 s), billing **`[{ unit, 1.8, video }]`** = 3 s × 0.6 silent rate (2026-09-20)
 
 ---
 
