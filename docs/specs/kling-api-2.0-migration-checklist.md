@@ -27,7 +27,7 @@ Conventions: `[ ]` open · `[x]` done · `[-]` deliberately skipped (write why i
 - [x] `npm run lint && npm run build && npm test && npx tsc --noEmit` green on `main` after removal — 534/534 tests; lint needed two unused imports removed from `test/integration/polling.test.ts` (pre-existing, would have failed the new push trigger)
 
 ### Live gate probes (`KLING_API_KEY` in env) — one per legacy write family 2.0 ships, because code `1103` is per-resource (run #2 A18, run #3 A40/F10). On `1103`, check `account.usage()` packages first: it is also the entitlement code.
-- [ ] **A5 write probe, image:** `POST /v1/images/generations` with the API Key (`kling-v3`, `n=1`, 1k, portrait prompt — the output is reused by the element and avatar probes) → `code: 0`, `data.task_id`; poll to `succeed`. **2026-09-20 result: HTTP 429 `code 1102 Account balance not enough`** (`req b63503f4`) — the account holds only a *Video* trial pack (`Trial-Video-100Units-5Con-1Months`) and packages are per product type (App. C §3). **Not an auth failure**: needs an image pack or cash balance. **After Alex bought `Trial-Image-1000Units-9Con-1Months` (expires 2026-10-21): `code: 0`, task `930810057590833241` → `succeed` in 24 s, `final_unit_deduction` = 8 image-units** (`req 29690122`, 2026-09-20). Portrait reused below.
+- [x] **A5 write probe, image:** `POST /v1/images/generations` with the API Key (`kling-v3`, `n=1`, 1k, portrait prompt — the output is reused by the element and avatar probes) → `code: 0`, `data.task_id`; poll to `succeed`. **2026-09-20 result: HTTP 429 `code 1102 Account balance not enough`** (`req b63503f4`) — the account holds only a *Video* trial pack (`Trial-Video-100Units-5Con-1Months`) and packages are per product type (App. C §3). **Not an auth failure**: needs an image pack or cash balance. **After Alex bought `Trial-Image-1000Units-9Con-1Months` (expires 2026-10-21): `code: 0`, task `930810057590833241` → `succeed` in 24 s, `final_unit_deduction` = 8 image-units** (`req 29690122`, 2026-09-20). Portrait reused below.
 - [x] **A5 write probe, audio (TTS):** `POST /v1/audio/tts` with the API Key → `code: 0`, `audio_id 930801290416885794`, 11.3 s, **0.05 units** (`req b71fa328`, 2026-09-20). **Finding:** TTS `voice_id` is its own catalogue (`oversea_male1`, from the external Voice Guide the docs link) — a `/v1/general/presets-voices` id returns `1201 Voice id not found`. Spec D8/§6.3 must say so.
 - [x] **A5 write probe, voice:** `POST /v1/general/custom-voices` with the TTS clip as `voice_url` → `code: 0`, task `930801301486305328` → `succeed` in 9 s, `voice_id 930801338081615883`, **0.05 units**; `POST /v1/general/delete-voices` → `code: 0` (2026-09-20)
 - [x] **A5 write probe, element:** `POST /v1/general/advanced-custom-elements` (`image_refer`, frontal + refer = the generated portrait) → `code: 0`, task `930810160078651476` → `succeed` in 5 s, `element_id 321922438904313`, **0 units**; `POST /v1/general/delete-advanced-elements` → `code: 0` (`req 90f732c5`, 2026-09-20). Q7 (is the library shared with the image delete path?) still open — this probe used the video path only.
@@ -151,21 +151,27 @@ Conventions: `[ ]` open · `[x]` done · `[-]` deliberately skipped (write why i
 
 ---
 
-## Phase 2a₀ — Remove the 1.x surface — deletion + ~30 lines of barrel/config edits
+## Phase 2a₀ — Remove the 1.x surface — deletion + ~30 lines of barrel/config edits — **actual: commit `4b7e376`, 54 files, +194 / −15 286; gates green with 146 tests. Edits beyond the budget: the §5 zones for `src/config` and `src/utils` (+40 lines in `eslint.config.js`, promised for 2a₀ in the 1c config comment) and the lint-control tests that exercised deleted 1.x files.**
 
 `chore!: remove the 1.x surface; switch package entry points to 2.0`
 
-Gate: **both Phase 0 write probes ticked.** This is the commit where the JWT path disappears.
+Gate: **both Phase 0 write probes ticked.** This is the commit where the JWT path disappears. *(Met — all five write families passed, A5 closed in Phase 0.)*
 
-- [ ] Delete `src/auth.ts`, `src/client/`, `src/api.ts`, `src/operations/`, `src/types.ts`, `src/errors.ts`, `src/handlers/result-poller.ts`, `src/handlers/file-saver.ts`, `src/handlers/index.ts`, `src/utils/polling.ts`, `src/utils/downloads.ts`, `src/cli.ts`, and the 16 files under `test/` (keep `test/2.0/`). **`src/utils/media.ts` is NOT deleted here** — it stays as the port reference until 2c (spec §3.1)
-- [ ] Trim the barrels so `tsc` passes: `src/utils/index.ts` — remove the `./downloads.js` and `./polling.js` re-exports (keep `./media.js` until 2c); `src/config/index.ts` — remove the `loadCredentials`, model-table and validator re-exports (run #3 architect F-1 / anxiety F1)
-- [ ] `vitest.config.ts` coverage `include` → `['src/**/*.ts']` (today it names `src/api.ts`, `src/auth.ts` and two nonexistent files)
-- [ ] Remove the 1.x `loadCredentials`, 1.x `ERROR_CODES`, model tables and validators from `src/config/` (the 2.0 replacements land in 2a₂/3a); rename `ERROR_CODES_V2` → `ERROR_CODES`
-- [ ] `src/cli/index.ts` stub: prints "kling 2.0 CLI is under construction on this branch" and exits 1
-- [ ] `package.json`: `main`/`types` → `dist/index.*`; `bin.kling` → `dist/cli/index.js`; `exports` = `"."`, `"./package.json"`; remove `./api`, `./auth`, `./utils`, `./config`, `./types`; `scripts.kling*` → `dist/cli/index.js`; remove `axios`, `jsonwebtoken`, `@types/jsonwebtoken`, `nock`; `files` = `dist`, `README.md`, `CHANGELOG.md`, `LICENSE`
-- [ ] `grep -rn "eyJ\|jsonwebtoken\|HS256\|accessKey\|secretKey\|KLING_ACCESS_KEY\|KLING_SECRET_KEY\|axios" src test` → 0 **(V4)**
-- [ ] `npx tsc --noEmit && npm run build && npm test && npm run lint && npm run check:cycles` green with only `test/2.0/`
-- [ ] `npm pack --dry-run` shows `dist/index.js`, `dist/cli/index.js`, no `dist/api.js`, no `dist/auth.*`
+**Deviations, recorded:**
+- **`src/utils/media.ts` moved to `docs/reference/1x-utils-media.ts`**, not kept under `src/`. §3.1 says it stays as the port reference until 2c, but it imports `axios` and the 1.x config barrel, and this commit removes `axios` — a file under `src/` that does not compile fails `tsc`, `build` and lint. It sits outside the compiled tree with a header saying what it is; 2c ports it into `src/media/*` and deletes it.
+- **`dotenv` stays a runtime dependency** though nothing imports it after this commit; the 6a₁ CLI re-adds the `.env` chain (spec D11: "`dotenv`, `ora` imported only from `src/cli/`").
+- **V4 census result: `src` 0; `test` 1** — `loaders.test.ts:39` `expect(MISSING_API_KEY_MESSAGE).not.toMatch(/set KLING_ACCESS_KEY/)`, the control asserting the literal is absent from the message. A census that forbids naming the thing it forbids cannot keep its own control; recorded rather than deleted.
+- **Q9 side-finding from the smoke run:** with a *malformed* key, the legacy and account endpoints answer `1002` with **"The token was expected to have 3 parts, but got 0"** (the vendor tries to parse an unrecognised credential as a JWT), while the new-standard endpoints answer `1002` with the "does not support AK/SK" text. Same code, two messages, neither diagnostic of a *revoked* key — the revoked half of Q9 is still open.
+
+- [x] Delete `src/auth.ts`, `src/client/`, `src/api.ts`, `src/operations/`, `src/types.ts`, `src/errors.ts`, `src/handlers/result-poller.ts`, `src/handlers/file-saver.ts`, `src/handlers/index.ts`, `src/utils/polling.ts`, `src/utils/downloads.ts`, `src/cli.ts`, and the 16 files under `test/` (keep `test/2.0/`). **`src/utils/media.ts` is NOT deleted here** — moved to `docs/reference/1x-utils-media.ts` as the port reference until 2c (spec §3.1; see deviations)
+- [x] Trim the barrels so `tsc` passes: `src/utils/index.ts` — remove the `./downloads.js` and `./polling.js` re-exports (keep `./media.js` until 2c); `src/config/index.ts` — remove the `loadCredentials`, model-table and validator re-exports (run #3 architect F-1 / anxiety F1)
+- [x] `vitest.config.ts` coverage `include` → `['src/**/*.ts']` (today it names `src/api.ts`, `src/auth.ts` and two nonexistent files)
+- [x] Remove the 1.x `loadCredentials`, 1.x `ERROR_CODES`, model tables and validators from `src/config/` (the 2.0 replacements land in 2a₂/3a); rename `ERROR_CODES_V2` → `ERROR_CODES` — also dropped the 1.x size limits / ranges (2.0's are D12's and land with the validators)
+- [x] `src/cli/index.ts` stub: prints "kling 2.0 CLI is under construction on this branch" and exits 1
+- [x] `package.json`: `main`/`types` → `dist/index.*`; `bin.kling` → `dist/cli/index.js`; `exports` = `"."`, `"./package.json"`; remove `./api`, `./auth`, `./utils`, `./config`, `./types`; `scripts.kling*` → `dist/cli/index.js`; remove `axios`, `jsonwebtoken`, `@types/jsonwebtoken`, `nock`; `files` = `dist`, `README.md`, `CHANGELOG.md`, `LICENSE`
+- [x] `grep -rn "eyJ\|jsonwebtoken\|HS256\|accessKey\|secretKey\|KLING_ACCESS_KEY\|KLING_SECRET_KEY\|axios" src test` → src 0, test 1 (the negative-assertion control — see deviations) **(V4)**
+- [x] `npx tsc --noEmit && npm run build && npm test && npm run lint && npm run check:cycles` green with only `test/2.0/`
+- [x] `npm pack --dry-run` shows `dist/index.js`, `dist/cli/index.js`, no `dist/api.js`, no `dist/auth.*` (72 files, 59.9 kB); `scripts/smoke.mjs` through the rebuilt `dist`: 4/4 live reads 200, control 401/1002 (2026-09-20)
 
 ---
 
