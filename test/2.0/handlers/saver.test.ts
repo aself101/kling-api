@@ -153,3 +153,31 @@ describe('save — ship run #4 regressions', () => {
     expect(MEDIA_DOWNLOAD_TIMEOUT).toBe(60_000);
   });
 });
+
+describe('save — ship run #5 regressions', () => {
+  it("client.save() does NOT pin the download deadline to the API timeout: a video slower than `timeout` still downloads under the saver's 120 s default", async () => {
+    // A fetch that takes 150 ms; client timeout 50 ms. Under the old override this was KlingSaveError(timeout).
+    const slowFetch = (async (_u: unknown, init?: RequestInit) => {
+      await new Promise((r) => setTimeout(r, 150));
+      if (init?.signal?.aborted) throw init.signal.reason; // a real fetch rejects once its signal aborted
+      return new Response('MP4', { status: 200, headers: { 'content-type': 'video/mp4' } });
+    }) as typeof fetch;
+    const client = new KlingClient({ apiKey: 'k', fetch: slowFetch, timeout: 50 });
+    const written = await client.save(task(), dir, { lookup: publicDns, now: () => NOW });
+    expect(written[0]).toMatch(/t-1-0\.mp4$/);
+    // An explicit timeoutMs still applies.
+    await expect(client.save(task({ id: 't-2' }), dir, { lookup: publicDns, now: () => NOW, timeoutMs: 20 })).rejects.toBeInstanceOf(KlingSaveError);
+  });
+
+  it('an fs failure while writing is a KlingSaveError too, with the partial file removed', async () => {
+    const { fetchImpl } = cdn({ 'https://cdn.example/v.mp4': { body: 'x', type: 'video/mp4' } });
+    // A directory where the target file name is already a directory → EISDIR on write.
+    const { mkdirSync: mk } = await import('node:fs');
+    mk(join(dir, 't-1-0.mp4'), { recursive: true });
+    const err = await save(task(), dir, { fetch: fetchImpl, lookup: publicDns, now: () => NOW }).catch((e) => e as KlingSaveError);
+    expect(err).toBeInstanceOf(KlingSaveError);
+    expect(err.written).toEqual([]);
+    expect(err.failedUrl).toMatch(/t-1-0\.mp4$/);
+    expect((err.cause as NodeJS.ErrnoException).code).toMatch(/EISDIR|EPERM|EACCES/);
+  });
+});

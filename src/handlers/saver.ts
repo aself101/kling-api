@@ -17,7 +17,7 @@
  * `fetchToBuffer` and its byte / redirect / per-hop SSRF guards. Import graph (§5):
  * `codecs/task`, `media/download`, `http/errors`, `utils/*`.
  */
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { extname, join } from 'node:path';
 import type { SaveOptions, Task, TaskOutput } from '../codecs/task.js';
 import {
@@ -68,8 +68,12 @@ export async function save(task: Task, dir: string, options: SaveOptions = {}): 
   }
 
   const downloads = task.outputs.flatMap((o) => downloadsFor(o, options.includeWatermark === true));
-  mkdirSync(dir, { recursive: true });
   const written: string[] = [];
+  try {
+    mkdirSync(dir, { recursive: true });
+  } catch (cause) {
+    throw new KlingSaveError(task, written, dir, cause);
+  }
   for (const [index, d] of downloads.entries()) {
     let res;
     try {
@@ -89,11 +93,11 @@ export async function save(task: Task, dir: string, options: SaveOptions = {}): 
       dir,
       `${task.id}-${index}${d.label}.${extensionFor(res.contentType, res.finalUrl)}`
     );
-    writeFileSync(file, res.buffer);
+    writeTo(file, res.buffer, task, written);
     written.push(file);
   }
   const sidecar = join(dir, `${task.id}.json`);
-  writeFileSync(
+  writeTo(
     sidecar,
     JSON.stringify(
       {
@@ -106,10 +110,29 @@ export async function save(task: Task, dir: string, options: SaveOptions = {}): 
       },
       null,
       2
-    )
+    ),
+    task,
+    written
   );
   written.push(sidecar);
   return written;
+}
+
+/**
+ * One failure signal for the whole save: an fs error (ENOSPC, EACCES) is a `KlingSaveError`
+ * like a download error, and a half-written file is removed so `written` stays truthful.
+ */
+function writeTo(file: string, data: Buffer | string, task: Task, written: string[]): void {
+  try {
+    writeFileSync(file, data);
+  } catch (cause) {
+    try {
+      rmSync(file, { force: true });
+    } catch {
+      // AUDIT-OK(no_empty_catch): best-effort cleanup of a partial file; the write error below is the one to report.
+    }
+    throw new KlingSaveError(task, written, file, cause);
+  }
 }
 
 /** Per-download deadline when `timeoutMs` is not given: 120 s for a video, 60 s for an image or audio file. */

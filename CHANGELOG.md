@@ -18,6 +18,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - URL safety: hex-embedded IPv4 forms (`::7f00:1`, `64:ff9b::7f00:1`) are refused like their dotted spellings.
 - CLI: the paid task id is printed (stdout, `--json`-aware) even when `--wait` or the save fails; errors set `process.exitCode` instead of calling `process.exit()` on the same tick (a large `--json` error body was truncated at the 64 KiB pipe buffer); `tasks list --days 0` is a zero-width window, not "unset"; every commander option bag crosses one typed boundary (`handler<T>()`).
 - Dead 1.x `utils/{index,file-io,logger}` modules and unused constants are gone from the tarball; stale phase-anchored preambles that shipped in `dist/*.d.ts` are rewritten.
+- `retry` options are resolved field by field and validated: `retry: { maxAttempts: undefined }` kept the default before only by luck of the spread — with an explicitly undefined key it disabled the attempt cap (a permanent 5xx retried forever); `client.save()` no longer pins the download deadline to the API `timeout` (the 120 s video default was unreachable from the client and CLI); an fs error while writing is a `KlingSaveError` too, with the partial file removed; the retry backoff timer is cleared on abort and its listener released on completion.
 
 A full reboot against the current Kling API (spec: `docs/specs/kling-api-2.0-migration-spec-v0_4_3.md`;
 build record: `docs/specs/kling-api-2.0-migration-checklist.md`). The vendor discontinued every model

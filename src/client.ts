@@ -99,15 +99,14 @@ export class KlingClient {
   }
 
   /**
-   * Save a task's outputs to `dir` (spec D14) through the client's `fetch` and timeout —
-   * so a proxied client downloads through its proxy. Returns the paths written.
+   * Save a task's outputs to `dir` (spec D14) through the client's `fetch` — so a proxied
+   * client downloads through its proxy. Returns the paths written.
    */
   save(task: Task, dir: string, options: SaveOptions = {}): Promise<string[]> {
-    return saveTask(task, dir, {
-      fetch: this.http.fetchImpl,
-      timeoutMs: this.config.timeout,
-      ...options,
-    });
+    // Only the fetch is forwarded. The download deadline is the saver's per-type default
+    // (120 s video / 60 s image+audio) unless the caller passes `timeoutMs` — the API `timeout`
+    // is sized for JSON round trips, not for a 40 MB clip (ship run #5, code-auditor).
+    return saveTask(task, dir, { fetch: this.http.fetchImpl, ...options });
   }
 
   /**

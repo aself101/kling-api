@@ -311,3 +311,41 @@ describe('ship run #4 regressions', () => {
     expect(err.cause).toBeInstanceOf(SyntaxError);
   });
 });
+
+describe('ship run #5 regressions', () => {
+  it('retry: { maxAttempts: undefined } keeps the default (3) instead of retrying forever; invalid values are refused', async () => {
+    const { fetchImpl, calls } = fakeFetch(Array.from({ length: 10 }, () => ({ json: { code: 5000, message: 'internal', request_id: 'r' }, status: 500 })));
+    const c = new HttpCore({ apiKey: 'k-1234', fetch: fetchImpl, timeout: 50, retry: { maxAttempts: undefined, baseDelayMs: undefined } }, { sleep });
+    await expect(c.request(READ)).rejects.toBeInstanceOf(KlingAPIError);
+    expect(calls).toHaveLength(3); // the default, not ∞
+    expect(c.retry).toEqual({ maxAttempts: 3, baseDelayMs: 1000, maxDelayMs: 30_000 });
+    expect(() => new HttpCore({ apiKey: 'k-1234', fetch: fetchImpl, retry: { maxAttempts: 0 } })).toThrow(/retry\.maxAttempts must be an integer ≥ 1/);
+    expect(() => new HttpCore({ apiKey: 'k-1234', fetch: fetchImpl, retry: { baseDelayMs: Number.NaN } })).toThrow(/retry\.baseDelayMs/);
+  });
+
+  it('an abort during the default backoff clears its timer and removes its listener; a completed backoff leaves no listener behind', async () => {
+    vi.useFakeTimers();
+    try {
+      const ac = new AbortController();
+      const { fetchImpl } = fakeFetch([{ json: { code: 5000, message: 'x', request_id: 'r' }, status: 500 }, OK]);
+      const c = new HttpCore({ apiKey: 'k-1234', fetch: fetchImpl, timeout: 50 }); // default sleep → real (fake) timers
+      const p = c.request({ ...READ, signal: ac.signal });
+      await vi.advanceTimersByTimeAsync(10); // into the 2 s backoff
+      expect(vi.getTimerCount()).toBe(1);
+      ac.abort('bail');
+      await expect(p).rejects.toBe('bail');
+      expect(vi.getTimerCount()).toBe(0); // timer cleared, nothing holds the loop
+      // Completed backoff: no listener accumulates on a long-lived signal.
+      const long = new AbortController();
+      const { fetchImpl: f2 } = fakeFetch([{ json: { code: 5000, message: 'x', request_id: 'r' }, status: 500 }, OK]);
+      const c2 = new HttpCore({ apiKey: 'k-1234', fetch: f2, timeout: 50 });
+      const p2 = c2.request({ ...READ, signal: long.signal });
+      await vi.advanceTimersByTimeAsync(2100);
+      await expect(p2).resolves.toBeDefined();
+      const { getEventListeners } = await import('node:events');
+      expect(getEventListeners(long.signal, 'abort')).toHaveLength(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

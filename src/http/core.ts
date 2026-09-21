@@ -133,15 +133,6 @@ const BODY_SNIPPET_BYTES = 200;
 // Core
 // ============================================================================
 
-/** Never resolves; rejects with the signal's reason when it aborts (or immediately if it already has). Without a signal, never settles. */
-function abortRejection(signal: AbortSignal | undefined): Promise<never> {
-  return new Promise((_, reject) => {
-    if (!signal) return;
-    if (signal.aborted) reject(signal.reason);
-    else signal.addEventListener('abort', () => reject(signal.reason), { once: true });
-  });
-}
-
 /** The transport behind every namespace: `request({ method, path, body, kind })` with the per-attempt deadline, the read-only retry policy and vendor-envelope error mapping (spec D10, D11). */
 export class HttpCore {
   readonly baseUrl: string;
@@ -153,6 +144,7 @@ export class HttpCore {
   readonly #apiKey: string;
   readonly #fetchImpl: typeof fetch;
   readonly #sleep: (ms: number) => Promise<void>;
+  readonly #sleepInjected: boolean;
 
   constructor(
     config: Pick<KlingConfig, 'baseUrl' | 'timeout' | 'retry' | 'fetch' | 'logger'> & {
@@ -173,10 +165,31 @@ export class HttpCore {
     this.baseUrl = baseUrl;
     this.#apiKey = config.apiKey;
     this.timeout = config.timeout ?? DEFAULT_TIMEOUT;
-    this.retry = { ...DEFAULT_RETRY, ...config.retry };
+    // Field-by-field with `??`, not a spread: `retry: { maxAttempts: opts.retries }` with the
+    // option absent would otherwise erase the default into `undefined`, and `attempt >= undefined`
+    // is never true — every retryable read would retry forever (ship run #5, code-auditor).
+    this.retry = {
+      maxAttempts: config.retry?.maxAttempts ?? DEFAULT_RETRY.maxAttempts,
+      baseDelayMs: config.retry?.baseDelayMs ?? DEFAULT_RETRY.baseDelayMs,
+      maxDelayMs: config.retry?.maxDelayMs ?? DEFAULT_RETRY.maxDelayMs,
+    };
+    if (!Number.isInteger(this.retry.maxAttempts) || this.retry.maxAttempts < 1) {
+      throw new KlingValidationError(
+        'retry.maxAttempts',
+        `retry.maxAttempts must be an integer ≥ 1, got ${String(this.retry.maxAttempts)}`
+      );
+    }
+    for (const k of ['baseDelayMs', 'maxDelayMs'] as const) {
+      if (!Number.isFinite(this.retry[k]) || this.retry[k] < 0)
+        throw new KlingValidationError(
+          `retry.${k}`,
+          `retry.${k} must be a finite number ≥ 0, got ${String(this.retry[k])}`
+        );
+    }
     this.#fetchImpl = config.fetch ?? globalThis.fetch;
     this.logger = config.logger ?? silentLogger;
     this.#sleep = internals.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
+    this.#sleepInjected = internals.sleep !== undefined;
     if (typeof this.#fetchImpl !== 'function') {
       throw new KlingValidationError(
         'fetch',
@@ -189,6 +202,52 @@ export class HttpCore {
   /** The fetch this core sends through — so downloads (`client.save`) can share a proxy or a test seam. */
   get fetchImpl(): typeof fetch {
     return this.#fetchImpl;
+  }
+
+  /**
+   * Sleep, or reject with the caller's reason on abort. With the default timer the timeout is
+   * CLEARED on abort (nothing left holding the process open); with an injected test seam the
+   * seam's promise is awaited and the abort listener is still removed on completion.
+   */
+  #abortableSleep(ms: number, signal: AbortSignal | undefined): Promise<void> {
+    if (!signal) return this.#sleep(ms);
+    if (signal.aborted) return Promise.reject(signal.reason);
+    if (!this.#sleepInjected) {
+      return new Promise<void>((resolve, reject) => {
+        const onAbort = () => {
+          clearTimeout(timer);
+          reject(signal.reason);
+        };
+        const timer = setTimeout(() => {
+          signal.removeEventListener('abort', onAbort);
+          resolve();
+        }, ms);
+        signal.addEventListener('abort', onAbort, { once: true });
+      });
+    }
+    return new Promise<void>((resolve, reject) => {
+      let done = false;
+      const onAbort = () => {
+        if (done) return;
+        done = true;
+        reject(signal.reason);
+      };
+      signal.addEventListener('abort', onAbort, { once: true });
+      this.#sleep(ms).then(
+        () => {
+          if (done) return;
+          done = true;
+          signal.removeEventListener('abort', onAbort);
+          resolve();
+        },
+        (err: unknown) => {
+          if (done) return;
+          done = true;
+          signal.removeEventListener('abort', onAbort);
+          reject(err);
+        }
+      );
+    });
   }
 
   describeCredential(): string {
@@ -223,8 +282,10 @@ export class HttpCore {
           `kling: ${req.method} ${req.path} attempt ${attempt}/${attempts} failed (${(err as Error).name}); retrying in ${delay} ms`
         );
         // The backoff is abortable: a caller cancel during the sleep rejects now, not at the
-        // next attempt's pre-check up to maxDelayMs later (ship run #4).
-        await Promise.race([this.#sleep(delay), abortRejection(req.signal)]);
+        // next attempt's pre-check up to maxDelayMs later (ship run #4). Both the timer and the
+        // abort listener are released whichever side wins (ship run #5: the race left the
+        // loser's listener on the caller's signal and the timer holding the process open).
+        await this.#abortableSleep(delay, req.signal);
       }
     }
   }

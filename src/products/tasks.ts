@@ -416,6 +416,7 @@ export function createHandle(
       loop = null;
       loopAbort = null;
       // Subscribers who joined while this loop was dying get a fresh loop.
+      // AUDIT-OK(no_fire_and_forget): runLoop never rejects — its body is fully try/catch/finally-guarded.
       if (subscribers.size > 0) loop = runLoop();
     }
   };
@@ -452,6 +453,7 @@ export function createHandle(
       if (options.signal?.aborted) return sub.fail(options.signal.reason);
       options.signal?.addEventListener('abort', onAbort, { once: true });
       subscribers.add(sub);
+      // AUDIT-OK(no_fire_and_forget): runLoop never rejects (see above); settlement reaches callers through the subscribers.
       loop ??= runLoop();
     });
 

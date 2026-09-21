@@ -7,14 +7,22 @@ import { registerTasks } from './tasks.js';
 import { registerVideo } from './video.js';
 
 export function buildProgram(): Command {
-  const pkg = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as {
-    version: string;
-  };
+  let version = '0.0.0';
+  try {
+    version =
+      (
+        JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as {
+          version?: string;
+        }
+      ).version ?? version;
+  } catch {
+    // AUDIT-OK(no_empty_catch): a corrupted install should still answer --help; --version reports 0.0.0.
+  }
   const program = new Command('kling')
     .description(
       'Kling AI from the command line — video (new API standard), image, elements, voices, avatar, TTS, tasks, account'
     )
-    .version(pkg.version)
+    .version(version)
     .option('--api-key <key>', 'API Key (else KLING_API_KEY, ./.env, ~/.kling/.env)')
     .option('--output-dir <dir>', 'where --wait saves outputs', 'output')
     .option('--json', 'machine-readable output on stdout; logs on stderr')
