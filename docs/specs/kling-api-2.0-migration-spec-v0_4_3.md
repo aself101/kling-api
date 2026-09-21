@@ -185,7 +185,7 @@ Each decision records the alternative that was rejected and why. **(settled)** =
 
 - The only credential is an **API Key**. `KlingConfig.apiKey?: string`; env `KLING_API_KEY`. **The library reads the constructor argument and `process.env.KLING_API_KEY` only.** The `./.env` and `~/.kling/.env` lookups (`src/config/loaders.ts:46-67`) move to the CLI layer — a library that silently reads the home directory is a surprise for a server consumer (run #1 A8).
 - **Removed:** `src/auth.ts` (`KlingAuth`, `decodeToken`, `isTokenExpired`), the `./auth` subpath export, `KlingAPI.getToken()` / `refreshToken()`, `jsonwebtoken` and `@types/jsonwebtoken`.
-- The `401 / 1002` message **[LIVE]** is surfaced verbatim by `KlingAPIError`. The library adds one hint only: if `1000`–`1004` is returned and the key is empty, the message names the two sources. Whether a *revoked* key also returns `1002` is §11 Q9; the smoke script's control probe records it.
+- The `401 / 1002` message **[LIVE]** is surfaced verbatim by `KlingAPIError` — with one caveat learned at 1c: **a garbage API Key also returns `1002` with the identical "does not support AK/SK … create API key" text [LIVE 2026-09-21]**, so the vendor's message is not diagnostic and the README says so ("1002 means the Authorization header was not accepted — check the key, not the auth scheme"). The library adds one hint only: if `1000`–`1004` is returned and the key is empty, the message names the two sources. Whether a *revoked* key also returns `1002` is the remaining half of §11 Q9.
 - Redaction (`src/utils/security.ts` `redactKey`) is retained; the key is never logged in full.
 
 Rejected: dual-auth with per-endpoint branching (App. A §4.4 item 5). It would ship a credential that authenticates half the surface and 401s the other half, with the boundary set by the vendor's product taxonomy rather than anything visible to the consumer.
@@ -813,7 +813,7 @@ Each item names the check and how it can fail.
 | Q6 | `watermark_url` presence when `watermark_info.enabled=false`. | Saver | Optional; saved only when non-empty. |
 | Q7 | Two element-delete paths; shared library? | D8 | Phase 4a: create via video path, delete via image path, observe. |
 | Q8 | `kling-video-o3` appears only in element docs. | D9 warning text | Quote the vendor; do not model. |
-| Q9 | Which code does a *garbage* key produce (`1000` vs `1002`)? A *revoked* key? | D2 | Smoke control; a revoked-key probe if Alex rotates one. |
+| Q9 | ~~Which code does a *garbage* key produce (`1000` vs `1002`)?~~ **Answered 2026-09-21: `1002`, with the same misleading AK/SK text.** A *revoked* key? | D2 | Smoke control (done); a revoked-key probe if Alex rotates one. |
 | Q10 | `/tasks` returns `200 data: []` for unknown ids **[LIVE]** — also for other accounts' ids? | `tasks.get` | Untestable with one account; document "empty = not visible". |
 | Q11 | Is `external_task_id` an idempotency key (does a duplicate create return the existing task or `400`)? | D10 | Phase 2a: submit the same `external_task_id` twice (cheapest t2v); record the response. Until known, creates are never auto-retried. |
 | Q12 | Are legacy *image* product timestamps ms? (Video and voice samples are; image samples not checked.) | D4 | Codec normalises: `t < 1e11` → seconds ×1000 with a warning; never throws on units (run #2 A24 — a hard throw would block every image `get()` until a release). Fixture tests cover image products. |
