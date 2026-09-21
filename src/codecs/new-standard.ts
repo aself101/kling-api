@@ -5,12 +5,13 @@
  * …) and the unified task queries (`GET /tasks`, `POST /tasks`). Its envelope is
  * `data.id` / `data.status` (`succeeded`) / `outputs[]` / `billing[]`, and its callback
  * body is the same record without the envelope (`docs/api/kling-get-started-callbacks.md`,
- * "New Callback Function"). The build half (`buildTextToVideo`, …) lands in 2a₁.
+ * "New Callback Function"). The build half is at the bottom of the file (2a₂ onward).
  *
  * Every vendor-spelled field name in this file is read HERE and nowhere else (D3).
  * Source: `docs/api/kling-3.0-turbo-t2v.md` Response Examples (fence lines 109, 172, 356);
  * the fixtures under `test/2.0/fixtures/new/` are those examples.
  */
+import type { CommonOptions, TextToVideoParams } from './params.js';
 import type {
   AudioOutput,
   BillingEntry,
@@ -224,4 +225,46 @@ function parseBilling(list: unknown[], path: string, ctx: ParseContext | undefin
     out.push(b);
   });
   return out;
+}
+
+// ============================================================================
+// Build half (spec D3, D6, D9; App. B §2.0–2.1) — landed in 2a₂
+// ============================================================================
+
+/** The new-standard request body. `prompt` (t2v) XOR `contents[]` (every other product). */
+export interface NewStandardBody {
+  prompt?: string;
+  contents?: Record<string, unknown>[];
+  settings?: Record<string, unknown>;
+  options?: Record<string, unknown>;
+}
+
+/**
+ * The shared `options` block (App. B §2.0). Unset optionals are OMITTED, never `null`.
+ * `externalId` is already resolved by the product module (`resolveExternalId`): the
+ * caller's value, a UUID, or undefined when opted out.
+ */
+export function buildOptions(params: CommonOptions, externalId: string | undefined): Record<string, unknown> | undefined {
+  const options: Record<string, unknown> = {};
+  if (params.callbackUrl !== undefined) options.callback_url = params.callbackUrl;
+  if (externalId !== undefined) options.external_task_id = externalId;
+  if (params.watermark !== undefined) options.watermark_info = { enabled: params.watermark };
+  if (params.extraOptions) Object.assign(options, params.extraOptions);
+  return Object.keys(options).length > 0 ? options : undefined;
+}
+
+/** `POST /text-to-video/<model>` body (App. B §2.1, §2.3, §2.8, §2.11). Validation has already run. */
+export function buildTextToVideo(params: TextToVideoParams, externalId: string | undefined): NewStandardBody {
+  const settings: Record<string, unknown> = {};
+  if (params.resolution !== undefined) settings.resolution = params.resolution;
+  if (params.aspectRatio !== undefined) settings.aspect_ratio = params.aspectRatio;
+  if (params.duration !== undefined) settings.duration = params.duration;
+  if (params.audio !== undefined) settings.audio = params.audio;
+  if (params.multiShot !== undefined) settings.multi_shot = params.multiShot;
+  if (params.extraSettings) Object.assign(settings, params.extraSettings);
+  const body: NewStandardBody = { prompt: params.prompt };
+  if (Object.keys(settings).length > 0) body.settings = settings;
+  const options = buildOptions(params, externalId);
+  if (options) body.options = options;
+  return body;
 }

@@ -11,6 +11,7 @@ import { MISSING_API_KEY_MESSAGE, loadApiKey, type ApiKeySource } from './config
 import { HttpCore, type HttpCoreInternals, type KlingConfig, type Logger, silentLogger } from './http/core.js';
 import { KlingValidationError } from './http/errors.js';
 import { TasksApi } from './products/tasks.js';
+import { VideoApi } from './products/video.js';
 
 export interface ResolvedKlingConfig {
   baseUrl: string;
@@ -32,6 +33,8 @@ export class KlingClient {
   readonly config: ResolvedKlingConfig;
   /** Product-neutral task queries and handles (spec D5): `get`, `list`, `getByProduct`, `listByProduct`, `recover`, `handle`. */
   readonly tasks: TasksApi;
+  /** Video generation on the new API standard (spec D6): `textToVideo`, `imageToVideo` (2a₃), `omni` / `motionControl` (2b). */
+  readonly video: VideoApi;
 
   constructor(config: KlingConfig = {}, internals: HttpCoreInternals = {}) {
     const key = loadApiKey(config.apiKey);
@@ -57,6 +60,11 @@ export class KlingClient {
       apiKeySource: key.source,
     };
     this.tasks = new TasksApi(this.http, this.config.logger);
+    this.video = new VideoApi(this.http, {
+      logger: this.config.logger,
+      unknownModels: this.config.unknownModels,
+      capabilityValidation: this.config.capabilityValidation,
+    });
   }
 
   /**
