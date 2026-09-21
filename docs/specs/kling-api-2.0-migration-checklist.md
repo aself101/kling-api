@@ -281,34 +281,42 @@ Gate: **both Phase 0 write probes ticked.** This is the commit where the JWT pat
 
 ---
 
-## Phase 2c — Media sources + download + save — budget ~230 src (source ~90, download ~80, saver ~60) + ~220 test
+## Phase 2c — Media sources + download + save — budget ~230 src (source ~90, download ~80, saver ~60) + ~220 test — **actual: ≈520 src (security 150, download 130, source +110, saver 120) + ≈450 test; split per D20: 2cᵃ `1028713` (URL check, fetchToBuffer), 2cᵇ `6d70a45` (file inputs, saver, client.save). 341 tests.**
 
 `feat(media)!: explicit MediaSource, fetch-based downloads with byte/redirect/SSRF guards`
 
+**Deviations, recorded:**
+- **`validateUrl` → `assertSafeUrl` (async, throws `UnsafeUrlError { reason }`)** in `utils/security.ts`; `media/download.ts` wraps it into `KlingDownloadError('blocked-host')`. `utils/*` may not import `http/errors` (§5), so the wrap happens one layer up. `PRIVATE_IP_PATTERNS` deleted; `100.64/10` (CGNAT), `224/4` and NAT64 `64:ff9b::` added to the refused set.
+- **Zone-id IPv6 literals** (`[fe80::1%25eth0]`) are `invalid-url` under WHATWG parsing, not `blocked-host` — refused either way.
+- **Saver file names** carry a label for variants: `<id>-<index>-watermark.<ext>`, `-wav`, `-preview` (checklist said `<task.id>-<index>.<ext>` only; two URLs from one output need distinct names). `SaveOptions` gained `request`, `maxBytes`, `lookup`, `now`.
+- **`SaveOptions`** is one interface in `codecs/task.ts` (§6.4 types), extended with the seams; `handlers/saver.ts` imports it.
+- **`client.save` forwards the client's `fetch` via a `HttpCore.fetchImpl` getter** (added).
+- **Voice outputs** save their preview URL as `-preview`; **element outputs** have no downloadable file and are skipped.
+
 ### `media/source.ts` (D12)
-- [ ] `resolveMediaSource(src: MediaSource, { kind: 'image' | 'video' | 'audio', standard: Standard }) → { url } | { base64 }`
-- [ ] Bare string: `https://…` → `{url}`; Base64 (charset check, optional `data:` prefix stripped) → `{base64}`; **anything else → `KlingValidationError`** — never `existsSync`. Test: a string that is a real path on disk → throws
-- [ ] `{ path }` / `Buffer` / `Uint8Array`: read, check extension (`jpg/jpeg/png` for images), magic bytes, ≥300 px, ratio 1:2.5–2.5:1 → `{base64}`; cap **10 000 000 bytes when `standard === 'legacy'`** (vendor "10MB", `kling-image-2.1-generation.md:77`; decimal so we are under either reading) and **20 000 000 when `'new'`** (library limit; JSON inflation) — over the cap → `KlingValidationError` naming the cap and the reason; tests for both standards at cap±1 byte
-- [ ] **Aggregate cap:** total encoded inline payload per request ≤ 40 MB → else `KlingValidationError('host the files and pass URLs')` (test: 5 × 9 MB legacy inputs → throws) (run #3 A45)
-- [ ] `kind: 'video'` accepts only `https` string or `{url}`; else `KlingValidationError('… must be a URL; the Kling API has no upload endpoint')`
-- [ ] Delete `src/utils/media.ts` (`imageToBase64`, `audioToBase64`, `processMediaSource`) after porting the checks — **this is where it goes** (kept through 2a₀ as the reference); remove the `./media.js` re-export from `src/utils/index.ts` now
+- [x] `resolveMediaSource(src: MediaSource, { kind: 'image' | 'video' | 'audio', standard: Standard }) → { url } | { base64 }`
+- [x] Bare string: `https://…` → `{url}`; Base64 (charset check, optional `data:` prefix stripped) → `{base64}`; **anything else → `KlingValidationError`** — never `existsSync`. Test: a string that is a real path on disk → throws
+- [x] `{ path }` / `Buffer` / `Uint8Array`: read, check extension (`jpg/jpeg/png` for images), magic bytes, ≥300 px, ratio 1:2.5–2.5:1 → `{base64}`; cap **10 000 000 bytes when `standard === 'legacy'`** (vendor "10MB", `kling-image-2.1-generation.md:77`; decimal so we are under either reading) and **20 000 000 when `'new'`** (library limit; JSON inflation) — over the cap → `KlingValidationError` naming the cap and the reason; tests for both standards at cap±1 byte
+- [x] **Aggregate cap:** total encoded inline payload per request ≤ 40 MB → else `KlingValidationError('host the files and pass URLs')` (test: 5 × 9 MB legacy inputs → throws) (run #3 A45)
+- [x] `kind: 'video'` accepts only `https` string or `{url}`; else `KlingValidationError('… must be a URL; the Kling API has no upload endpoint')`
+- [x] Delete the 1.x media reference (`docs/reference/1x-utils-media.ts`, where 2a₀ had moved `src/utils/media.ts`) after porting the checks — done; the `./media.js` re-export went at 2a₀
 
 ### `media/download.ts` (D12)
-- [ ] `fetchToBuffer(url, { maxBytes, maxRedirects = MAX_REDIRECTS, timeoutMs, signal, fetch })`
-- [ ] `redirect: 'manual'` loop; **`validateUrl` on the initial URL and on every `Location`** (test: first hop public, second hop **`https://127.0.0.1/`** → `KlingDownloadError('blocked-host')` before the second fetch — https so the protocol check passes and the *host* check is what fires; **control:** second hop `http://127.0.0.1/` is also blocked, but that one proves only the protocol rule — run #3 anxiety F3)
-- [ ] `validateUrl` hardened (D12): `dns.lookup({all:true})` and reject if any address is private/loopback/link-local/metadata; IPv4 alternate encodings (`0x7f000001`, `2130706433`, `0177.0.0.1`) normalised via `new URL()` + `net.isIP`; IPv6 `::1`, `fc00::/7`, `fe80::/10`, `::ffff:` mapped v4 — each with a failing control; DNS lookup is injectable for tests; **lookup failure (`ENOTFOUND`, timeout) → `KlingDownloadError('blocked-host', cause)`** — fail closed (test); the time-of-check limitation is a README note, not a test
-- [ ] Stream the body; abort and throw `KlingDownloadError('too-large')` once `maxBytes` is exceeded (test: fake stream of `maxBytes + 1`)
-- [ ] `> maxRedirects` → `KlingDownloadError('too-many-redirects')` (test); non-2xx final → `KlingDownloadError('http', httpStatus)`
-- [ ] Delete `src/utils/downloads.ts`
+- [x] `fetchToBuffer(url, { maxBytes, maxRedirects = MAX_REDIRECTS, timeoutMs, signal, fetch })`
+- [x] `redirect: 'manual'` loop; **`validateUrl` on the initial URL and on every `Location`** (test: first hop public, second hop **`https://127.0.0.1/`** → `KlingDownloadError('blocked-host')` before the second fetch — https so the protocol check passes and the *host* check is what fires; **control:** second hop `http://127.0.0.1/` is also blocked, but that one proves only the protocol rule — run #3 anxiety F3)
+- [x] `validateUrl` hardened (D12): `dns.lookup({all:true})` and reject if any address is private/loopback/link-local/metadata; IPv4 alternate encodings (`0x7f000001`, `2130706433`, `0177.0.0.1`) normalised via `new URL()` + `net.isIP`; IPv6 `::1`, `fc00::/7`, `fe80::/10`, `::ffff:` mapped v4 — each with a failing control; DNS lookup is injectable for tests; **lookup failure (`ENOTFOUND`, timeout) → `KlingDownloadError('blocked-host', cause)`** — fail closed (test); the time-of-check limitation is a README note, not a test
+- [x] Stream the body; abort and throw `KlingDownloadError('too-large')` once `maxBytes` is exceeded (test: fake stream of `maxBytes + 1`)
+- [x] `> maxRedirects` → `KlingDownloadError('too-many-redirects')` (test); non-2xx final → `KlingDownloadError('http', httpStatus)`
+- [x] Delete `src/utils/downloads.ts` — already gone at 2a₀
 
 ### `handlers/saver.ts` (D14)
-- [ ] `save(task, dir, { includeWatermark?, signal?, fetch?, timeoutMs?, force? }) → string[]`; `client.save(task, dir, opts)` forwards the client's `fetch`/`timeout`/logger (test: injected fetch is the one called)
-- [ ] `KlingOutputsExpiredError` when `outputsExpireAt < Date.now()` — thrown before any fetch (test with a synthetic task); `force: true` bypasses it (test)
-- [ ] `KlingNoOutputsError` when `status === 'succeeded'` and `outputs.length === 0`
-- [ ] Filename `<task.id>-<index>.<ext>`; `ext` from `Content-Type` → URL extension → `bin` (tests for each branch)
-- [ ] Sidecar `<task.id>.json`: `{ product, standard, request, outputs, raw }` — `request` media fields already redacted to `{ kind, bytes, sha256 }` by the handle (test: a 5 MB Buffer input yields a sidecar under 10 KB)
-- [ ] Watermarked variants only with `includeWatermark`
-- [ ] Live (opt-in): `save()` on the V6 task writes a playable mp4
+- [x] `save(task, dir, { includeWatermark?, signal?, fetch?, timeoutMs?, force? }) → string[]`; `client.save(task, dir, opts)` forwards the client's `fetch`/`timeout`/logger (test: injected fetch is the one called)
+- [x] `KlingOutputsExpiredError` when `outputsExpireAt < Date.now()` — thrown before any fetch (test with a synthetic task); `force: true` bypasses it (test)
+- [x] `KlingNoOutputsError` when `status === 'succeeded'` and `outputs.length === 0`
+- [x] Filename `<task.id>-<index>[-label].<ext>`; `ext` from `Content-Type` → URL extension → `bin` (tests for each branch)
+- [x] Sidecar `<task.id>.json`: `{ product, standard, request, outputs, raw }` — `request` media fields already redacted to `{ kind, bytes, sha256 }` by the handle (test: a 5 MB Buffer input yields a sidecar under 10 KB)
+- [x] Watermarked variants only with `includeWatermark`
+- [x] Live (opt-in): `client.save()` on the V6 task `930831534075682845` → `930831534075682845-0.mp4` (2 149 121 bytes, byte-identical to the earlier direct download; `ftyp`, `soun`+`vide`) + sidecar (2026-09-20). `includeWatermark` produced nothing: the create did not ask for a watermark, so the output has no `watermark_url`
 
 ---
 
