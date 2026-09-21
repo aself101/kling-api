@@ -175,27 +175,36 @@ Gate: **both Phase 0 write probes ticked.** This is the commit where the JWT pat
 
 ---
 
-## Phase 2a₁ — Task handles, queries, poller — budget ~240 src + ~240 test
+## Phase 2a₁ — Task handles, queries, poller — budget ~240 src + ~240 test — **actual: src ≈560 (tasks 367, poller 67, models 67, client/index/errors +60); test ≈490 (tasks 359, poller 101, client +30). ~2.3× over → split per D20: 2a₁ᵃ `c681d61` (poller, models skeleton, `KlingTaskNotFoundError`), 2a₁ᵇ `1ea9b45` (TasksApi, TaskHandle, client wiring). 180 tests. Running re-estimate: every 2.0 module so far has landed at 1.5–2.5× its budget, the excess being decision-record JSDoc and the failing-control tests D20 requires; budgets from 2a₂ on should be read ×2.**
 
 `feat(tasks): TaskHandle, unified and per-product task queries, poller`
 
+**Live findings (free reads, 2026-09-20) and deviations, recorded:**
+- **`GET /tasks` caps at 20 ids** — HTTP 400 / `1201` for 21 (Q13). `TASKS_CHUNK_SIZE = 20`, not the spec's 50.
+- **Legacy not-found is `1201`, not `1203`** — HTTP 400 / `1201` "Task not found by id/external id: <value>" for both a bogus task id and a bogus external id on `image-generation` (Q15). Mapped by code **and message**; a `1201` with any other message stays a `KlingAPIError` (control in `tasks.test.ts`).
+- **⚠ D5 premise contradicted: the unified `/tasks` sees legacy-created tasks.** `GET /tasks?task_ids=930810294971662349,930810057590833241` (the Phase 0 avatar and image tasks) returned both, normalized (`outputs[]` video / image, `billing[]` `unit` 4.4 video / 8 image); `POST /tasks {limit:20}` listed all four Phase 0 tasks — avatar, element (`packageType: video`), image, voice (`packageType: video`). D5 says "Unified `/tasks` only knows new-standard tasks" and rejects a bare `getTask(id)` on that premise. **No code change made** — `getByProduct`/`recover` still route legacy products to `/v1/...` as designed (the legacy envelope carries `task_info`, which `/tasks` does not). **Decision for Alex before 6b docs:** (a) keep the routing and document that `tasks.get()` works for any id as a bonus `[LIVE]`; or (b) simplify — `getByProduct` for legacy products becomes an alias of `tasks.get` and `/v1/<product>/{id}` is used only by `listByProduct`. (a) is the conservative default and is what ships until told otherwise; the difference for a consumer is whether they must remember the product to look a task up.
+- **`KlingTaskNotFoundError` added** (not in D10) — the new-standard single-task lookup has no vendor error to surface when `data: []`; `getByProduct` throws it, `recover` returns `null`. Exported from the barrel.
+- **`externalTaskId` accepts `false`** to opt out (D10) — §6.1 types it `string`; the product param types in 2a₂ should be `string | false`.
+- **`KlingTaskFailedError.code` is always `null` today** — neither standard puts a business code on a failed task record (`message` carries the reason); the field stays for a future envelope.
+- **`handle.wait()` late joiners**: a subscriber that joins mid-sleep with a shorter interval takes effect at the *next* sleep, not immediately (the sleep in progress is not interrupted). Bounded by the previous interval; documented in the poller JSDoc.
+
 ### `products/tasks.ts` (D5)
-- [ ] Product → path table: new-standard products → `/tasks`; legacy → `/v1/images/generations`, `/v1/images/omni-image`, `/v1/images/multi-image2image`, `/v1/images/editing/expand`, `/v1/general/ai-multi-shot`, `/v1/videos/avatar/image2video`, `/v1/general/advanced-custom-elements`, `/v1/general/custom-voices`
-- [ ] `createHandle(core, product, id, request, externalId) → TaskHandle` — `request` arrives **already redacted** by the product module (2a₂); `products/tasks.ts` never imports `media/*`; `get()` routes by product
-- [ ] `wait()` shares one in-flight poll loop across concurrent callers; **per-caller semantics** (spec D5): loop interval = shortest requested; each caller's `deadlineMs`/`signal` enforced on that caller's promise only; loop stops when the last subscriber settles. Tests: two callers, one aborts → only that one rejects with its `AbortError`, the other resolves; two callers with 5 s and 60 s deadlines → the 5 s one times out alone
-- [ ] `wait()` → `KlingTaskFailedError` on `failed` (with `task`, `code` = vendor code or `null`); `KlingPollTimeoutError` on deadline; caller abort → `AbortError`; a poll `get()` that exhausts read retries surfaces its `KlingAPIError` (the loop does not swallow it)
-- [ ] UUID `external_task_id` generated for every create when the caller supplies none (`crypto.randomUUID()`); `externalTaskId: false` opts out (then `TaskHandle.externalId` is `undefined` and the README says recovery is impossible); TTS never has one
-- [ ] `tasks.get(ids, { byExternalId?, signal? })` → `{ tasks, missing }`; chunks of 50 run sequentially; `missing` = attempted − returned; a failing chunk throws `KlingBatchError { tasks (so far), missing (attempted only), unattempted (never sent), cause }` (tests: 120 ids → 3 calls; chunk 2 fails → error carries 50 tasks, 50 missing-or-returned from chunk 1–2 accounting, 20 `unattempted`; unknown id → in `missing`)
-- [ ] `tasks.recover(product, externalId) → Task | null` — new-standard products → `GET /tasks?external_task_ids=`; legacy products → `GET /v1/<product>/{externalId}`; `null` = not visible (README wording); TTS → `KlingValidationError('TTS tasks carry no external id and cannot be recovered')`. Tests per standard with fixtures; **live** per legacy product recorded in the V10 blanks (§11 Q15)
-- [ ] `tasks.list({...})` → `POST /tasks`; `limit ≤ 500`; `filters[]` from `status`/`productType`; `product` **not** back-filled; **live:** numeric `start_time` → if 400, switch to strings; pin in a contract test; record §11 Q2: `________`
-- [ ] `tasks.getByProduct(product, id)`, `tasks.listByProduct(product, {pageNum, pageSize})` (pageNum 1–1000, pageSize 1–500), `tasks.handle(product, id, request?)`
-- [ ] `config/models.ts` skeleton: exports empty `VIDEO_MODELS`/`IMAGE_MODELS` tables and their types, so 2a₂ and 3a each append their own table without touching shared lines (run #3 F-11/A48)
-- [ ] `client.http` marked `/** @internal */`; the smoke script reaches it via `client['http']` with a comment saying so (run #3 F-8)
-- [ ] **Live:** `tasks.get` with 100 ids → record whether 200 or 4xx (§11 Q13): `________`
-- [ ] `healthCheck()` = `tasks.get(['0'])` resolves → `true`; any throw → `false`
+- [x] Product → path table: new-standard products → `/tasks`; legacy → `/v1/images/generations`, `/v1/images/omni-image`, `/v1/images/multi-image2image`, `/v1/images/editing/expand`, `/v1/general/ai-multi-shot`, `/v1/videos/avatar/image2video`, `/v1/general/advanced-custom-elements`, `/v1/general/custom-voices`
+- [x] `createHandle(core, product, id, request, externalId) → TaskHandle` — `request` arrives **already redacted** by the product module (2a₂); `products/tasks.ts` never imports `media/*`; `get()` routes by product
+- [x] `wait()` shares one in-flight poll loop across concurrent callers; **per-caller semantics** (spec D5): loop interval = shortest requested; each caller's `deadlineMs`/`signal` enforced on that caller's promise only; loop stops when the last subscriber settles. Tests: two callers, one aborts → only that one rejects with its `AbortError`, the other resolves; two callers with 5 s and 60 s deadlines → the 5 s one times out alone
+- [x] `wait()` → `KlingTaskFailedError` on `failed` (with `task`, `code` = vendor code or `null`); `KlingPollTimeoutError` on deadline; caller abort → `AbortError`; a poll `get()` that exhausts read retries surfaces its `KlingAPIError` (the loop does not swallow it)
+- [x] UUID `external_task_id` generated for every create when the caller supplies none (`crypto.randomUUID()`); `externalTaskId: false` opts out (then `TaskHandle.externalId` is `undefined` and the README says recovery is impossible); TTS never has one
+- [x] `tasks.get(ids, { byExternalId?, signal? })` → `{ tasks, missing }`; chunks of **20** (live cap, Q13) run sequentially; `missing` = attempted − returned; a failing chunk throws `KlingBatchError { tasks (so far), missing (attempted only), unattempted (never sent), cause }` (tests: 45 ids → 3 calls of 20/20/5; chunk 2 fails → error carries chunk-1's 19 tasks + 1 missing, 5 `unattempted`; unknown id → in `missing`)
+- [x] `tasks.recover(product, externalId) → Task | null` — new-standard products → `GET /tasks?external_task_ids=`; legacy products → `GET /v1/<product>/{externalId}`; `null` = not visible (README wording); TTS is not a `Product` (it returns outputs synchronously), so `recover` cannot be called for it — an unknown product string throws `KlingValidationError('product')`. Tests per standard with fixtures; **live** `image-generation` bogus external id → `1201` "Task not found by id/external id" (Q15 partial; positive acceptance in the V10 blanks)
+- [x] `tasks.list({...})` → `POST /tasks`; `limit ≤ 500`; `filters[]` from `status`/`productType`; `product` **not** back-filled; **live:** numeric `start_time` → 200 (strings also 200); numeric kept and pinned in `tasks.test.ts`; §11 Q2 closed
+- [x] `tasks.getByProduct(product, id)`, `tasks.listByProduct(product, {pageNum, pageSize})` (pageNum 1–1000, pageSize 1–500), `tasks.handle(product, id, request?)`
+- [x] `config/models.ts` skeleton: exports empty `VIDEO_MODELS`/`IMAGE_MODELS` tables and their types, so 2a₂ and 3a each append their own table without touching shared lines (run #3 F-11/A48)
+- [x] `client.http` marked `/** @internal */`; the smoke script reaches it via `client['http']` with a comment saying so (run #3 F-8)
+- [x] **Live:** `tasks.get` with 100 ids → the single request is HTTP 400 / `1201` "cannot exceed 20 in total"; 20 → 200, 21 → 400 (§11 Q13 closed; chunk size set to 20)
+- [x] `healthCheck()` = `tasks.get(['0'])` resolves → `true`; any throw → `false`
 
 ### `handlers/poller.ts` (D13)
-- [ ] `poll(fn, { intervalMs = 3000, deadlineMs = 900_000, signal })` — no TTY output; tests with fake timers for interval, deadline, abort
+- [x] `poll(fn, { intervalMs = 3000, deadlineMs = 900_000, signal })` — no TTY output; tests with fake timers for interval, deadline, abort
 
 ---
 
@@ -439,18 +448,18 @@ Not part of the 2.0.0 publish gate (V15 is). Runs after 6c, against the package 
 | Q | Closes in | Result |
 |---|---|---|
 | Q1 callback shape / signing for 3.0-omni | Phase 5 | `________` |
-| Q2 `POST /tasks` time field type | Phase 2a | `________` |
+| Q2 `POST /tasks` time field type | Phase 2a | **closed 2026-09-20 [LIVE]** — numeric ms (`start_time: 1758…`) → 200, count 4; the same window as strings → also 200. The library sends numbers, as the vendor table types them (`long`). |
 | Q3 3.0-turbo `audio` | 2a₂ V6 audio-track check | inferred always-on (pricing); confirm: `________` |
 | §10.11 default video model | settled 2026-09-20 | `kling-3.0-turbo` (Alex) |
 | §10.15 resource live creates release-blocking? | settled 2026-09-20 | blocking — the three Phase 0 resource probes are in V15 (Alex) |
 | §10.16 concurrency queue stays out of scope? | settled 2026-09-20 | out of scope for 2.0 (Alex) |
 | §10.17 live-programme budget (~8–10 units) | settled 2026-09-20 | up to ~20 units authorised as a block; pack expires **2026-10-20** — run the live items before then; record each spend in its blank (Alex) |
-| Q15 legacy `GET /v1/<product>/{external_task_id}` per product | 2a₁ live / V10 blanks | `________` |
+| Q15 legacy `GET /v1/<product>/{external_task_id}` per product | 2a₁ live / V10 blanks | **partial 2026-09-20 [LIVE]** — `image-generation`: an unknown value in the `{id}` segment answers HTTP 400 / `1201` "Task not found by id/external id: <value>" (so the segment is matched against both, and **not-found is `1201`, not the table's `1203`**); the library maps `1201` + `/task not found/i` → `KlingTaskNotFoundError` / `recover() → null`. Positive per-product acceptance (a real external id resolving) still lands in the V10 blanks. |
 | Q14 undici behaviours on Node 20/22 | 1c (V14) | **closed 2026-09-20** — all three hold on Node 24 locally and on the CI matrix (20 and 22 both green on `f8b1150`); the one surprise was the *dev* dependency, not the behaviours: undici 8 does not load on Node 20 |
 | Q4 omni `duration` with reference video; `shot_type` | Phase 2b (document only) | `________` |
 | Q7 element delete path / shared library | Phase 4a | `________` |
 | Q9 code for a garbage key; revoked key | Phase 1a smoke control | `________` |
 | Q11 `external_task_id` idempotency | Phase 2a | `________` |
-| Q12 legacy image timestamps ms | Phase 1b fixtures (normalise-and-warn) | `________` |
-| Q13 `/tasks` id cap | Phase 2a | `________` |
+| Q12 legacy image timestamps ms | Phase 1b fixtures (normalise-and-warn) | **closed 2026-09-20 [LIVE]** — `GET /v1/images/generations/930810057590833241` → `outputsExpireAt 1792542950357`, i.e. `updated_at` was ms (a seconds value would have produced a warning and a 1970s expiry). Normalise-and-warn stays as the guard. |
+| Q13 `/tasks` id cap | Phase 2a | **closed 2026-09-20 [LIVE]** — 20 ids → 200; 21 ids → HTTP 400 / `1201` "task_ids and external_task_ids cannot exceed 20 in total". The docs state no cap and the spec assumed 50; `TASKS_CHUNK_SIZE = 20`. |
 | A5 API Key on legacy writes | **Phase 0 gate** (image + TTS) | image `________` · tts `________` |
