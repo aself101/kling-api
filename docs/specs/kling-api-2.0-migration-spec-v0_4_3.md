@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| **Version** | v0.4.2 (approved for implementation — run #3 PROCEED; §10 decisions closed 2026-09-20) |
+| **Version** | v0.4.3 (approved for implementation; Phase 0 in progress — live findings folded in) |
 | **Date** | 2026-09-20 |
 | **Target repo** | `kling-api` (`misc/npm-packages/kling-api`, published as `kling-api` on npm) |
 | **From → To** | `1.0.0` (2025-12-27, `264da22`) → `2.0.0` |
@@ -70,6 +70,7 @@ The 200 on `/v1/videos/text2video` returned the 2025-12-27 task, so the legacy s
 ### 1.4 Retention and concurrency facts that shape defaults
 
 - Every output URL *"will be cleared after 30 days"* (all endpoint docs). The download step is load-bearing, and `Task` carries the expiry (D4) so a consumer reading a stored id at day 31 gets an expiry error, not a download error.
+- **Resource packages are per product type, and so is the balance an endpoint can draw on.** The trial account holds a *Video* pack only; `POST /v1/images/generations` with the API Key returned `429 / 1102 Account balance not enough` **[LIVE 2026-09-20]** while TTS and voice creates on the same key succeeded — so `1102` on one family says nothing about auth and nothing about another family. The image side of the live programme needs an image pack (§10.17; Alex purchasing).
 - Concurrency is per account, model version, and package type; an image task with `n` consumes `n` slots; over-limit returns `code 1303` *"parallel task over resource pack limit"* with **no `data`** and the vendor recommends exponential backoff from ≥1 s (App. C §3). Retry policy is in D10 and is **not** "retry everything retryable": a create that has received any HTTP response is never re-sent by the library, because a `5002` *"internal timeout, usually due to a backlog"* is exactly the case where the task may already exist and a retry would bill twice.
 
 ---
@@ -644,7 +645,7 @@ export interface AvatarCreateParams extends CommonOptions {          // POST /v1
 }
 export interface TtsParams {                                          // POST /v1/audio/tts (synchronous; no callback/externalTaskId fields exist)
   text: string;                                // ≤ 1000
-  voiceId: string;
+  voiceId: string;                             // TTS has ITS OWN voice catalogue (e.g. 'oversea_male1', from the vendor's external Voice Guide, docs/api/kling-text-to-speech.md:49) — a /v1/general/presets-voices id returns 1201 'Voice id not found' [LIVE 2026-09-20]
   voiceLanguage: 'zh' | 'en';                  // vendor: Required Yes, default 'zh' — library requires it
   voiceSpeed?: number;                         // [0.8, 2.0], default 1.0
   signal?: AbortSignal;
@@ -819,6 +820,7 @@ Each item names the check and how it can fail.
 | Q13 | Maximum ids per `GET /tasks?task_ids=`; URL length. | D5 | Chunk at 50; probe 100 once in Phase 2a₁. |
 | Q14 | Do the three undici behaviours D11 relies on hold on Node 20 and 22, and on an injected proxied fetch? | D11, D20 | Real-undici integration tests on the CI matrix (V14); injected-fetch divergence is documented, not tested. |
 | Q15 | Does every legacy product's `GET /v1/<product>/{id}` accept an `external_task_id` in the path segment (App. B §3.6 says "most docs")? | D10 `recover()` | Recorded per product in the V10 blanks; a product that does not accept it is documented as unrecoverable like TTS. |
+| Q16 | Where is the TTS voice catalogue? The docs link an external Voice Guide (`kling-text-to-speech.md:49`) not in the snapshot; only `oversea_male1` is known to work **[LIVE]**. | D8 `audio.tts`, README | Fetch the guide into `docs/api/` if it is retrievable; otherwise ship `voiceId` as a free string with the one known id in the README and the 1201 error mapped to a clear message. |
 
 Client-side edge cases now specified: concurrent `wait()` (D5, shared loop); `succeeded` with empty outputs (D4); Base64 body inflation (D12, 20 MB cap); HTTP 429 with a non-JSON body (D10, `KlingResponseError`, retryable on reads); `external_task_id` reuse (Q11).
 
@@ -919,3 +921,4 @@ Client-side edge cases now specified: concurrent `wait()` (D5, shared loop); `su
 | v0.4.0 | 2026-09-20 | Revised on run #2's 39 findings (§13.2). |
 | v0.4.1 | 2026-09-20 | Run #3 PROCEED (architect 86, docs 93, anxiety 86, synthesis 84, excavator 79). Folds in run #3's 59 findings (§13.3): `taskState` on write errors; `tasks.recover()` across both standards, TTS stated unrecoverable; https-through-`HttpCore` undici tests and loopback SSRF control; `lintText` virtual-path lint control; per-caller `wait()` semantics; `unattempted` on `KlingBatchError`; `extraOptions`/`extraContents` with known-key rejection; `[shape]`/`[capability]` rule labels; aggregate 40 MB cap and body-scaled create timeout; DNS fail-closed + TOCTOU stated; `now` injection for webhooks; per-file src/test budgets with 1a → 1a₁/1a₂/1c and 2a₂ → 2a₂/2a₃; §3.1 rows for barrels, `constants.ts`, `media.ts`, vitest, `./api`; Phase 0 probes one per shipped legacy write family; §10.15–10.17 for Alex. |
 | v0.4.2 | 2026-09-20 | §10.11 (Turbo, on the corrected premise), §10.15 (resource creates release-blocking), §10.16 (queue out of scope), §10.17 (~10 units authorised) settled by Alex interactively. Approved for implementation; Phase 0 next. |
+| v0.4.3 | 2026-09-20 | Phase 0 live results: packages are per product type — image writes return `1102` on a video-only account (not auth); TTS `voice_id` is a separate catalogue (`oversea_male1`), `presets-voices` ids return `1201` (Q16, §6.3). TTS and voice create/delete pass with the API Key at 0.05 units each. |

@@ -1,6 +1,6 @@
 # kling-api 2.0 — Implementation Checklist
 
-Companion to [`kling-api-2.0-migration-spec-v0_4_2.md`](kling-api-2.0-migration-spec-v0_4_2.md). The spec holds the *why*; this file holds the *what*, in commit order, with the check that closes each item. Decision references (`D3`, `§8.4`) point into the spec; `V<n>` are the spec's §8 verification items. Tick a box only when its check has been run and observed to pass — and, where a control is listed, observed to fail on the control.
+Companion to [`kling-api-2.0-migration-spec-v0_4_3.md`](kling-api-2.0-migration-spec-v0_4_3.md). The spec holds the *why*; this file holds the *what*, in commit order, with the check that closes each item. Decision references (`D3`, `§8.4`) point into the spec; `V<n>` are the spec's §8 verification items. Tick a box only when its check has been run and observed to pass — and, where a control is listed, observed to fail on the control.
 
 Conventions: `[ ]` open · `[x]` done · `[-]` deliberately skipped (write why inline). Each sub-phase is one commit with a ≤ 500 LOC budget (source + tests, fixture JSON excluded but listed); **an overrun of more than 20 % splits the sub-phase before it merges into `release/2.0`** (D20). Commit messages are suggested, not mandated. **Branch:** Phase 0 and 6c on `main`; 1a–6b on `release/2.0` (D19); sub-phase work happens on `feat/<id>` branches PR'd into `release/2.0` so CI runs before merge. **Nothing 1.x is deleted before 2a₀** (spec §3.1).
 
