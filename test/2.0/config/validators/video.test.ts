@@ -216,3 +216,142 @@ describe('validateImageToVideo — [capability] rules', () => {
     expect(() => validateImageToVideo({ prompt: 'p', firstFrame: FRAME, resolution: '8k' as never, lastFrame: FRAME, elements: [{ elementId: 'e' }], voices: [{ voiceId: 'v' }] }, undefined, p)).not.toThrow();
   });
 });
+
+// ── omni-video rules (2b) ─────────────────────────────────────────────────────────────
+
+import { validateMotionControl, validateOmniVideo } from '../../../../src/config/validators/video.js';
+import type { OmniVideoParams } from '../../../../src/codecs/params.js';
+
+const omni = VIDEO_MODELS['kling-3.0-omni'];
+const o1 = VIDEO_MODELS['kling-o1'];
+const IMG = 'https://cdn.example/i.png';
+const VID = { url: 'https://cdn.example/v.mp4' };
+const refs = (n: number) => Array.from({ length: n }, (_, i) => ({ source: IMG, id: `r${i}` }));
+const els = (n: number, kind?: 'video_character' | 'multi_image') => Array.from({ length: n }, (_, i) => ({ elementId: `E${i}`, id: `e${i}`, kind }));
+const ok = (p: Partial<OmniVideoParams>, caps = omni) => expect(() => validateOmniVideo({ prompt: 'p', aspectRatio: '16:9', ...p }, caps, policy().policy)).not.toThrow();
+const bad = (p: Partial<OmniVideoParams>, re: RegExp, caps = omni) => expect(() => validateOmniVideo({ prompt: 'p', aspectRatio: '16:9', ...p }, caps, policy().policy)).toThrow(re);
+
+describe('validateOmniVideo — [shape] rules (both modes)', () => {
+  it('[shape] lastFrame without firstFrame; two reference videos; video by URL only', () => {
+    for (const p of [{ lastFrame: IMG }, { featureVideo: VID, baseVideo: VID }, { featureVideo: { url: '' } }] as Partial<OmniVideoParams>[]) {
+      const r = underBothModes((pol) => validateOmniVideo({ prompt: 'p', ...p }, omni, pol));
+      expect(r.threwError).toBeInstanceOf(KlingValidationError);
+      expect(r.threwWarn).toBeInstanceOf(KlingValidationError);
+    }
+  });
+
+  it('[shape] baseVideo ⇒ no frames, no multiShot: true, no native audio — never warned past (paid-request shaping)', () => {
+    for (const p of [{ baseVideo: VID, firstFrame: IMG }, { baseVideo: VID, multiShot: true }, { baseVideo: VID, audio: 'native' }] as Partial<OmniVideoParams>[]) {
+      const r = underBothModes((pol) => validateOmniVideo({ prompt: 'p', ...p }, omni, pol));
+      expect(r.threwWarn, JSON.stringify(p)).toBeInstanceOf(KlingValidationError);
+    }
+    ok({ baseVideo: VID, audio: 'original', multiShot: false });
+  });
+
+  it("[shape] featureVideo ⇒ audio 'off' (or unset) and multiShot not false", () => {
+    bad({ featureVideo: VID, audio: 'native' }, /audio must be 'off'/);
+    bad({ featureVideo: VID, multiShot: false }, /multiShot must not be false/);
+    ok({ featureVideo: VID, audio: 'off', multiShot: true });
+    ok({ featureVideo: VID });
+  });
+
+  it('[shape] ids unique across elements, reference images and videos', () => {
+    bad({ elements: [{ elementId: 'a', id: 'x' }], referImages: [{ source: IMG, id: 'x' }] }, /must be unique/);
+    bad({ featureVideo: { url: 'https://v', id: 'x' }, elements: [{ elementId: 'a', id: 'x' }] }, /must be unique/);
+  });
+
+  it('aspectRatio absent with no first frame / reference video → a WARNING (the vendor contradicts itself), never a throw', () => {
+    const { policy: p, warnings } = policy();
+    expect(() => validateOmniVideo({ prompt: 'p' }, omni, p)).not.toThrow();
+    expect(warnings).toEqual([expect.stringMatching(/aspectRatio is not set .* field notes call it required/)]);
+    const quiet = policy();
+    validateOmniVideo({ prompt: 'p', firstFrame: IMG }, omni, quiet.policy);
+    validateOmniVideo({ prompt: 'p', baseVideo: VID, audio: 'off' }, omni, quiet.policy);
+    expect(quiet.warnings).toEqual([]);
+  });
+});
+
+describe('validateOmniVideo — [capability] envelopes and matrix cells (kling-3.0-omni)', () => {
+  it('kind-independent: refs + elements ≤ 7 without a reference video, ≤ 4 with one', () => {
+    ok({ referImages: refs(4), elements: els(3) });
+    bad({ referImages: refs(5), elements: els(3) }, /at most 7 without a reference video \(got 5 \+ 3\)/);
+    ok({ featureVideo: VID, referImages: refs(2), elements: els(2) });
+    bad({ featureVideo: VID, referImages: refs(3), elements: els(2) }, /at most 4 with a reference video/);
+  });
+
+  it('with a first frame: at most 3 elements', () => {
+    ok({ firstFrame: IMG, elements: els(3) });
+    bad({ firstFrame: IMG, elements: els(4) }, /with a first frame, at most 3 elements/);
+  });
+
+  it('kind cells, no reference video: video-character ≤ 3; both kinds ⇒ refs + multi ≤ 4; multi only ⇒ refs + multi ≤ 7', () => {
+    bad({ elements: els(4, 'video_character') }, /at most 3 video-character elements/);
+    ok({ elements: [...els(3, 'video_character')] });
+    const mixed = [{ elementId: 'V', id: 'v0', kind: 'video_character' as const }, ...els(2, 'multi_image').map((e) => ({ ...e, id: `m${e.id}` }))];
+    bad({ elements: mixed, referImages: refs(3) }, /with both element kinds, reference images \+ multi-image elements ≤ 4 \(got 5\)/);
+    ok({ elements: mixed, referImages: refs(2) });
+    ok({ elements: els(3, 'multi_image'), referImages: refs(4) });
+  });
+
+  it('kind cells, with a reference video: not both kinds; video-character ≤ 1; video-character + refer images excluded; refs + multi ≤ 4', () => {
+    const vc = (n: number) => els(n, 'video_character').map((e, i) => ({ ...e, id: `v${i}` }));
+    const mi = (n: number) => els(n, 'multi_image').map((e, i) => ({ ...e, id: `m${i}` }));
+    bad({ featureVideo: VID, elements: [...vc(1), ...mi(1)] }, /cannot be combined/);
+    bad({ featureVideo: VID, elements: vc(2) }, /at most 1 video-character element/);
+    bad({ featureVideo: VID, elements: vc(1), referImages: refs(1) }, /not supported at the same time/);
+    ok({ featureVideo: VID, elements: vc(1) });
+    ok({ featureVideo: VID, elements: mi(2), referImages: refs(2) });
+  });
+
+  it('unknown kinds fall back to the envelopes only (no false rejections)', () => {
+    ok({ elements: [...els(3), { elementId: 'x', id: 'q', kind: 'video_character' }] }); // mixed known/unknown → envelope only
+  });
+});
+
+describe('validateOmniVideo — kling-o1', () => {
+  it('multi-image elements only; first+last ⇒ no elements, no refer images; featureVideo ⇒ no last frame', () => {
+    bad({ elements: els(1, 'video_character') }, /multi-image elements only/, o1);
+    ok({ elements: els(1, 'multi_image') }, o1);
+    bad({ firstFrame: IMG, lastFrame: IMG, elements: els(1) }, /first \+ last frame does not support elements/, o1);
+    bad({ firstFrame: IMG, lastFrame: IMG, referImages: refs(1) }, /does not take additional reference images/, o1);
+    bad({ firstFrame: IMG, lastFrame: IMG, featureVideo: VID }, /first frame only, not the last/, o1);
+  });
+
+  it('first frame alone ⇒ duration 5 | 10; with a reference it is the 3–10 set', () => {
+    bad({ firstFrame: IMG, duration: 7 }, /only 5 s or 10 s/, o1);
+    ok({ firstFrame: IMG, duration: 10 }, o1);
+    ok({ firstFrame: IMG, referImages: refs(1), duration: 7 }, o1);
+    bad({ duration: 12 }, /accepts duration 3–10 s, not 12/, o1);
+    bad({ multiShot: true }, /no multi_shot setting/, o1);
+    bad({ audio: 'native' }, /accepts audio original \| off, not native/, o1);
+    bad({ resolution: '4k' }, /accepts resolution 720p \| 1080p, not 4k/, o1);
+  });
+});
+
+describe('validateMotionControl', () => {
+  const mc = VIDEO_MODELS['kling-3.0'];
+  const base = { image: IMG, video: 'https://cdn.example/dance.mp4', characterOrientation: 'video' as const };
+
+  it('[shape] image, video (URL) and characterOrientation are required under both modes', () => {
+    for (const p of [{ ...base, image: undefined }, { ...base, video: undefined }, { ...base, video: { base64: 'AAAA' } }, { ...base, characterOrientation: 'both' }]) {
+      const r = underBothModes((pol) => validateMotionControl(p as never, mc, pol));
+      expect(r.threwWarn, JSON.stringify(p)).toBeInstanceOf(KlingValidationError);
+    }
+    expect(() => validateMotionControl(base, mc, policy().policy)).not.toThrow();
+    expect(() => validateMotionControl({ ...base, video: { url: 'https://cdn.example/d.mp4' } }, mc, policy().policy)).not.toThrow();
+  });
+
+  it("[shape] audio is 'original' | 'off'; prompt ≤ 2500 (motion prompts cap at the model's limit)", () => {
+    expect(() => validateMotionControl({ ...base, audio: 'native' as never }, mc, policy().policy)).toThrow(/'original' or 'off'/);
+    expect(() => validateMotionControl({ ...base, prompt: 'x'.repeat(3073) }, mc, policy().policy)).toThrow(/3072/);
+  });
+
+  it('[capability] element 3.0 only; no 4k; model must have motion-control', () => {
+    expect(() => validateMotionControl({ ...base, element: { elementId: 'E' } }, mc, policy().policy)).not.toThrow();
+    expect(() => validateMotionControl({ ...base, model: 'kling-2.6', element: { elementId: 'E' } }, v26, policy().policy)).toThrow(/does not take an element \(kling-3.0 does\)/);
+    expect(() => validateMotionControl({ ...base, resolution: '4k' as never }, mc, policy().policy)).toThrow(/4k is not supported on motion control/);
+    const r = underBothModes((pol) => validateMotionControl({ ...base, model: 'kling-3.0-turbo' }, turbo, pol));
+    expect(r.threwError?.message).toMatch(/has no \/motion-control endpoint/);
+    expect(r.threwWarn).toBeUndefined();
+  });
+});

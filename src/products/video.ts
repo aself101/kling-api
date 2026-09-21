@@ -10,12 +10,12 @@
  * Import graph (§5): `http/*`, `codecs/*`, `config/*`, `media/*`, `products/tasks`.
  */
 import { createHash } from 'node:crypto';
-import { buildImageToVideo, buildTextToVideo, parseCreate, type NewStandardBody } from '../codecs/new-standard.js';
-import type { ImageToVideoParams, MediaSource, TextToVideoParams } from '../codecs/params.js';
+import { buildImageToVideo, buildMotionControl, buildOmniVideo, buildTextToVideo, parseCreate, type NewStandardBody } from '../codecs/new-standard.js';
+import type { ImageToVideoParams, MediaSource, MotionControlParams, OmniVideoParams, TextToVideoParams } from '../codecs/params.js';
 import type { Product, TaskHandle } from '../codecs/task.js';
-import { DEFAULT_VIDEO_MODEL } from '../config/models.js';
+import { DEFAULT_MOTION_CONTROL_MODEL, DEFAULT_OMNI_VIDEO_MODEL, DEFAULT_VIDEO_MODEL } from '../config/models.js';
 import { resolveVideoCaps, type ValidationPolicy } from '../config/validators/helpers.js';
-import { validateImageToVideo, validateTextToVideo } from '../config/validators/video.js';
+import { validateImageToVideo, validateMotionControl, validateOmniVideo, validateTextToVideo } from '../config/validators/video.js';
 import type { HttpCore, KlingConfig, Logger } from '../http/core.js';
 import { MediaBudget, resolveMediaSource, type ResolvedMedia } from '../media/source.js';
 import { createHandle, resolveExternalId } from './tasks.js';
@@ -75,6 +75,57 @@ export class VideoApi {
     const externalId = resolveExternalId(params.externalTaskId);
     const body = buildImageToVideo(params, { firstFrame: asUrlField(firstFrame), lastFrame: lastFrame && asUrlField(lastFrame) }, externalId, policy.warn);
     const record = recordOf({ ...params, model, firstFrame: redactMedia(params.firstFrame, firstFrame), lastFrame: params.lastFrame === undefined ? undefined : redactMedia(params.lastFrame, lastFrame!) });
+    return this.#create(product, model, body, externalId, params.signal, record, policy);
+  }
+
+  /**
+   * `POST /omni-video/<model>` (D6). Default `kling-3.0-omni`. Frames and reference
+   * images are `MediaSource`s (URL or Base64, shared budget); reference videos are URLs.
+   */
+  async omni(params: OmniVideoParams): Promise<TaskHandle> {
+    const product: Product = 'omni-video';
+    const model = params.model ?? DEFAULT_OMNI_VIDEO_MODEL;
+    const policy = this.#policy();
+    const caps = resolveVideoCaps(model, policy);
+    validateOmniVideo({ ...params, model }, caps, policy);
+    const budget = new MediaBudget();
+    const image = (src: MediaSource, field: string) => resolveMediaSource(src, { kind: 'image', standard: 'new', field, budget });
+    const firstFrame = params.firstFrame === undefined ? undefined : image(params.firstFrame, 'firstFrame');
+    const lastFrame = params.lastFrame === undefined ? undefined : image(params.lastFrame, 'lastFrame');
+    const referImages = params.referImages?.map((r, i) => image(r.source, `referImages[${i}]`));
+    for (const [field, v] of [['featureVideo', params.featureVideo], ['baseVideo', params.baseVideo]] as const) {
+      if (v) resolveMediaSource(v.url, { kind: 'video', standard: 'new', field });
+    }
+    const externalId = resolveExternalId(params.externalTaskId);
+    const body = buildOmniVideo(
+      params,
+      { firstFrame: firstFrame && asUrlField(firstFrame), lastFrame: lastFrame && asUrlField(lastFrame), referImages: referImages?.map(asUrlField) },
+      externalId,
+      policy.warn
+    );
+    const record = recordOf({
+      ...params,
+      model,
+      firstFrame: firstFrame && redactMedia(params.firstFrame!, firstFrame),
+      lastFrame: lastFrame && redactMedia(params.lastFrame!, lastFrame),
+      referImages: referImages?.map((r, i) => ({ ...(params.referImages![i].id ? { id: params.referImages![i].id } : {}), source: redactMedia(params.referImages![i].source, r) })),
+    });
+    return this.#create(product, model, body, externalId, params.signal, record, policy);
+  }
+
+  /** `POST /motion-control/<model>` (D6). Default `kling-3.0`. `image` is a `MediaSource`; `video` is a URL. */
+  async motionControl(params: MotionControlParams): Promise<TaskHandle> {
+    const product: Product = 'motion-control';
+    const model = params.model ?? DEFAULT_MOTION_CONTROL_MODEL;
+    const policy = this.#policy();
+    const caps = resolveVideoCaps(model, policy);
+    validateMotionControl({ ...params, model }, caps, policy);
+    const budget = new MediaBudget();
+    const image = resolveMediaSource(params.image, { kind: 'image', standard: 'new', field: 'image', budget });
+    const video = resolveMediaSource(params.video, { kind: 'video', standard: 'new', field: 'video' });
+    const externalId = resolveExternalId(params.externalTaskId);
+    const body = buildMotionControl(params, { image: asUrlField(image), video: asUrlField(video) }, externalId, policy.warn);
+    const record = recordOf({ ...params, model, image: redactMedia(params.image, image), video: redactMedia(params.video, video) });
     return this.#create(product, model, body, externalId, params.signal, record, policy);
   }
 

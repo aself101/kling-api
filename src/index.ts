@@ -61,7 +61,7 @@ export type {
   WaitOptions,
 } from './codecs/task.js';
 export { BASE_URL, ERROR_CODES, VENDOR_HTTP_STATUS, type VendorErrorCode } from './config/constants.js';
-export { DEFAULT_VIDEO_MODEL, IMAGE_MODELS, VIDEO_MODELS, type ImageModelCaps, type VideoModelCaps } from './config/models.js';
+export { DEFAULT_MOTION_CONTROL_MODEL, DEFAULT_OMNI_VIDEO_MODEL, DEFAULT_VIDEO_MODEL, IMAGE_MODELS, VIDEO_MODELS, type ImageModelCaps, type VideoModelCaps } from './config/models.js';
 export type {
   AspectRatio,
   AudioMode,
@@ -73,7 +73,11 @@ export type {
   KnownVideoModel,
   MediaSource,
   Resolution,
+  ElementKind,
   ImageToVideoParams,
+  MotionControlParams,
+  OmniElementRef,
+  OmniVideoParams,
   TextToVideoParams,
   VideoModel,
 } from './codecs/params.js';

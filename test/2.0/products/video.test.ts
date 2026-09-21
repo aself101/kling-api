@@ -143,3 +143,50 @@ describe('video.imageToVideo', () => {
     expect(redactMedia(Buffer.alloc(1), { base64: 'AAAA' })).toMatchObject({ kind: 'buffer' });
   });
 });
+
+// ── omni / motionControl (2b) ─────────────────────────────────────────────────────────
+
+describe('video.omni and video.motionControl', () => {
+  it('omni: POST /omni-video/kling-3.0-omni; frames/refs resolved and redacted; videos pass by URL', async () => {
+    const { video, calls, warnings } = rig(created);
+    const h = await video.omni({ prompt: '@image_1 in the style of @image_2, then @video_1', firstFrame: FRAME_URL, referImages: [{ source: `data:image/png;base64,${PNG_B64}` }], featureVideo: { url: 'https://cdn.example/v.mp4' }, resolution: '1080p', externalTaskId: 'e-omni' });
+    expect(calls[0].url.pathname).toBe('/omni-video/kling-3.0-omni');
+    const body = calls[0].body as { contents: { type: string; url?: string; id?: string }[]; settings: unknown };
+    expect(body.contents.map((c) => [c.type, c.id])).toEqual([['prompt', undefined], ['first_frame', 'image_1'], ['refer_image', 'image_2'], ['feature_video', 'video_1']]);
+    expect(body.contents[2].url).toBe(PNG_B64);
+    expect(body.settings).toEqual({ resolution: '1080p' });
+    expect(h.product).toBe('omni-video');
+    expect(h.request.firstFrame).toEqual({ kind: 'url', url: FRAME_URL });
+    expect((h.request.referImages as { source: { kind: string; bytes: number } }[])[0].source).toMatchObject({ kind: 'base64', bytes: 3000 });
+    expect(h.request.featureVideo).toEqual({ url: 'https://cdn.example/v.mp4' });
+    expect(warnings).toEqual([]);
+  });
+
+  it('omni: a Base64 reference video is refused before any request ("no upload endpoint")', async () => {
+    const { video, calls } = rig(created);
+    await expect(video.omni({ prompt: 'p', aspectRatio: '16:9', baseVideo: { url: PNG_B64 }, audio: 'off' })).rejects.toThrow(/no upload endpoint for video/);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('motionControl: POST /motion-control/kling-3.0; settings carries character_orientation; both media redacted', async () => {
+    const { video, calls } = rig(created);
+    const h = await video.motionControl({ image: FRAME_URL, video: 'https://cdn.example/dance.mp4', characterOrientation: 'video', audio: 'original', externalTaskId: 'e-mc' });
+    expect(calls[0].url.pathname).toBe('/motion-control/kling-3.0');
+    expect(calls[0].body).toEqual({
+      contents: [{ type: 'image', url: FRAME_URL }, { type: 'video', url: 'https://cdn.example/dance.mp4' }],
+      settings: { character_orientation: 'video', audio: 'original' },
+      options: { external_task_id: 'e-mc' },
+    });
+    expect(h.product).toBe('motion-control');
+    expect(h.request).toEqual({ model: 'kling-3.0', characterOrientation: 'video', audio: 'original', image: { kind: 'url', url: FRAME_URL }, video: { kind: 'url', url: 'https://cdn.example/dance.mp4' } });
+  });
+
+  it('motionControl on kling-2.6 with an element is a capability failure; under warn it is sent', async () => {
+    const strict = rig(created);
+    await expect(strict.video.motionControl({ model: 'kling-2.6', image: FRAME_URL, video: 'https://v/d.mp4', characterOrientation: 'image', element: { elementId: 'E' } })).rejects.toThrow(/does not take an element/);
+    const lenient = rig(created, { capabilityValidation: 'warn' });
+    await lenient.video.motionControl({ model: 'kling-2.6', image: FRAME_URL, video: 'https://v/d.mp4', characterOrientation: 'image', element: { elementId: 'E' } });
+    expect(lenient.calls[0].url.pathname).toBe('/motion-control/kling-2.6');
+    expect(lenient.warnings[0]).toMatch(/^\[capability\] element:/);
+  });
+});

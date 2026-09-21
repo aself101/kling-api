@@ -144,6 +144,10 @@ export const VIDEO_MODEL_SOURCES: Readonly<Record<KnownVideoModel, Partial<Recor
 
 /** Default video model for t2v/i2v: cheapest current-generation model with native audio (§10.11, settled). */
 export const DEFAULT_VIDEO_MODEL: KnownVideoModel = 'kling-3.0-turbo';
+/** Default omni model: ties Turbo's with-audio rate (§10.11 policy). */
+export const DEFAULT_OMNI_VIDEO_MODEL: KnownVideoModel = 'kling-3.0-omni';
+/** Default motion-control model: the only current-generation option (2.6 is the other). */
+export const DEFAULT_MOTION_CONTROL_MODEL: KnownVideoModel = 'kling-3.0';
 
 // ============================================================================
 // Image (legacy standard, `model_name`) — filled in 3a from App. B §4.2
