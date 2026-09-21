@@ -6,7 +6,7 @@
  * work correctly in real usage scenarios.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { waitForVideoResult, waitForImageResult } from '../../src/handlers/result-poller.js';
 import { pollWithSpinner } from '../../src/utils/polling.js';
 import { KlingAPIError } from '../../src/errors.js';

@@ -1,3 +1,10 @@
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
 ## [Unreleased]
 
 2.0.0 is in specification — see `docs/specs/kling-api-2.0-migration-spec-v0_4_2.md`. The vendor
@@ -13,25 +20,18 @@ static API Key the only credential for it; 1.x cannot generate video against the
 ### Removed
 - *(2.0.0, pending)* AccessKey/SecretKey JWT authentication; `extendVideo`; `multiImageToVideo`; the `./auth`, `./utils`, `./config`, `./types` subpath exports; semantic-release automation.
 
-# 1.0.0 (2025-12-27)
+## [1.0.0] - 2025-12-27
 
 
-### Bug Fixes
+### Fixed
 
 * **api:** correct image expansion and avatar endpoints ([72e54e2](https://github.com/aself101/kling-api/commit/72e54e22dbbff0b26bc02517c955f42cf109719f))
 
 
-### Features
+### Added
 
 * **kling-api:** add CLI, modular architecture, and comprehensive tests ([bf197c8](https://github.com/aself101/kling-api/commit/bf197c8a3490adab34f77497a6990ecd9e8a0255))
 * **kling-api:** initial release v0.1.0 ([a8237cd](https://github.com/aself101/kling-api/commit/a8237cdee1fd307e72117aecac8abca8cd2d3ff4))
-
-# Changelog
-
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [0.1.0] - 2025-12-25
 

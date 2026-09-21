@@ -18,24 +18,24 @@ Conventions: `[ ]` open · `[x]` done · `[-]` deliberately skipped (write why i
 - [x] Appendix C line 9: add "*(these four files were removed before commit — see checklist Phase 0)*"
 - [x] README: move the "1.x is broken" notice to directly under the H1 (above badges and Quick Start); fix `[LICENSE](../LICENSE)` → `[LICENSE](LICENSE)`
 - [x] `CHANGELOG.md`: add `## [Unreleased]` at the top with the 2.0 breaking-change skeleton (Added / Changed / Removed)
-- [ ] `CHANGELOG.md`: collapse to a single `# Changelog` H1; fold the semantic-release `# 1.0.0` block under `## [1.0.0] - 2025-12-27` (run #3 docs-validator)
+- [x] `CHANGELOG.md`: collapse to a single `# Changelog` H1; fold the semantic-release `# 1.0.0` block under `## [1.0.0] - 2025-12-27` (run #3 docs-validator)
 
 ### Release automation removal (D19)
-- [ ] Delete `.github/workflows/release.yml` and `.releaserc.json`
-- [ ] Remove `semantic-release`, `@semantic-release/{changelog,commit-analyzer,git,github,npm,release-notes-generator}` from `devDependencies`; remove the `semantic-release` script; `npm install` regenerates the lockfile
-- [ ] `ci.yml`: `on.push.branches: [main, 'release/**']` **and** `on.pull_request.branches: [main, 'release/**']` (run #2 A31); steps lint → build → test → `tsc --noEmit`; **no** `dist/api.js` assertion; the `dist/index.js` + `dist/cli/index.js` assertions are added in 2a₀ when the layout switches
-- [ ] `npm ci && npm run lint && npm run build && npm test` green on `main` after removal (1.x still builds — nothing in `src/` changed)
+- [x] Delete `.github/workflows/release.yml` and `.releaserc.json`
+- [x] Remove `semantic-release`, `@semantic-release/{changelog,commit-analyzer,git,github,npm,release-notes-generator}` from `devDependencies`; remove the `semantic-release` script; `npm install` regenerated the lockfile (jq scan: 0 `localhost:4873`; 0 `semantic-release`)
+- [x] `ci.yml`: `on.push.branches: [main, 'release/**']` **and** `on.pull_request.branches: [main, 'release/**']` (run #2 A31); Node 20 + 22 matrix (V14 needs it later); steps lint → build → test → `tsc --noEmit`; **no** `dist/api.js` assertion; the `dist/index.js` + `dist/cli/index.js` assertions are added in 2a₀ when the layout switches
+- [x] `npm run lint && npm run build && npm test && npx tsc --noEmit` green on `main` after removal — 534/534 tests; lint needed two unused imports removed from `test/integration/polling.test.ts` (pre-existing, would have failed the new push trigger)
 
 ### Live gate probes (`KLING_API_KEY` in env) — one per legacy write family 2.0 ships, because code `1103` is per-resource (run #2 A18, run #3 A40/F10). On `1103`, check `account.usage()` packages first: it is also the entitlement code.
-- [ ] **A5 write probe, image:** `POST /v1/images/generations` with the API Key, body `{"model_name":"kling-v3","prompt":"a red cube on white","n":1,"resolution":"1k","aspect_ratio":"1:1"}` → `code: 0`, `data.task_id` present. Poll `GET /v1/images/generations/{task_id}` to `succeed`. Record here: task_id `________`, deduction `________`. **This closes the "API Key is a superset" claim for writes; `auth.ts` is not deleted until this box is ticked.**
-- [ ] **A5 write probe, audio:** `POST /v1/audio/tts` with the API Key, body `{"text":"hello","voice_id":"<a presets-voices id>","voice_language":"en"}` (0.05 units, synchronous) → `code: 0`, `task_result.audios[0].url` present. Record: `________`
-- [ ] **A5 write probe, voice:** `POST /v1/general/custom-voices` `{"voice_name":"probe","voice_url":"<hosted 6 s mp3>"}` → `code: 0`, `task_id`; then `POST /v1/general/delete-voices` for it. Record: `________` (deduction `________`)
+- [ ] **A5 write probe, image:** `POST /v1/images/generations` with the API Key (`kling-v3`, `n=1`, 1k, portrait prompt — the output is reused by the element and avatar probes) → `code: 0`, `data.task_id`; poll to `succeed`. **2026-09-20 result: HTTP 429 `code 1102 Account balance not enough`** (`req b63503f4`) — the account holds only a *Video* trial pack (`Trial-Video-100Units-5Con-1Months`) and packages are per product type (App. C §3). **Not an auth failure**: needs an image pack or cash balance. Record after purchase: task_id `________`, deduction `________`
+- [x] **A5 write probe, audio (TTS):** `POST /v1/audio/tts` with the API Key → `code: 0`, `audio_id 930801290416885794`, 11.3 s, **0.05 units** (`req b71fa328`, 2026-09-20). **Finding:** TTS `voice_id` is its own catalogue (`oversea_male1`, from the external Voice Guide the docs link) — a `/v1/general/presets-voices` id returns `1201 Voice id not found`. Spec D8/§6.3 must say so.
+- [x] **A5 write probe, voice:** `POST /v1/general/custom-voices` with the TTS clip as `voice_url` → `code: 0`, task `930801301486305328` → `succeed` in 9 s, `voice_id 930801338081615883`, **0.05 units**; `POST /v1/general/delete-voices` → `code: 0` (2026-09-20)
 - [ ] **A5 write probe, element:** `POST /v1/general/advanced-custom-elements` `{"element_name":"probe","element_description":"probe","reference_type":"image_refer","element_image_list":{"frontal_image":"<hosted jpg>","refer_images":[{"image_url":"<hosted jpg>"}]}}` → `code: 0`; poll to `succeed`; then delete via `/v1/general/delete-advanced-elements`. Record: `________` (deduction `________`)
 - [ ] **A5 write probe, avatar:** `POST /v1/videos/avatar/image2video` `{"image":"<hosted jpg>","audio_id":"<TTS probe audio id>","mode":"std"}` → `code: 0`; poll to `succeed` (≈ 0.4 units/s × audio length). Record: `________` (deduction `________`)
-- [ ] Total Phase 0 spend recorded here: `________` units (budget §10.17)
+- [ ] Total Phase 0 spend recorded here: **0.10** units so far (TTS 0.05 + voice 0.05); element and avatar pending a hosted portrait (budget §10.17)
 - [ ] If any probe returns `1002`: **stop** — the API-Key-only design is wrong for that family and D2 needs revisiting before 2a₀. If `1103`: confirm the account holds the relevant package; if it does and `1103` persists, stop likewise.
 - [x] Spec + checklist at v0.4.0 committed; pre-implementation pipeline run #3 → **PROCEED** (architect 86, docs 93, anxiety 86, synthesis 84, excavator 79); findings folded into v0.4.1 (spec §13.3)
-- [ ] Before 1a₁: `npx madge --circular --extensions ts src` on the **1.x** tree; record the result (run #3 A44 — if 1.x has cycles, the cycle check is scoped to the 2.0 directories until 2a₀): `________`
+- [x] Before 1a₁: `npx madge --circular --extensions ts src` on the **1.x** tree: **1 cycle — `config/constants.ts > types.ts`** (constants imports types; types re-exports `ERROR_CODES`). It is the exact import 1a₁'s `constants.ts` rewrite removes; `check:cycles` is scoped to the 2.0 directories until then
 
 ---
 
