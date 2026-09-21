@@ -73,12 +73,14 @@ export type {
   KnownVideoModel,
   MediaSource,
   Resolution,
+  ImageToVideoParams,
   TextToVideoParams,
   VideoModel,
 } from './codecs/params.js';
 export { TasksApi, LEGACY_PRODUCT_PATHS, standardOf, type GetOptions, type ListOptions, type ProductType } from './products/tasks.js';
 export type { CursorPage, NewStandardBody } from './codecs/new-standard.js';
 export { VideoApi, type VideoApiConfig } from './products/video.js';
+export { MediaBudget, resolveMediaSource, type MediaKind, type ResolvedMedia, type ResolveOptions } from './media/source.js';
 export { MODELED_OPTIONS, MODELED_SETTINGS } from './config/constants.js';
 export { poll, type PollOptions } from './handlers/poller.js';
 export { MISSING_API_KEY_MESSAGE, loadApiKey, type ApiKeySource } from './config/loaders.js';

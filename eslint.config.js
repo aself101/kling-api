@@ -49,7 +49,7 @@ const zones = [
   // media: http/errors, utils/security, config/constants
   { target: `${SRC}/media`, from: `${SRC}/http`, except: ['./errors.ts'], message: 'media may import http/errors only (spec §5)' },
   { target: `${SRC}/media`, from: `${SRC}/config`, except: ['./constants.ts'], message: 'media may import config/constants only (spec §5)' },
-  { target: `${SRC}/media`, from: `${SRC}/codecs`, except: ['./params.ts'], message: 'media may import codecs/params (the MediaSource type) only (spec §5)' },
+  { target: `${SRC}/media`, from: `${SRC}/codecs`, except: ['./params.ts', './task.ts'], message: 'media may import codecs/params and codecs/task (types) only (spec §5)' },
   { target: `${SRC}/media`, from: `${SRC}/products`, message: 'media must not import products (spec §5)' },
   { target: `${SRC}/media`, from: `${SRC}/handlers`, message: 'media must not import handlers (spec §5)' },
   { target: `${SRC}/media`, from: `${SRC}/webhooks.ts`, message: 'media must not import webhooks (spec §5)' },

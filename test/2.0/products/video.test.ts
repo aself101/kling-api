@@ -83,3 +83,63 @@ describe('video.textToVideo', () => {
     expect(recordOf({ prompt: 'p', signal: new AbortController().signal, externalTaskId: 'e', duration: undefined, model: 'm' })).toEqual({ prompt: 'p', model: 'm' });
   });
 });
+
+// ── imageToVideo (2a₃) ────────────────────────────────────────────────────────────────
+
+import { createTimeoutMs, redactMedia } from '../../../src/products/video.js';
+import { createHash } from 'node:crypto';
+
+const FRAME_URL = 'https://p2-kling.klingai.com/kcdn/cdn-kcdn112452/kling-tob-release_note/image_25.png';
+const PNG_B64 = Buffer.alloc(3000, 7).toString('base64');
+
+describe('video.imageToVideo', () => {
+  it('POSTs /image-to-video/<model> with contents[] and settings without aspect_ratio; handle records the URL frame as-is', async () => {
+    const { video, calls } = rig(created);
+    const h = await video.imageToVideo({ prompt: 'p', firstFrame: FRAME_URL, resolution: '1080p', duration: 10, externalTaskId: 'e-i2v' });
+    expect(calls[0].url.pathname).toBe('/image-to-video/kling-3.0-turbo');
+    expect(calls[0].body).toEqual({
+      contents: [{ type: 'prompt', text: 'p' }, { type: 'first_frame', url: FRAME_URL }],
+      settings: { resolution: '1080p', duration: 10 },
+      options: { external_task_id: 'e-i2v' },
+    });
+    expect(h.product).toBe('image-to-video');
+    expect(h.request).toEqual({ prompt: 'p', model: 'kling-3.0-turbo', resolution: '1080p', duration: 10, firstFrame: { kind: 'url', url: FRAME_URL } });
+  });
+
+  it('a Base64 frame is sent inline in url and redacted on the handle to { kind, bytes, sha256 }', async () => {
+    const { video, calls } = rig(created);
+    const h = await video.imageToVideo({ prompt: 'p', firstFrame: `data:image/png;base64,${PNG_B64}` });
+    const contents = (calls[0].body as { contents: { type: string; url?: string }[] }).contents;
+    expect(contents[1]).toEqual({ type: 'first_frame', url: PNG_B64 });
+    expect(h.request.firstFrame).toEqual({ kind: 'base64', bytes: 3000, sha256: createHash('sha256').update(Buffer.alloc(3000, 7)).digest('hex') });
+    expect(JSON.stringify(h.request).length).toBeLessThan(400);
+  });
+
+  it('media validation: a bare path string is rejected before any request; a { path } says 2c', async () => {
+    const { video, calls } = rig(created);
+    await expect(video.imageToVideo({ prompt: 'p', firstFrame: './frame.png' })).rejects.toThrow(/filesystem path is never read/);
+    await expect(video.imageToVideo({ prompt: 'p', firstFrame: { path: './frame.png' } })).rejects.toThrow(/Phase 2c/);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('lastFrame on kling-3.0 → last_frame content; @name warnings reach the logger', async () => {
+    const { video, calls, warnings } = rig(created);
+    await video.imageToVideo({ model: 'kling-3.0', prompt: '@Zhang waves at @Li', firstFrame: FRAME_URL, lastFrame: FRAME_URL, elements: [{ elementId: 'E', id: 'Zhang' }] });
+    const types = (calls[0].body as { contents: { type: string }[] }).contents.map((c) => c.type);
+    expect(types).toEqual(['prompt', 'first_frame', 'last_frame', 'element']);
+    expect(warnings).toEqual([expect.stringMatching(/@Li but no contents\[\] entry has id "Li"/)]);
+  });
+
+  it('the per-attempt deadline scales with the body: 20 MB → ≥ 110 s; a small body keeps the configured timeout', () => {
+    expect(createTimeoutMs(30_000, 20_000_000)).toBeGreaterThanOrEqual(110_000);
+    expect(createTimeoutMs(30_000, 500)).toBe(30_002);
+    expect(createTimeoutMs(30_000, 0)).toBe(30_000);
+    expect(createTimeoutMs(200_000, 20_000_000)).toBe(200_000);
+  });
+
+  it('redactMedia: url kept; base64/buffer/path origins named', () => {
+    expect(redactMedia('https://x/y', { url: 'https://x/y' })).toEqual({ kind: 'url', url: 'https://x/y' });
+    expect(redactMedia({ path: '/a.png' }, { base64: 'AAAA' })).toMatchObject({ kind: 'path', bytes: 3 });
+    expect(redactMedia(Buffer.alloc(1), { base64: 'AAAA' })).toMatchObject({ kind: 'buffer' });
+  });
+});

@@ -11,7 +11,7 @@
  * Source: `docs/api/kling-3.0-turbo-t2v.md` Response Examples (fence lines 109, 172, 356);
  * the fixtures under `test/2.0/fixtures/new/` are those examples.
  */
-import type { CommonOptions, TextToVideoParams } from './params.js';
+import type { CommonOptions, ImageToVideoParams, TextToVideoParams } from './params.js';
 import type {
   AudioOutput,
   BillingEntry,
@@ -267,4 +267,60 @@ export function buildTextToVideo(params: TextToVideoParams, externalId: string |
   const options = buildOptions(params, externalId);
   if (options) body.options = options;
   return body;
+}
+
+/** Media already resolved by the product module (`media/source.ts`) — a URL or a Base64 string, either way sent in `url`. */
+export interface ResolvedMediaFields {
+  firstFrame: string;
+  lastFrame?: string;
+}
+
+/**
+ * `POST /image-to-video/<model>` body (App. B §2.2, §2.4, §2.9, §2.12): `contents[]` from
+ * the named fields in vendor order — prompt, first_frame, last_frame, element*, voice*,
+ * then `extraContents` — and `settings` without `aspect_ratio` (the frame sets it).
+ * `@name` references in the prompt that match no content `id` produce a WARNING through
+ * `warn`, not an error (D6; the vendor's guidance is advisory).
+ */
+export function buildImageToVideo(params: ImageToVideoParams, media: ResolvedMediaFields, externalId: string | undefined, warn?: (m: string) => void): NewStandardBody {
+  const contents: Record<string, unknown>[] = [{ type: 'prompt', text: params.prompt }, { type: 'first_frame', url: media.firstFrame }];
+  if (media.lastFrame !== undefined) contents.push({ type: 'last_frame', url: media.lastFrame });
+  const ids: string[] = [];
+  params.elements?.forEach((e, i) => {
+    const id = e.id ?? `element_${i + 1}`;
+    ids.push(id);
+    contents.push({ type: 'element', element_id: e.elementId, id });
+  });
+  params.voices?.forEach((v, i) => {
+    const id = v.id ?? `voice_${i + 1}`;
+    ids.push(id);
+    contents.push({ type: 'voice', voice_id: v.voiceId, id });
+  });
+  if (params.extraContents) contents.push(...params.extraContents);
+  warnUnresolvedReferences(params.prompt, ids, warn);
+
+  const settings: Record<string, unknown> = {};
+  if (params.resolution !== undefined) settings.resolution = params.resolution;
+  if (params.duration !== undefined) settings.duration = params.duration;
+  if (params.audio !== undefined) settings.audio = params.audio;
+  if (params.multiShot !== undefined) settings.multi_shot = params.multiShot;
+  if (params.extraSettings) Object.assign(settings, params.extraSettings);
+  const body: NewStandardBody = { contents };
+  if (Object.keys(settings).length > 0) body.settings = settings;
+  const options = buildOptions(params, externalId);
+  if (options) body.options = options;
+  return body;
+}
+
+/** Every `@name` in the prompt should name a content `id` (App. B §2.4 "@Zhang", §2.9 "@1"). Advisory. */
+export function warnUnresolvedReferences(prompt: string, ids: string[], warn?: (m: string) => void): void {
+  if (!warn) return;
+  const known = new Set(ids);
+  const seen = new Set<string>();
+  for (const m of prompt.matchAll(/@([\p{L}\p{N}_-]+)/gu)) {
+    const name = m[1];
+    if (known.has(name) || seen.has(name)) continue;
+    seen.add(name);
+    warn(`prompt references @${name} but no contents[] entry has id "${name}"${ids.length > 0 ? ` (ids: ${ids.join(', ')})` : ''} — the vendor will not resolve it`);
+  }
 }

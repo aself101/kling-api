@@ -44,6 +44,10 @@ const REQUEST_FIXTURES = [
   { out: 'requests/t2v-kling-3.0.json', doc: 'kling-omni-3.0-t2v.md', section: '## Create Task', request: true },
   { out: 'requests/t2v-kling-2.6.json', doc: 'kling-2.6-t2v.md', section: '## Create Task', request: true },
   { out: 'requests/t2v-kling-2.5-turbo.json', doc: 'kling-2.5-turbo-t2v.md', section: '## Create Task', request: true },
+  { out: 'requests/i2v-kling-3.0-turbo.json', doc: 'kling-3.0-turbo-i2v.md', section: '## Create Task', request: true },
+  { out: 'requests/i2v-kling-3.0.json', doc: 'kling-omni-3.0-i2v.md', section: '## Create Task', request: true },
+  { out: 'requests/i2v-kling-2.6.json', doc: 'kling-2.6-i2v.md', section: '## Create Task', request: true },
+  { out: 'requests/i2v-kling-2.5-turbo.json', doc: 'kling-2.5-turbo-i2v.md', section: '## Create Task', request: true },
 ];
 
 /** @type {Array<{out: string, doc: string, section: string, subs?: Record<string, unknown>}>} */
@@ -98,7 +102,7 @@ function extractRequestBody(doc, section) {
   const open = lines.findIndex((l, i) => i > anchor && /^```bash$/i.test(l.trim()));
   const close = lines.findIndex((l, i) => i > open && l.trim() === '```');
   const block = lines.slice(open + 1, close).join('\n');
-  const m = /--data\s+'([\s\S]*?)'\s*$/.exec(block);
+  const m = /--data(?:-raw)?\s+'([\s\S]*?)'\s*$/.exec(block);
   if (!m) throw new Error(`${doc}: no --data body in the Request Example after ${section}`);
   return { text: m[1], line: open + 1 };
 }

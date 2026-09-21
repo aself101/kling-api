@@ -94,3 +94,16 @@ export interface TextToVideoParams extends CommonOptions {
   /** `settings.multi_shot`; only 3.0 and 3.0-omni carry the field. */
   multiShot?: boolean;
 }
+
+export interface ImageToVideoParams extends Omit<TextToVideoParams, 'aspectRatio'> {
+  /** `contents[] { type: 'first_frame', url }` — URL or Base64 (D12). Required; the frame sets the aspect ratio. */
+  firstFrame: MediaSource;
+  /** 3.0 / 2.6 / 2.5-turbo only (3.0-turbo: first frame only); on 2.x, first+last ⇒ 1080p. */
+  lastFrame?: MediaSource;
+  /** 3.0 only, ≤ 3. `id` is the `@name` the prompt uses; auto-assigned `element_1`… when omitted. */
+  elements?: { elementId: string; id?: string }[];
+  /** 2.6 only, ≤ 2, requires `audio !== 'off'`. `id` is the `@name` the prompt uses; auto-assigned `voice_1`… */
+  voices?: { voiceId: string; id?: string }[];
+  /** Extra `contents[]` entries for content types the library does not model yet (D9). */
+  extraContents?: Record<string, unknown>[];
+}

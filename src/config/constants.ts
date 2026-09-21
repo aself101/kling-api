@@ -186,3 +186,19 @@ export const TIMESTAMP_SECONDS_CEILING = 1e11;
 export const MODELED_SETTINGS: ReadonlySet<string> = new Set(['resolution', 'aspect_ratio', 'duration', 'audio', 'multi_shot']);
 /** `options` keys the builders write (App. B §2.0). */
 export const MODELED_OPTIONS: ReadonlySet<string> = new Set(['callback_url', 'external_task_id', 'watermark_info']);
+
+// ============================================================================
+// 2.0 — inline media caps (spec D12, run #2 A22, run #3 A45)
+// ============================================================================
+
+/**
+ * Decoded bytes an inline (Base64) image may carry, per API standard. DECIMAL megabytes
+ * so a passing file is under the vendor's limit whichever unit it means. Legacy `/v1/`
+ * image endpoints document "10MB" (`kling-image-2.1-generation.md:77`); the new standard
+ * documents 50 MB for URLs and nothing for inline, so 20 MB is the library's own line —
+ * a 50 MB Base64 body would be ~67 MB of JSON against an unpublished edge limit.
+ */
+export const INLINE_MEDIA_CAP_BYTES: Readonly<Record<'legacy' | 'new', number>> = { legacy: 10_000_000, new: 20_000_000 };
+
+/** Encoded Base64 characters across every inline input of ONE request (≈ 30 MB of files). */
+export const INLINE_MEDIA_AGGREGATE_CAP_BYTES = 40_000_000;

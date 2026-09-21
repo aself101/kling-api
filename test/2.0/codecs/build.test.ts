@@ -60,3 +60,78 @@ describe('buildTextToVideo — vendor Request Examples (V1 build half)', () => {
     expect(buildOptions({}, undefined)).toBeUndefined();
   });
 });
+
+// ── image-to-video (2a₃) ─────────────────────────────────────────────────────────────
+
+import { buildImageToVideo, warnUnresolvedReferences } from '../../../src/codecs/new-standard.js';
+import type { ImageToVideoParams } from '../../../src/codecs/params.js';
+
+interface VendorI2VBody {
+  contents: { type: string; text?: string; url?: string; element_id?: string; voice_id?: string; id?: string }[];
+  settings?: { resolution?: string; duration?: number; audio?: string; multi_shot?: boolean };
+  options?: { callback_url?: string; external_task_id?: string; watermark_info?: { enabled: boolean } };
+}
+
+function i2vParamsFrom(body: VendorI2VBody): { params: ImageToVideoParams; media: { firstFrame: string; lastFrame?: string } } {
+  const prompt = body.contents.find((c) => c.type === 'prompt')!.text!;
+  const first = body.contents.find((c) => c.type === 'first_frame')!.url!;
+  const last = body.contents.find((c) => c.type === 'last_frame')?.url;
+  const p: ImageToVideoParams = { prompt, firstFrame: first };
+  if (last) p.lastFrame = last;
+  const elements = body.contents.filter((c) => c.type === 'element').map((c) => ({ elementId: c.element_id!, id: c.id }));
+  const voices = body.contents.filter((c) => c.type === 'voice').map((c) => ({ voiceId: c.voice_id!, id: c.id }));
+  if (elements.length) p.elements = elements;
+  if (voices.length) p.voices = voices;
+  if (body.settings?.resolution) p.resolution = body.settings.resolution as ImageToVideoParams['resolution'];
+  if (body.settings?.duration !== undefined) p.duration = body.settings.duration;
+  if (body.settings?.audio) p.audio = body.settings.audio as ImageToVideoParams['audio'];
+  if (body.settings?.multi_shot !== undefined) p.multiShot = body.settings.multi_shot;
+  if (body.options?.callback_url) p.callbackUrl = body.options.callback_url;
+  if (body.options?.watermark_info) p.watermark = body.options.watermark_info.enabled;
+  return { params: p, media: { firstFrame: first, lastFrame: last } };
+}
+
+describe('buildImageToVideo — vendor Request Examples (V1 build half)', () => {
+  it.each(REQUEST_FIXTURES.filter((f) => f.startsWith('requests/i2v-')))('%s round-trips', (f) => {
+    const vendor = fixture(f) as VendorI2VBody;
+    const expected = structuredClone(vendor);
+    expected.options!.external_task_id = 'fixed-external-id';
+    const { params, media } = i2vParamsFrom(vendor);
+    const warnings: string[] = [];
+    expect(buildImageToVideo(params, media, 'fixed-external-id', (m) => warnings.push(m))).toEqual(expected);
+    expect(warnings, 'every @name in the vendor example resolves').toEqual([]);
+  });
+
+  it('contents order: prompt, first_frame, last_frame, element*, voice*, extraContents; ids auto-assigned', () => {
+    const body = buildImageToVideo(
+      { prompt: 'p', firstFrame: 'x', lastFrame: 'y', elements: [{ elementId: 'E1' }, { elementId: 'E2', id: 'Zhang' }], voices: [{ voiceId: 'V1' }], extraContents: [{ type: 'hologram', url: 'h' }] },
+      { firstFrame: 'https://a/f.png', lastFrame: 'https://a/l.png' },
+      undefined
+    );
+    expect(body.contents).toEqual([
+      { type: 'prompt', text: 'p' },
+      { type: 'first_frame', url: 'https://a/f.png' },
+      { type: 'last_frame', url: 'https://a/l.png' },
+      { type: 'element', element_id: 'E1', id: 'element_1' },
+      { type: 'element', element_id: 'E2', id: 'Zhang' },
+      { type: 'voice', voice_id: 'V1', id: 'voice_1' },
+      { type: 'hologram', url: 'h' },
+    ]);
+    expect(body).not.toHaveProperty('settings');
+    expect(body).not.toHaveProperty('options');
+  });
+
+  it('a Base64 frame goes in the same url field ("URL or Base64")', () => {
+    const body = buildImageToVideo({ prompt: 'p', firstFrame: 'ignored' }, { firstFrame: 'iVBORw0KGgo=' }, 'e');
+    expect(body.contents[1]).toEqual({ type: 'first_frame', url: 'iVBORw0KGgo=' });
+  });
+
+  it('@name with no matching content id → one warning per name, never a throw; known and repeated names are silent', () => {
+    const warnings: string[] = [];
+    warnUnresolvedReferences('@Zhang walks; @Zhang waves; @1 speaks; email @gmail', ['Zhang'], (m) => warnings.push(m));
+    expect(warnings).toHaveLength(2);
+    expect(warnings[0]).toMatch(/@1 but no contents\[\] entry has id "1" \(ids: Zhang\)/);
+    expect(warnings[1]).toMatch(/@gmail/);
+    expect(() => warnUnresolvedReferences('@x', [], undefined)).not.toThrow();
+  });
+});
