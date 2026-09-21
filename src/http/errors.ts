@@ -194,8 +194,8 @@ export class KlingCodecError extends KlingError {
 export class KlingValidationError extends KlingError {
   readonly field: string;
 
-  constructor(field: string, message: string) {
-    super(message);
+  constructor(field: string, message: string, options?: { cause?: unknown }) {
+    super(message, options);
     this.field = field;
   }
 }

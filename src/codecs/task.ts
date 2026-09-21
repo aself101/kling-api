@@ -183,12 +183,22 @@ export interface PageOptions extends RequestOptions {
 }
 
 export interface SaveOptions extends RequestOptions {
+  /** Also save the watermarked variants (`watermarkUrl`). Default false. */
   includeWatermark?: boolean;
-  /** Download through this fetch (proxies, tests). Defaults to the client's. */
+  /** Download through this fetch (proxies, tests). `client.save` passes the client's. */
   fetch?: typeof fetch;
+  /** Per-download deadline. Default 60 s. */
   timeoutMs?: number;
   /** Bypass the derived `outputsExpireAt` check (spec D14). */
   force?: boolean;
+  /** The handle's redacted request record, written to the sidecar (D4). */
+  request?: Record<string, unknown>;
+  /** Byte cap per download. Default 500 MiB. */
+  maxBytes?: number;
+  /** DNS seam for the per-hop SSRF check (tests). */
+  lookup?: (hostname: string) => Promise<{ address: string; family: number }[]>;
+  /** Clock seam for the expiry check (tests). */
+  now?: () => number;
 }
 
 /**

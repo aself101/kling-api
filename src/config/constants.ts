@@ -202,3 +202,10 @@ export const INLINE_MEDIA_CAP_BYTES: Readonly<Record<'legacy' | 'new', number>> 
 
 /** Encoded Base64 characters across every inline input of ONE request (≈ 30 MB of files). */
 export const INLINE_MEDIA_AGGREGATE_CAP_BYTES = 40_000_000;
+
+/** Vendor image rules stated on every video/image page: `.jpg/.jpeg/.png`, ≥ 300 px per side, aspect within 1:2.5 – 2.5:1. */
+export const SUPPORTED_IMAGE_EXTENSIONS: readonly string[] = ['jpg', 'jpeg', 'png'];
+export const MIN_IMAGE_DIMENSION_PX = 300;
+export const MAX_IMAGE_ASPECT = 2.5;
+/** Audio inputs (voice creation, avatar): `kling-omni-3.0-voice-mgt.md`, `kling-avatar.md`. */
+export const SUPPORTED_AUDIO_EXTENSIONS: readonly string[] = ['mp3', 'wav', 'm4a', 'aac'];

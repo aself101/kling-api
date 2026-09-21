@@ -115,10 +115,11 @@ describe('video.imageToVideo', () => {
     expect(JSON.stringify(h.request).length).toBeLessThan(400);
   });
 
-  it('media validation: a bare path string is rejected before any request; a { path } says 2c', async () => {
+  it('media validation: a bare path string is rejected before any request; a { path } that is missing or wrongly typed too', async () => {
     const { video, calls } = rig(created);
     await expect(video.imageToVideo({ prompt: 'p', firstFrame: './frame.png' })).rejects.toThrow(/filesystem path is never read/);
-    await expect(video.imageToVideo({ prompt: 'p', firstFrame: { path: './frame.png' } })).rejects.toThrow(/Phase 2c/);
+    await expect(video.imageToVideo({ prompt: 'p', firstFrame: { path: './missing-frame.png' } })).rejects.toThrow(/cannot read/);
+    await expect(video.imageToVideo({ prompt: 'p', firstFrame: { path: './frame.gif' } })).rejects.toThrow(/unsupported image extension/);
     expect(calls).toHaveLength(0);
   });
 

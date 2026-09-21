@@ -12,6 +12,8 @@ import { HttpCore, type HttpCoreInternals, type KlingConfig, type Logger, silent
 import { KlingValidationError } from './http/errors.js';
 import { TasksApi } from './products/tasks.js';
 import { VideoApi } from './products/video.js';
+import { save as saveTask } from './handlers/saver.js';
+import type { SaveOptions, Task } from './codecs/task.js';
 
 export interface ResolvedKlingConfig {
   baseUrl: string;
@@ -65,6 +67,14 @@ export class KlingClient {
       unknownModels: this.config.unknownModels,
       capabilityValidation: this.config.capabilityValidation,
     });
+  }
+
+  /**
+   * Save a task's outputs to `dir` (spec D14) through the client's `fetch` and timeout —
+   * so a proxied client downloads through its proxy. Returns the paths written.
+   */
+  save(task: Task, dir: string, options: SaveOptions = {}): Promise<string[]> {
+    return saveTask(task, dir, { fetch: this.http.fetchImpl, timeoutMs: this.config.timeout, ...options });
   }
 
   /**

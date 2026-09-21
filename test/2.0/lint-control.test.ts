@@ -52,8 +52,8 @@ describe('import-graph zones (production config)', () => {
   });
 
   it('an UNRESOLVABLE import is invisible to the zones rule — so no-unresolved must catch it', async () => {
-    // handlers/saver.ts does not exist until 2c. Without no-unresolved a typo would bypass the graph.
-    const [result] = await eslint.lintText(`export * from '../handlers/saver.js';\n`, { filePath: 'src/products/x.ts' });
+    // A file that does not exist. Without no-unresolved a typo would bypass the graph.
+    const [result] = await eslint.lintText(`export * from '../handlers/does-not-exist.js';\n`, { filePath: 'src/products/x.ts' });
     expect(result.messages.filter((m) => m.ruleId === RULE)).toHaveLength(0);
     expect(result.messages.filter((m) => m.ruleId === 'import-x/no-unresolved')).toHaveLength(1);
   });

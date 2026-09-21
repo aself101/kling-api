@@ -164,6 +164,11 @@ export class HttpCore {
   }
 
   /** The redacted key, for `--debug` output. Never the key itself. */
+  /** The fetch this core sends through — so downloads (`client.save`) can share a proxy or a test seam. */
+  get fetchImpl(): typeof fetch {
+    return this.#fetchImpl;
+  }
+
   describeCredential(): string {
     return redactKey(this.#apiKey);
   }

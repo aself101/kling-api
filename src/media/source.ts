@@ -1,7 +1,6 @@
 /**
- * Media input resolution (spec D12). 2a₃ ships the URL / Base64 half; 2c adds `{ path }`,
- * `Buffer` and `Uint8Array` (read, extension, magic bytes, dimensions) and the download
- * side. Until then those inputs throw a `KlingValidationError` that says so.
+ * Media input resolution (spec D12). URL / Base64 (2a₃) and `{ path }` / `Buffer` /
+ * `Uint8Array` (2c: read, extension, magic bytes, dimensions, then Base64).
  *
  * The one rule that is fully in force from day one: **a bare string is never a
  * filesystem path.** 1.x read any string that `existsSync` matched, so a server passing
@@ -16,7 +15,9 @@
  */
 import type { MediaSource } from '../codecs/params.js';
 import type { Standard } from '../codecs/task.js';
-import { INLINE_MEDIA_CAP_BYTES, INLINE_MEDIA_AGGREGATE_CAP_BYTES } from '../config/constants.js';
+import { readFileSync } from 'node:fs';
+import { extname } from 'node:path';
+import { INLINE_MEDIA_CAP_BYTES, INLINE_MEDIA_AGGREGATE_CAP_BYTES, MIN_IMAGE_DIMENSION_PX, MAX_IMAGE_ASPECT, SUPPORTED_AUDIO_EXTENSIONS, SUPPORTED_IMAGE_EXTENSIONS } from '../config/constants.js';
 import { KlingValidationError } from '../http/errors.js';
 
 export type MediaKind = 'image' | 'video' | 'audio';
@@ -77,7 +78,7 @@ export function resolveMediaSource(src: MediaSource, options: ResolveOptions): R
 
   if (src instanceof Uint8Array) {
     if (kind === 'video') throw videoMustBeUrl(field);
-    throw notYet(field, 'Buffer / Uint8Array');
+    return inlineBytes(Buffer.from(src.buffer, src.byteOffset, src.byteLength), kind, undefined, standard, options);
   }
 
   if (typeof src === 'object' && src !== null) {
@@ -91,7 +92,16 @@ export function resolveMediaSource(src: MediaSource, options: ResolveOptions): R
       if (!isBase64(base64)) throw new KlingValidationError(field, `${field}.base64 is not valid Base64`);
       return inline(base64, standard, options);
     }
-    if ('path' in src) throw notYet(field, '{ path }');
+    if ('path' in src) {
+      shapeExtension(src.path, kind, field);
+      let bytes: Buffer;
+      try {
+        bytes = readFileSync(src.path);
+      } catch (cause) {
+        throw new KlingValidationError(field, `${field}: cannot read ${src.path} (${cause instanceof Error ? cause.message : String(cause)})`, { cause });
+      }
+      return inlineBytes(bytes, kind, src.path, standard, options);
+    }
   }
 
   throw new KlingValidationError(field, `${field} is not a MediaSource (https URL, Base64 string, { url }, { base64 }, { path }, Buffer or Uint8Array)`);
@@ -111,8 +121,84 @@ function inline(base64: string, standard: Standard, options: ResolveOptions): Re
   return { base64 };
 }
 
-const notYet = (field: string, what: string) =>
-  new KlingValidationError(field, `${field}: ${what} inputs are not supported on this build yet (Phase 2c) — pass an https URL or a Base64 string`);
+/**
+ * Bytes from a file or a Buffer: cap by size FIRST (cheap, and the message the caller
+ * most needs), then the vendor's content rules — magic bytes and, for images, ≥ 300 px
+ * per side and an aspect ratio within 1:2.5 – 2.5:1 (every video/image page states
+ * these). Base64 is produced only after the checks pass.
+ */
+function inlineBytes(bytes: Buffer, kind: MediaKind, path: string | undefined, standard: Standard, options: ResolveOptions): ResolvedMedia {
+  const { field } = options;
+  const cap = INLINE_MEDIA_CAP_BYTES[standard];
+  if (bytes.byteLength > cap) {
+    throw new KlingValidationError(field, `${field} is ${formatMB(bytes.byteLength)}, over the ${formatMB(cap)} inline cap for the ${standard} standard — host the file and pass a URL`);
+  }
+  if (kind === 'image') {
+    const info = sniffImage(bytes);
+    if (!info) throw new KlingValidationError(field, `${field}${path ? ` (${path})` : ''} is not a PNG or JPEG (magic bytes) — the vendor accepts .jpg, .jpeg, .png`);
+    if (info.width !== undefined && info.height !== undefined) {
+      if (info.width < MIN_IMAGE_DIMENSION_PX || info.height < MIN_IMAGE_DIMENSION_PX) {
+        throw new KlingValidationError(field, `${field} is ${info.width}×${info.height} px; the vendor requires at least ${MIN_IMAGE_DIMENSION_PX} px on each side`);
+      }
+      const ratio = info.width / info.height;
+      if (ratio > MAX_IMAGE_ASPECT || ratio < 1 / MAX_IMAGE_ASPECT) {
+        throw new KlingValidationError(field, `${field} aspect ratio ${ratio.toFixed(2)} is outside the vendor's 1:${MAX_IMAGE_ASPECT} – ${MAX_IMAGE_ASPECT}:1 range`);
+      }
+    }
+  } else if (kind === 'audio') {
+    if (!sniffAudio(bytes)) throw new KlingValidationError(field, `${field}${path ? ` (${path})` : ''} is not MP3, WAV, M4A or AAC (magic bytes)`);
+  }
+  const base64 = bytes.toString('base64');
+  options.budget?.charge(base64.length, field);
+  return { base64 };
+}
+
+function shapeExtension(path: string, kind: MediaKind, field: string): void {
+  const ext = extname(path).toLowerCase().replace('.', '');
+  const allowed = kind === 'image' ? SUPPORTED_IMAGE_EXTENSIONS : SUPPORTED_AUDIO_EXTENSIONS;
+  if (!allowed.includes(ext)) throw new KlingValidationError(field, `${field}: unsupported ${kind} extension ".${ext}" — the vendor accepts ${allowed.map((e) => `.${e}`).join(', ')}`);
+}
+
+export interface ImageInfo {
+  format: 'png' | 'jpeg';
+  width?: number;
+  height?: number;
+}
+
+/** PNG (IHDR) and JPEG (first SOFn marker) headers; dimensions undefined when a JPEG has no SOF before the scan. */
+export function sniffImage(b: Buffer): ImageInfo | undefined {
+  if (b.length >= 24 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) {
+    return { format: 'png', width: b.readUInt32BE(16), height: b.readUInt32BE(20) };
+  }
+  if (b.length >= 4 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) {
+    let i = 2;
+    while (i + 9 < b.length) {
+      if (b[i] !== 0xff) return { format: 'jpeg' };
+      const marker = b[i + 1];
+      if (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) {
+        i += 2;
+        continue;
+      }
+      const len = b.readUInt16BE(i + 2);
+      const isSof = marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc;
+      if (isSof) return { format: 'jpeg', height: b.readUInt16BE(i + 5), width: b.readUInt16BE(i + 7) };
+      if (marker === 0xda) break; // start of scan without SOF — malformed; give up on dimensions
+      i += 2 + len;
+    }
+    return { format: 'jpeg' };
+  }
+  return undefined;
+}
+
+/** MP3 (ID3 tag or MPEG sync), WAV (RIFF/WAVE), M4A (ftyp box), AAC (ADTS sync). */
+export function sniffAudio(b: Buffer): boolean {
+  if (b.length < 12) return false;
+  if (b[0] === 0x49 && b[1] === 0x44 && b[2] === 0x33) return true; // ID3
+  if (b[0] === 0xff && (b[1] & 0xe0) === 0xe0) return true; // MPEG audio sync (MP3 frame or ADTS AAC)
+  if (b.toString('latin1', 0, 4) === 'RIFF' && b.toString('latin1', 8, 12) === 'WAVE') return true;
+  if (b.toString('latin1', 4, 8) === 'ftyp') return true; // MP4 container (m4a)
+  return false;
+}
 const videoMustBeUrl = (field: string) => new KlingValidationError(field, `${field} must be a URL; the Kling API has no upload endpoint for video`);
 
 export function isHttpsUrl(s: string): boolean {
