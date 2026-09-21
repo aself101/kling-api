@@ -17,7 +17,7 @@
  * `fetchToBuffer` and its byte / redirect / per-hop SSRF guards. Import graph (§5):
  * `codecs/task`, `media/download`, `http/errors`, `utils/*`.
  */
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { extname, join } from 'node:path';
 import type { SaveOptions, Task, TaskOutput } from '../codecs/task.js';
 import {
@@ -123,13 +123,19 @@ export async function save(task: Task, dir: string, options: SaveOptions = {}): 
  * like a download error, and a half-written file is removed so `written` stays truthful.
  */
 function writeTo(file: string, data: Buffer | string, task: Task, written: string[]): void {
+  // Write to a sibling temp name and rename into place: a failure part-way leaves the temp
+  // file to remove, never a truncated target — and never touches a PRE-EXISTING file at
+  // `file` (a read-only prior output whose overwrite fails at open must survive; ship run #5,
+  // anxiety-reader F3). rename() is atomic on the same filesystem.
+  const tmp = `${file}.${process.pid}.part`;
   try {
-    writeFileSync(file, data);
+    writeFileSync(tmp, data);
+    renameSync(tmp, file);
   } catch (cause) {
     try {
-      rmSync(file, { force: true });
+      rmSync(tmp, { force: true });
     } catch {
-      // AUDIT-OK(no_empty_catch): best-effort cleanup of a partial file; the write error below is the one to report.
+      // AUDIT-OK(no_empty_catch): best-effort cleanup of the temp file; the write error below is the one to report.
     }
     throw new KlingSaveError(task, written, file, cause);
   }

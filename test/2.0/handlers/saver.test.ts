@@ -181,3 +181,40 @@ describe('save — ship run #5 regressions', () => {
     expect((err.cause as NodeJS.ErrnoException).code).toMatch(/EISDIR|EPERM|EACCES/);
   });
 });
+
+describe('save — ship run #5 anxiety-read follow-ups', () => {
+  it('a pre-existing read-only output survives a failed overwrite (temp-file + rename; nothing is unlinked at the target)', async () => {
+    const { fetchImpl } = cdn({ 'https://cdn.example/v.mp4': { body: 'NEW', type: 'video/mp4' } });
+    const { writeFileSync: wf, chmodSync, readFileSync: rf, statSync } = await import('node:fs');
+    const target = join(dir, 't-1-0.mp4');
+    wf(target, 'OLD-GOOD');
+    chmodSync(target, 0o444);
+    // Make the directory itself read-only so the temp write fails — the target must be untouched.
+    const { chmodSync: cm } = await import('node:fs');
+    cm(dir, 0o555);
+    try {
+      const err = await save(task(), dir, { fetch: fetchImpl, lookup: publicDns, now: () => NOW }).catch((e) => e as KlingSaveError);
+      if (process.getuid?.() === 0) return; // root ignores directory modes; nothing to assert here
+      expect(err).toBeInstanceOf(KlingSaveError);
+      expect(rf(target, 'utf8')).toBe('OLD-GOOD');
+      expect(statSync(target).size).toBe(8);
+    } finally {
+      cm(dir, 0o755);
+      chmodSync(target, 0o644);
+    }
+  });
+
+  it("client.save with an explicit `fetch: undefined` still downloads through the client's fetch", async () => {
+    const { fetchImpl, calls } = cdn({ 'https://cdn.example/v.mp4': { body: 'via-client', type: 'video/mp4' } });
+    const client = new KlingClient({ apiKey: 'k', fetch: fetchImpl });
+    const origFetch = globalThis.fetch;
+    globalThis.fetch = (async () => { throw new Error('global fetch must not be used'); }) as typeof fetch;
+    try {
+      const written = await client.save(task(), dir, { lookup: publicDns, now: () => NOW, fetch: undefined });
+      expect(readFileSync(written[0], 'utf8')).toBe('via-client');
+      expect(calls).toHaveLength(1);
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+  });
+});

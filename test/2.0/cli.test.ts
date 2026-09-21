@@ -206,3 +206,19 @@ describe('finishCreate — ship run #4: the paid task id survives a failed wait/
     expect(fetched).toBe(0);
   });
 });
+
+describe('finishCreate — ship run #5: -q still gets the id out (stderr) on a failed wait', () => {
+  it('under -q without --json the id is written to stderr before the error propagates', async () => {
+    const { finishCreate } = await import('../../src/cli/shared.js');
+    const err: string[] = [];
+    const origErr = process.stderr.write.bind(process.stderr);
+    process.stderr.write = ((chunk: string | Uint8Array) => { err.push(String(chunk)); return true; }) as typeof process.stderr.write;
+    try {
+      const handle = { id: 'paid-q', standard: 'new' as const, product: 'text-to-video' as const, request: {}, get: async () => { throw new Error('unused'); }, wait: async () => { throw new Error('poll exploded'); } };
+      await expect(finishCreate({} as never, handle, { quiet: true }, { wait: true })).rejects.toThrow('poll exploded');
+    } finally {
+      process.stderr.write = origErr;
+    }
+    expect(err.join('')).toMatch(/task paid-q \(text-to-video\) was created/);
+  });
+});

@@ -185,6 +185,12 @@ export async function finishCreate(
       `submitted ${handle.product} task ${handle.id}${handle.externalId ? ` (external id ${handle.externalId})` : ''} — the wait or save failed; recover with\n  kling tasks get-by-product ${handle.product} ${handle.id}`,
       { ...summary, ...partial, error: err instanceof Error ? err.name : String(err) }
     );
+    // -q without --json prints nothing above; the id still has to leave the process somewhere.
+    if (globals.quiet && !globals.json) {
+      process.stderr.write(
+        `task ${handle.id} (${handle.product}) was created; the wait or save failed — kling tasks get-by-product ${handle.product} ${handle.id}\n`
+      );
+    }
     throw err;
   }
   const human = [

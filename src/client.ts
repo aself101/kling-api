@@ -106,7 +106,9 @@ export class KlingClient {
     // Only the fetch is forwarded. The download deadline is the saver's per-type default
     // (120 s video / 60 s image+audio) unless the caller passes `timeoutMs` — the API `timeout`
     // is sized for JSON round trips, not for a 40 MB clip (ship run #5, code-auditor).
-    return saveTask(task, dir, { fetch: this.http.fetchImpl, ...options });
+    // `??` not spread: a caller spreading their own bag with `fetch: undefined` must not drop the
+    // proxied fetch (same shape as the retry-defaults bug; ship run #5, anxiety-reader F5).
+    return saveTask(task, dir, { ...options, fetch: options.fetch ?? this.http.fetchImpl });
   }
 
   /**

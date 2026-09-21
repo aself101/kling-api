@@ -127,7 +127,7 @@ interface Task {
 }
 ```
 
-`handle.wait()` resolves on `succeeded`, throws `KlingTaskFailedError` on `failed`, and `KlingPollTimeoutError` on the deadline. Two concurrent `wait()` calls on one handle share a single poll loop; each caller's `deadlineMs` and `signal` apply to that caller only.
+`handle.wait()` resolves on `succeeded`, throws `KlingTaskFailedError` on `failed`, and `KlingPollTimeoutError` on the deadline. **It also rethrows any read error the poll itself hits** once that read's own retries are exhausted (~96 s of vendor read trouble at defaults): a `KlingAPIError`/`KlingNetworkError`/`KlingTimeoutError` with `taskState: 'n/a'` — *n/a* means the task is unaffected; the vendor just could not be asked about it. Do not treat that as a failed create: call `wait()` again on the same handle, or `get()`. Two concurrent `wait()` calls on one handle share a single poll loop; each caller's `deadlineMs` and `signal` apply to that caller only.
 
 `outputsExpireAt` is derived, not vendor-supplied, from the vendor's stated 30-day retention. On the one task where it was compared (a legacy image task, 2026-09-20), the vendor's signed URL carried an `Expires=` within 2 seconds of the derived value; new-standard video URLs have not been compared yet. `save()` refuses an expired task unless `force: true`.
 
@@ -276,7 +276,7 @@ const files = await client.save(task, './output', { includeWatermark: false, req
 // ./output/<task.id>.json          { product, standard, request, outputs, files, raw }
 ```
 
-Downloads go through the client's `fetch` with a byte cap (default 500 MiB — also the per-call heap ceiling, since the body is buffered before it is written), a redirect cap (5), a per-download deadline (120 s for videos, 60 s for images/audio; `timeoutMs` overrides), and a per-hop URL safety check (below). `KlingOutputsExpiredError` is thrown **before any fetch** once `outputsExpireAt` has passed (`force: true` bypasses); `KlingNoOutputsError` for a `succeeded` task with no outputs. A download that fails after earlier files were written throws `KlingSaveError { written, failedUrl, cause }` — the files already on disk are listed, and no sidecar is written. The vendor's `task.id` is checked to be a single path segment before it becomes a file name. The sidecar's `request` is the handle's redacted record — a 20 MB inline frame is a `{ kind, bytes, sha256 }` triple there, not a second copy.
+Downloads go through the client's `fetch` with a byte cap (default 500 MiB — also the per-call heap ceiling, since the body is buffered before it is written), a redirect cap (5), a per-hop deadline (120 s for videos, 60 s for images/audio; `timeoutMs` overrides — re-armed on each of up to 5 redirects, so a pathological chain can take 6× that; your `signal` is the overall ceiling), and a per-hop URL safety check (below). `KlingOutputsExpiredError` is thrown **before any fetch** once `outputsExpireAt` has passed (`force: true` bypasses); `KlingNoOutputsError` for a `succeeded` task with no outputs. A download that fails after earlier files were written throws `KlingSaveError { written, failedUrl, cause }` — the files already on disk are listed, and no sidecar is written. The vendor's `task.id` is checked to be a single path segment before it becomes a file name. The sidecar's `request` is the handle's redacted record — a 20 MB inline frame is a `{ kind, bytes, sha256 }` triple there, not a second copy.
 
 ## Account and billing
 
@@ -301,9 +301,9 @@ Every error extends `KlingError` (`requestId` when a response was received):
 | `KlingResponseError` | non-JSON body or an unexpected 3xx | `httpStatus`, `bodySnippet`, `location` |
 | `KlingCodecError` | the envelope parsed but not into the expected shape | `standard`, `path` |
 | `KlingValidationError` | a parameter failed a rule | `field` |
-| `KlingTaskFailedError` / `KlingPollTimeoutError` | `wait()` | `task`, `code` (always `null` today — neither standard puts a code on a failed record; read `task.message`) / `task` (the last state polled, `null` before the first poll), `elapsedMs` |
+| `KlingTaskFailedError` / `KlingPollTimeoutError` | `wait()` | `task`, `code` (always `null` today — neither standard puts a code on a failed record; read `task.message`) / `task` (the last state this handle polled, `null` if it never got a response), `elapsedMs`. `wait()` also rethrows read errors — see [How it fits together](#how-it-fits-together) |
 | `KlingTaskNotFoundError` | a single-task lookup the vendor cannot see | `product`, `id`, `byExternalId` |
-| `KlingNoOutputsError` / `KlingOutputsExpiredError` / `KlingSaveError` | `save()` | `task` / `task` / `task`, `written`, `failedUrl`, `cause` (a `KlingDownloadError { url, reason: 'too-large' \| 'too-many-redirects' \| 'blocked-host' \| 'http' \| 'timeout' \| 'invalid-redirect', httpStatus }`) |
+| `KlingNoOutputsError` / `KlingOutputsExpiredError` / `KlingSaveError` | `save()` | `task` / `task` / `task`, `written`, `failedUrl`, `cause`. `cause` is a `KlingDownloadError { url, reason: 'too-large' \| 'too-many-redirects' \| 'blocked-host' \| 'http' \| 'timeout' \| 'invalid-redirect', httpStatus }` when a download failed, or the Node fs error (`ENOSPC`, `EACCES`, …) when a write failed — then `failedUrl` is the file path. Check `cause instanceof KlingDownloadError` before reading `reason` |
 | `KlingBatchError` | a `tasks.get` chunk failed | `tasks`, `missing`, `unattempted`, `cause` |
 | `KlingWebhookError` | `parseCallback` with a secret | `reason: 'missing-headers' \| 'bad-signature' \| 'stale-timestamp'` |
 
@@ -313,13 +313,13 @@ Every error extends `KlingError` (`requestId` when a response was received):
 
 **Key your re-submit decision on `taskState`, not `isTransient()`:**
 
-- `'not-created'` — the vendor rejected before enqueueing (any 4xx business code, `1303` concurrency included; a pre-request network failure). Safe to re-submit after a backoff.
+- `'not-created'` — the vendor rejected before enqueueing (any 4xx business code, `1303` concurrency included; a pre-request network failure). Re-submitting after a backoff is the intended path. The classification follows the vendor's error table; that a refused create leaves no deduction on the ledger has not yet been confirmed against `account.packageLedger` (a cheap Phase 7 probe).
 - `'may-exist'` — `5000`/`5002`, HTTP 502/503/504, an unparseable response, a timeout, a post-request network error. **Recover before re-submitting.**
 - `'n/a'` — the request was a read.
 
 `isTransient()` is the vendor's "try later" signal and says nothing about whether the task exists; `isRetryable()` is always `false` for a create.
 
-**Recovery.** Every create carries an `external_task_id` — yours, or a UUID the library generates (opt out with `externalTaskId: false`). After a `may-exist` failure, `err.externalId` is set; call `client.tasks.recover(product, externalId)`. `null` means *not visible to this account*, not *never created*. The vendor also **rejects a duplicate `external_task_id`** (`400 / 1201 "already exists"` — observed once, on a `text-to-video` create re-submitted immediately after a successful one; not yet observed on legacy creates, across products, after a failed original, or after time has passed). Where that holds, re-submitting with the same id after `may-exist` cannot double-bill — but it cannot succeed either, so recovery is the path forward. TTS carries no external id and is unrecoverable.
+**Recovery.** Every create carries an `external_task_id` — yours, or a UUID the library generates (opt out with `externalTaskId: false`). After a `may-exist` failure, `err.externalId` is set; call `client.tasks.recover(product, externalId)`. `null` means *not visible to this account*, not *never created* — and immediately after a lost response it can also mean *not visible yet*: whether the vendor's reads lag its writes has not been probed under load (see Known limits), so treat a `null` in the first seconds as inconclusive and recover again after a pause before considering a re-submit. The vendor also **rejects a duplicate `external_task_id`** (`400 / 1201 "already exists"` — observed once, on a `text-to-video` create re-submitted immediately after a successful one; not yet observed on legacy creates, across products, after a failed original, or after time has passed). Where that holds, re-submitting with the same id after `may-exist` cannot double-bill — but it cannot succeed either, so recovery is the path forward. TTS carries no external id and is unrecoverable.
 
 Concurrency refusals (`1303 "parallel task over resource pack limit"`) surface immediately as `KlingAPIError` with `taskState: 'not-created'` — the library does not queue creates for you.
 
@@ -467,7 +467,7 @@ Against the production API on 2026-09-20 (the spend is recorded per item in the 
 - `video.omni` first-frame-only on `kling-3.0-omni` (3 s, 720p, silent): 83 s, **1.8 units** — the silent rate.
 - `image.generate` on `kling-v3` (n=1, 1k): 24 s, **8 image units**; on this one task the vendor's signed URL expiry matched the derived `outputsExpireAt` within 2 s.
 - `elements.create` (image_refer, 0 units), delete through **either** path → `deleted`; `voices.create` from a TTS clip (0.05), `audio.tts` (0.05), `avatar.create` (4.4 units, Phase 0).
-- `tasks.recover` by external id for `image-generation` and `voice`; one duplicate `external_task_id` (t2v) rejected with `1201`; `GET /tasks` capped at 20 ids; legacy not-found is `1201 "Task not found by id/external id"`.
+- `tasks.recover` by external id for `image-generation` and `voice`; one duplicate `external_task_id` (t2v) rejected with `1201`; `GET /tasks` capped at 20 ids; legacy not-found is `1201 "Task not found by id/external id"` — the library recognises it by that message text (the code alone is the generic parameter error), so a vendor rewording would make legacy `recover()` throw a `KlingAPIError` instead of returning `null`.
 - `account.usage` reported the remaining units to the decimal the checklist had tallied.
 
 Every builder is also checked against the vendor's own Request Examples (43 fixtures regenerated from `docs/api/`), and every capability-registry value against the page it cites.
@@ -479,7 +479,7 @@ Every builder is also checked against the vendor's own Request Examples (43 fixt
 - **Element ids are typed `long` by the vendor** and its examples send numbers; the library sends a safe-integer id as a number and an 18-digit id as a string — acceptance of the string form has not been observed live.
 - **URL safety is time-of-check**; DNS rebinding between check and fetch is not defended (would need a pinned undici `connect`).
 - Reference-video duration/format bounds are stated on the parameters, not checked client-side.
-- **Not observed live yet:** read-after-write lag (a `wait()` that starts before the vendor's read replica sees the create would fail with `KlingTaskNotFoundError` — ~4 live tasks polled at 3 s showed no lag); the vendor's rate limit on `/tasks`; whether an 18-digit `element_id` is accepted as a string.
+- **Not observed live yet:** read-after-write lag (a `wait()` or `recover()` that runs before the vendor's reads see the create would return not-found / `null` — ~4 live tasks polled at 3 s showed no lag); that a refused create (`taskState: 'not-created'`) leaves no ledger deduction; the vendor's rate limit on `/tasks`; whether an 18-digit `element_id` is accepted as a string.
 
 ## License
 
