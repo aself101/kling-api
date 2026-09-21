@@ -272,6 +272,8 @@ export function reportError(err: unknown, globals: GlobalOptions): void {
  * type-safety-validator). Values are still shell strings: commander's `int`/`num` parsers
  * narrow the numeric ones, and the library's `[shape]` rules reject anything else with a
  * `KlingValidationError` naming the field — the CLI does not re-implement the validators.
+ * The one exception is `tasks list --status / --product-type`, filters no library rule
+ * checks; `cli/tasks.ts` guards those itself.
  */
 export function handler<O>(
   fn: (options: O, cmd: Command) => Promise<void>

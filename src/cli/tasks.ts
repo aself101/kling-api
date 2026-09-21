@@ -98,6 +98,22 @@ export function registerTasks(program: Command): void {
       handler<ListOptions>(async (o, cmd) => {
         const g = globalsOf(cmd);
         const end = Date.now();
+        // The list filters are the one CLI input no library [shape] rule checks (the vendor validates
+        // them), so the enum guard lives here rather than in the handler<T>() cast.
+        const STATUSES = new Set<string>(['submitted', 'processing', 'succeeded', 'failed']);
+        const PRODUCT_TYPES = new Set<string>(['video', 'image', 'try_on']);
+        for (const v of o.status ?? [])
+          if (!STATUSES.has(v))
+            throw new KlingValidationError(
+              'status',
+              `--status must be one of ${[...STATUSES].join(', ')}, got ${JSON.stringify(v)}`
+            );
+        for (const v of o.productType ?? [])
+          if (!PRODUCT_TYPES.has(v))
+            throw new KlingValidationError(
+              'productType',
+              `--product-type must be one of ${[...PRODUCT_TYPES].join(', ')}, got ${JSON.stringify(v)}`
+            );
         const page = await makeClient(g).tasks.list({
           cursor: o.cursor,
           status: o.status as TaskStatus[] | undefined,
