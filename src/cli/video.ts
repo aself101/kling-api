@@ -1,0 +1,135 @@
+/** `kling video …` (spec D15; flags mirror §6.1 in kebab-case). */
+import type { Command } from 'commander';
+import type { AudioMode, MotionControlParams, OmniVideoParams, Resolution } from '../codecs/params.js';
+import { DEFAULT_MOTION_CONTROL_MODEL, DEFAULT_OMNI_VIDEO_MODEL, DEFAULT_VIDEO_MODEL } from '../config/models.js';
+import { collect, elementArgs, finishCreate, globalsOf, int, makeClient, mediaArg, type CreateOptions } from './shared.js';
+
+function createFlags(cmd: Command): Command {
+  return cmd
+    .option('-w, --wait', 'poll until the task finishes (default: submit and print the id)')
+    .option('--no-download', 'with --wait, do not save the outputs')
+    .option('--with-watermark', 'with --wait, also save the watermarked variants')
+    .option('--callback-url <url>', 'vendor callback (see `parseCallback`)')
+    .option('--external-task-id <id>', 'your own id (default: a generated UUID — the recovery key)');
+}
+
+const common = (o: Record<string, unknown>): CreateOptions => ({
+  wait: o.wait as boolean | undefined,
+  download: o.download as boolean | undefined,
+  withWatermark: o.withWatermark as boolean | undefined,
+  callbackUrl: o.callbackUrl as string | undefined,
+  externalTaskId: o.externalTaskId as string | undefined,
+});
+
+export function registerVideo(program: Command): void {
+  const video = program.command('video').description('video generation on the new API standard');
+
+  createFlags(
+    video
+      .command('t2v')
+      .description('text to video')
+      .requiredOption('-p, --prompt <text>', 'prompt (≤ 3072 chars on 3.0-era models, ≤ 2500 on 2.x)')
+      .option('-m, --model <id>', 'kling-3.0-turbo | kling-3.0 | kling-2.6 | kling-2.5-turbo', DEFAULT_VIDEO_MODEL)
+      .option('-r, --resolution <res>', '720p | 1080p | 4k (3.0 only)')
+      .option('-a, --aspect-ratio <ratio>', '16:9 | 9:16 | 1:1')
+      .option('-d, --duration <seconds>', '3–15 (3.0-era) | 5, 10 (2.x)', int('duration'))
+      .option('--audio <mode>', 'native | off (not on kling-3.0-turbo: always on)')
+      .option('--multi-shot', 'settings.multi_shot = true (kling-3.0)')
+      .option('--no-multi-shot', 'settings.multi_shot = false (kling-3.0)')
+  ).action(async (o, cmd: Command) => {
+    const g = globalsOf(cmd);
+    const client = makeClient(g);
+    const handle = await client.video.textToVideo({
+      model: o.model, prompt: o.prompt, resolution: o.resolution, aspectRatio: o.aspectRatio, duration: o.duration, audio: o.audio,
+      multiShot: o.multiShot === true || o.multiShot === false ? o.multiShot : undefined,
+      callbackUrl: o.callbackUrl, externalTaskId: o.externalTaskId,
+    });
+    await finishCreate(client, handle, g, common(o));
+  });
+
+  createFlags(
+    video
+      .command('i2v')
+      .description('image to video (first frame, optional last frame)')
+      .requiredOption('-p, --prompt <text>', 'prompt')
+      .requiredOption('--first-frame <file|url>', 'first frame image')
+      .option('--last-frame <file|url>', 'last frame image (not on kling-3.0-turbo; 1080p only on 2.x)')
+      .option('-m, --model <id>', 'kling-3.0-turbo | kling-3.0 | kling-2.6 | kling-2.5-turbo', DEFAULT_VIDEO_MODEL)
+      .option('-r, --resolution <res>', '720p | 1080p | 4k (3.0 only)')
+      .option('-d, --duration <seconds>', '3–15 (3.0-era) | 5, 10 (2.x)', int('duration'))
+      .option('--audio <mode>', 'native | off')
+      .option('--multi-shot', 'settings.multi_shot = true (kling-3.0)')
+      .option('--no-multi-shot', 'settings.multi_shot = false (kling-3.0)')
+      .option('--element <id[:alias]>', 'element reference, repeatable (kling-3.0, ≤ 3)', collect)
+      .option('--voice <id[:alias]>', 'voice reference, repeatable (kling-2.6, ≤ 2)', collect)
+  ).action(async (o, cmd: Command) => {
+    const g = globalsOf(cmd);
+    const client = makeClient(g);
+    const handle = await client.video.imageToVideo({
+      model: o.model, prompt: o.prompt, firstFrame: mediaArg(o.firstFrame), lastFrame: o.lastFrame ? mediaArg(o.lastFrame) : undefined,
+      resolution: o.resolution, duration: o.duration, audio: o.audio,
+      multiShot: o.multiShot === true || o.multiShot === false ? o.multiShot : undefined,
+      elements: elementArgs(o.element),
+      voices: o.voice ? (o.voice as string[]).map((v) => { const [voiceId, id] = v.split(':', 2); return id ? { voiceId, id } : { voiceId }; }) : undefined,
+      callbackUrl: o.callbackUrl, externalTaskId: o.externalTaskId,
+    });
+    await finishCreate(client, handle, g, common(o));
+  });
+
+  createFlags(
+    video
+      .command('omni')
+      .description('omni video: frames, reference images, a reference video, elements')
+      .requiredOption('-p, --prompt <text>', 'prompt (@image_1, @video_1, @element_1 …)')
+      .option('-m, --model <id>', 'kling-3.0-omni | kling-o1', DEFAULT_OMNI_VIDEO_MODEL)
+      .option('--first-frame <file|url>', 'first frame (auto id image_1)')
+      .option('--last-frame <file|url>', 'last frame')
+      .option('--refer-image <file|url[:alias]>', 'reference image, repeatable', collect)
+      .option('--feature-video <url>', 'reference video for motion/shots (URL only; forces audio off)')
+      .option('--base-video <url>', 'video to edit (URL only; no frames, no multi-shot, audio ≠ native)')
+      .option('--element <id[:alias]>', 'element reference, repeatable', collect)
+      .option('-r, --resolution <res>', '720p | 1080p | 4k (3.0-omni)')
+      .option('-a, --aspect-ratio <ratio>', '16:9 | 9:16 | 1:1 (needed without a first frame / reference video)')
+      .option('-d, --duration <seconds>', '3–15 (3.0-omni) | 3–10 (o1)', int('duration'))
+      .option('--audio <mode>', 'native | original | off')
+      .option('--multi-shot', 'settings.multi_shot = true (3.0-omni)')
+      .option('--no-multi-shot', 'settings.multi_shot = false (3.0-omni)')
+  ).action(async (o, cmd: Command) => {
+    const g = globalsOf(cmd);
+    const client = makeClient(g);
+    const params: OmniVideoParams = {
+      model: o.model, prompt: o.prompt,
+      firstFrame: o.firstFrame ? mediaArg(o.firstFrame) : undefined, lastFrame: o.lastFrame ? mediaArg(o.lastFrame) : undefined,
+      referImages: o.referImage ? (o.referImage as string[]).map((v) => { const m = /^(.*?)(?::([A-Za-z0-9_-]+))?$/.exec(v)!; return { source: mediaArg(m[1]), ...(m[2] ? { id: m[2] } : {}) }; }) : undefined,
+      featureVideo: o.featureVideo ? { url: o.featureVideo } : undefined, baseVideo: o.baseVideo ? { url: o.baseVideo } : undefined,
+      elements: elementArgs(o.element),
+      resolution: o.resolution as Resolution | undefined, aspectRatio: o.aspectRatio, duration: o.duration, audio: o.audio as AudioMode | undefined,
+      multiShot: o.multiShot === true || o.multiShot === false ? o.multiShot : undefined,
+      callbackUrl: o.callbackUrl, externalTaskId: o.externalTaskId,
+    };
+    await finishCreate(client, await client.video.omni(params), g, common(o));
+  });
+
+  createFlags(
+    video
+      .command('motion-control')
+      .description('animate a character image with the motion of a reference video')
+      .requiredOption('--image <file|url>', 'appearance reference image')
+      .requiredOption('--video <url>', 'motion reference video (URL only; ≤ 10 s with image orientation, ≤ 30 s with video)')
+      .requiredOption('--character-orientation <image|video>', 'follow the image or the video')
+      .option('-m, --model <id>', 'kling-3.0 | kling-2.6', DEFAULT_MOTION_CONTROL_MODEL)
+      .option('-p, --prompt <text>', 'prompt')
+      .option('--element <id[:alias]>', 'one element (kling-3.0)')
+      .option('--audio <mode>', 'original | off')
+      .option('-r, --resolution <res>', '720p | 1080p')
+  ).action(async (o, cmd: Command) => {
+    const g = globalsOf(cmd);
+    const client = makeClient(g);
+    const params: MotionControlParams = {
+      model: o.model, prompt: o.prompt, image: mediaArg(o.image), video: o.video, characterOrientation: o.characterOrientation,
+      element: o.element ? elementArgs([o.element])![0] : undefined, audio: o.audio, resolution: o.resolution,
+      callbackUrl: o.callbackUrl, externalTaskId: o.externalTaskId,
+    };
+    await finishCreate(client, await client.video.motionControl(params), g, common(o));
+  });
+}
