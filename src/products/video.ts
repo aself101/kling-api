@@ -9,31 +9,22 @@
  * before `createHandle` — `products/tasks.ts` never sees media (run #3 architect F-5).
  * Import graph (§5): `http/*`, `codecs/*`, `config/*`, `media/*`, `products/tasks`.
  */
-import { createHash } from 'node:crypto';
 import { buildImageToVideo, buildMotionControl, buildOmniVideo, buildTextToVideo, parseCreate, type NewStandardBody } from '../codecs/new-standard.js';
 import type { ImageToVideoParams, MediaSource, MotionControlParams, OmniVideoParams, TextToVideoParams } from '../codecs/params.js';
 import type { Product, TaskHandle } from '../codecs/task.js';
 import { DEFAULT_MOTION_CONTROL_MODEL, DEFAULT_OMNI_VIDEO_MODEL, DEFAULT_VIDEO_MODEL } from '../config/models.js';
 import { resolveVideoCaps, type ValidationPolicy } from '../config/validators/helpers.js';
 import { validateImageToVideo, validateMotionControl, validateOmniVideo, validateTextToVideo } from '../config/validators/video.js';
-import type { HttpCore, KlingConfig, Logger } from '../http/core.js';
+import type { HttpCore } from '../http/core.js';
 import { MediaBudget, resolveMediaSource, type ResolvedMedia } from '../media/source.js';
+import { createTimeoutMs, recordOf, redactMedia, type ProductApiConfig } from './shared.js';
 import { createHandle, resolveExternalId } from './tasks.js';
-
-export interface VideoApiConfig {
-  logger: Logger;
-  unknownModels: NonNullable<KlingConfig['unknownModels']>;
-  capabilityValidation: NonNullable<KlingConfig['capabilityValidation']>;
-}
-
-/** Keys that never belong in the handle's `request` record. */
-const NON_RECORD_KEYS: ReadonlySet<string> = new Set(['signal']);
 
 export class VideoApi {
   readonly #core: HttpCore;
-  readonly #config: VideoApiConfig;
+  readonly #config: ProductApiConfig;
 
-  constructor(core: HttpCore, config: VideoApiConfig) {
+  constructor(core: HttpCore, config: ProductApiConfig) {
     this.#core = core;
     this.#config = config;
   }
@@ -145,43 +136,7 @@ export class VideoApi {
   }
 }
 
-/**
- * A create's per-attempt deadline grows with the body (spec D11): a 20 MB Base64 frame
- * cannot be written in the 30 s a JSON-only create gets. `max(configured, 30 s + 4 s per MB)`
- * — 250 000 bytes per second of allowance.
- */
-export function createTimeoutMs(configuredMs: number, bodyBytes: number): number {
-  return Math.max(configuredMs, 30_000 + Math.round(bodyBytes / 250));
-}
-
 /** The vendor takes a URL or a Base64 string in the same `url` field ("URL or Base64"). */
 function asUrlField(media: ResolvedMedia): string {
   return 'url' in media ? media.url : media.base64;
-}
-
-/**
- * What the handle's `request` (and the saver's sidecar, D4) records for a media input:
- * a URL is kept as-is — it is what the vendor was told and is not secret; inline data is
- * reduced to `{ kind, bytes, sha256 }` so a 20 MB frame does not become a 27 MB sidecar
- * (run #3 architect F-5).
- */
-export function redactMedia(source: MediaSource, resolved: ResolvedMedia): Record<string, unknown> {
-  if ('url' in resolved) return { kind: 'url', url: resolved.url };
-  const bytes = Buffer.from(resolved.base64, 'base64');
-  const origin = typeof source === 'string' ? 'base64' : source instanceof Uint8Array ? 'buffer' : 'path' in source ? 'path' : 'base64';
-  return { kind: origin, bytes: bytes.byteLength, sha256: createHash('sha256').update(bytes).digest('hex') };
-}
-
-/**
- * The params as recorded on the handle (and later in the saver's sidecar, D4): `signal`
- * dropped, `undefined` dropped, `externalTaskId` dropped (the resolved value is on the
- * handle). Callers pass media fields already through `redactMedia`.
- */
-export function recordOf(params: Record<string, unknown>): Record<string, unknown> {
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(params)) {
-    if (NON_RECORD_KEYS.has(k) || k === 'externalTaskId' || v === undefined) continue;
-    out[k] = v;
-  }
-  return out;
 }

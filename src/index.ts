@@ -61,7 +61,7 @@ export type {
   WaitOptions,
 } from './codecs/task.js';
 export { BASE_URL, ERROR_CODES, VENDOR_HTTP_STATUS, type VendorErrorCode } from './config/constants.js';
-export { DEFAULT_MOTION_CONTROL_MODEL, DEFAULT_OMNI_VIDEO_MODEL, DEFAULT_VIDEO_MODEL, IMAGE_MODELS, VIDEO_MODELS, type ImageModelCaps, type VideoModelCaps } from './config/models.js';
+export { DEFAULT_IMAGE_MODEL, DEFAULT_MOTION_CONTROL_MODEL, DEFAULT_OMNI_IMAGE_MODEL, DEFAULT_OMNI_VIDEO_MODEL, DEFAULT_VIDEO_MODEL, MULTI_IMAGE_MODEL, IMAGE_MODELS, VIDEO_MODELS, type ImageModelCaps, type VideoModelCaps } from './config/models.js';
 export type {
   AspectRatio,
   AudioMode,
@@ -74,7 +74,13 @@ export type {
   MediaSource,
   Resolution,
   ElementKind,
+  ImageAspectRatio,
+  ImageGenerateParams,
   ImageToVideoParams,
+  MultiImageToImageParams,
+  OmniImageParams,
+  OutpaintParams,
+  SubjectCompletionParams,
   MotionControlParams,
   OmniElementRef,
   OmniVideoParams,
@@ -83,7 +89,11 @@ export type {
 } from './codecs/params.js';
 export { TasksApi, LEGACY_PRODUCT_PATHS, standardOf, type GetOptions, type ListOptions, type ProductType } from './products/tasks.js';
 export type { CursorPage, NewStandardBody } from './codecs/new-standard.js';
-export { VideoApi, type VideoApiConfig } from './products/video.js';
+export type { LegacyBody } from './codecs/legacy.js';
+export { MODELED_LEGACY_FIELDS } from './config/constants.js';
+export { VideoApi } from './products/video.js';
+export { ImageApi } from './products/image.js';
+export { createTimeoutMs, recordOf, redactMedia, type ProductApiConfig } from './products/shared.js';
 export { MediaBudget, resolveMediaSource, sniffAudio, sniffImage, type ImageInfo, type MediaKind, type ResolvedMedia, type ResolveOptions } from './media/source.js';
 export { fetchToBuffer, type FetchToBufferOptions, type FetchedResource } from './media/download.js';
 export { save, extensionFor } from './handlers/saver.js';

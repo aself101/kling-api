@@ -12,6 +12,7 @@ import { HttpCore, type HttpCoreInternals, type KlingConfig, type Logger, silent
 import { KlingValidationError } from './http/errors.js';
 import { TasksApi } from './products/tasks.js';
 import { VideoApi } from './products/video.js';
+import { ImageApi } from './products/image.js';
 import { save as saveTask } from './handlers/saver.js';
 import type { SaveOptions, Task } from './codecs/task.js';
 
@@ -37,6 +38,8 @@ export class KlingClient {
   readonly tasks: TasksApi;
   /** Video generation on the new API standard (spec D6): `textToVideo`, `imageToVideo` (2a₃), `omni` / `motionControl` (2b). */
   readonly video: VideoApi;
+  /** Image generation on the legacy standard (spec D7): `generate`, `omni`, `multiImageToImage`, `outpaint`, `subjectCompletion`. */
+  readonly image: ImageApi;
 
   constructor(config: KlingConfig = {}, internals: HttpCoreInternals = {}) {
     const key = loadApiKey(config.apiKey);
@@ -62,11 +65,13 @@ export class KlingClient {
       apiKeySource: key.source,
     };
     this.tasks = new TasksApi(this.http, this.config.logger);
-    this.video = new VideoApi(this.http, {
+    const productConfig = {
       logger: this.config.logger,
       unknownModels: this.config.unknownModels,
       capabilityValidation: this.config.capabilityValidation,
-    });
+    };
+    this.video = new VideoApi(this.http, productConfig);
+    this.image = new ImageApi(this.http, productConfig);
   }
 
   /**

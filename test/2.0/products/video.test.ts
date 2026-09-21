@@ -2,7 +2,8 @@
 import { describe, expect, it } from 'vitest';
 import { HttpCore } from '../../../src/http/core.js';
 import { KlingAPIError, KlingValidationError } from '../../../src/http/errors.js';
-import { VideoApi, recordOf } from '../../../src/products/video.js';
+import { VideoApi } from '../../../src/products/video.js';
+import { recordOf } from '../../../src/products/shared.js';
 import { fixture } from '../codecs/fixtures.js';
 
 interface Call { url: URL; method: string; body?: unknown }
@@ -86,7 +87,7 @@ describe('video.textToVideo', () => {
 
 // ── imageToVideo (2a₃) ────────────────────────────────────────────────────────────────
 
-import { createTimeoutMs, redactMedia } from '../../../src/products/video.js';
+import { createTimeoutMs, redactMedia } from '../../../src/products/shared.js';
 import { createHash } from 'node:crypto';
 
 const FRAME_URL = 'https://p2-kling.klingai.com/kcdn/cdn-kcdn112452/kling-tob-release_note/image_25.png';
