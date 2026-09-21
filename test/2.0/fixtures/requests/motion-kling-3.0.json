@@ -1,0 +1,25 @@
+{
+  "contents": [
+    {
+      "type": "prompt",
+      "text": "The girl is wearing a loose gray T-shirt and denim shorts"
+    },
+    {
+      "type": "image",
+      "url": "https://p2-kling.klingai.com/kcdn/cdn-kcdn112452/kling-qa-test/35d77e27300cf5e8995704cd858d759c.png"
+    },
+    {
+      "type": "video",
+      "url": "https://v4-kling.kechuangai.com/kcdn/cdn-kcdn112452/kling-qa-test/dance_10s.mp4"
+    }
+  ],
+  "settings": {
+    "character_orientation": "video",
+    "resolution": "1080p",
+    "audio": "original"
+  },
+  "options": {
+    "callback_url": "https://xxx/callback",
+    "external_task_id": ""
+  }
+}

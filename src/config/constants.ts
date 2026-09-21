@@ -183,7 +183,7 @@ export const TIMESTAMP_SECONDS_CEILING = 1e11;
 // ============================================================================
 
 /** `settings` keys the builders write. An `extraSettings` key among these is rejected — the hatch cannot override a validated field. */
-export const MODELED_SETTINGS: ReadonlySet<string> = new Set(['resolution', 'aspect_ratio', 'duration', 'audio', 'multi_shot']);
+export const MODELED_SETTINGS: ReadonlySet<string> = new Set(['resolution', 'aspect_ratio', 'duration', 'audio', 'multi_shot', 'character_orientation']);
 /** `options` keys the builders write (App. B §2.0). */
 export const MODELED_OPTIONS: ReadonlySet<string> = new Set(['callback_url', 'external_task_id', 'watermark_info']);
 

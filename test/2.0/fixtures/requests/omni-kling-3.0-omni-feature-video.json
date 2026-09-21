@@ -1,0 +1,22 @@
+{
+  "contents": [
+    {
+      "type": "prompt",
+      "text": "Change the color of the parrot’s feathers to match the reference image. Keep all other elements of the video unchanged."
+    },
+    {
+      "type": "feature_video",
+      "url": "https://p2-kling.klingai.com/kcdn/cdn-kcdn112452/kling-tob-release_note/video_7.1.mp4",
+      "id": "video_1"
+    }
+  ],
+  "settings": {
+    "resolution": "4k",
+    "audio": "off",
+    "multi_shot": true
+  },
+  "options": {
+    "callback_url": "https://xxx/callback",
+    "external_task_id": ""
+  }
+}

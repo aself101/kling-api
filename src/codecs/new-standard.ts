@@ -11,7 +11,7 @@
  * Source: `docs/api/kling-3.0-turbo-t2v.md` Response Examples (fence lines 109, 172, 356);
  * the fixtures under `test/2.0/fixtures/new/` are those examples.
  */
-import type { CommonOptions, ImageToVideoParams, TextToVideoParams } from './params.js';
+import type { CommonOptions, ImageToVideoParams, MotionControlParams, OmniVideoParams, TextToVideoParams } from './params.js';
 import type {
   AudioOutput,
   BillingEntry,
@@ -323,4 +323,81 @@ export function warnUnresolvedReferences(prompt: string, ids: string[], warn?: (
     seen.add(name);
     warn(`prompt references @${name} but no contents[] entry has id "${name}"${ids.length > 0 ? ` (ids: ${ids.join(', ')})` : ''} — the vendor will not resolve it`);
   }
+}
+
+// ── omni-video and motion-control (2b) ──────────────────────────────────────────────
+
+/** Media the product module has already resolved for an omni create (URL or Base64 strings). */
+export interface ResolvedOmniMedia {
+  firstFrame?: string;
+  lastFrame?: string;
+  referImages?: string[];
+}
+
+/**
+ * `POST /omni-video/<model>` body (App. B §2.5, §2.7). Seven content types in the order
+ * prompt, first_frame, last_frame, refer_image*, feature_video | base_video, element*,
+ * then `extraContents`. Image ids follow the vendor's examples — `image_1`, `image_2`, …
+ * counted across frames and reference images in that order; the reference video is
+ * `video_1`; elements `element_n`. Explicit ids on referImages / videos / elements win.
+ * (The vendor's own examples do not hold one fixed content order, so the contract test
+ * compares `contents[]` as a set.)
+ */
+export function buildOmniVideo(params: OmniVideoParams, media: ResolvedOmniMedia, externalId: string | undefined, warn?: (m: string) => void): NewStandardBody {
+  const contents: Record<string, unknown>[] = [{ type: 'prompt', text: params.prompt }];
+  const ids: string[] = [];
+  let image = 0;
+  const push = (entry: Record<string, unknown>, id: string) => {
+    ids.push(id);
+    contents.push({ ...entry, id });
+  };
+  if (media.firstFrame !== undefined) push({ type: 'first_frame', url: media.firstFrame }, `image_${++image}`);
+  if (media.lastFrame !== undefined) push({ type: 'last_frame', url: media.lastFrame }, `image_${++image}`);
+  media.referImages?.forEach((url, i) => push({ type: 'refer_image', url }, params.referImages?.[i]?.id ?? `image_${++image}`));
+  if (params.featureVideo) push({ type: 'feature_video', url: params.featureVideo.url }, params.featureVideo.id ?? 'video_1');
+  if (params.baseVideo) push({ type: 'base_video', url: params.baseVideo.url }, params.baseVideo.id ?? 'video_1');
+  params.elements?.forEach((e, i) => push({ type: 'element', element_id: e.elementId }, e.id ?? `element_${i + 1}`));
+  if (params.extraContents) contents.push(...params.extraContents);
+  warnUnresolvedReferences(params.prompt, ids, warn);
+
+  const settings: Record<string, unknown> = {};
+  if (params.resolution !== undefined) settings.resolution = params.resolution;
+  if (params.aspectRatio !== undefined) settings.aspect_ratio = params.aspectRatio;
+  if (params.duration !== undefined) settings.duration = params.duration;
+  if (params.audio !== undefined) settings.audio = params.audio;
+  if (params.multiShot !== undefined) settings.multi_shot = params.multiShot;
+  if (params.extraSettings) Object.assign(settings, params.extraSettings);
+  const body: NewStandardBody = { contents };
+  if (Object.keys(settings).length > 0) body.settings = settings;
+  const options = buildOptions(params, externalId);
+  if (options) body.options = options;
+  return body;
+}
+
+/**
+ * `POST /motion-control/<model>` body (App. B §2.6, §2.10): `contents[]` prompt?, image,
+ * video, element?; `settings { character_orientation, audio?, resolution? }` — no
+ * duration, no aspect ratio, no multi_shot (the output follows the motion video).
+ */
+export function buildMotionControl(params: MotionControlParams, media: { image: string; video: string }, externalId: string | undefined, warn?: (m: string) => void): NewStandardBody {
+  const contents: Record<string, unknown>[] = [];
+  if (params.prompt !== undefined) contents.push({ type: 'prompt', text: params.prompt });
+  contents.push({ type: 'image', url: media.image }, { type: 'video', url: media.video });
+  const ids: string[] = [];
+  if (params.element) {
+    const id = params.element.id ?? 'element_1';
+    ids.push(id);
+    contents.push({ type: 'element', element_id: params.element.elementId, id });
+  }
+  if (params.extraContents) contents.push(...params.extraContents);
+  if (params.prompt !== undefined) warnUnresolvedReferences(params.prompt, ids, warn);
+
+  const settings: Record<string, unknown> = { character_orientation: params.characterOrientation };
+  if (params.audio !== undefined) settings.audio = params.audio;
+  if (params.resolution !== undefined) settings.resolution = params.resolution;
+  if (params.extraSettings) Object.assign(settings, params.extraSettings);
+  const body: NewStandardBody = { contents, settings };
+  const options = buildOptions(params, externalId);
+  if (options) body.options = options;
+  return body;
 }

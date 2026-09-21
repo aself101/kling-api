@@ -135,3 +135,106 @@ describe('buildImageToVideo — vendor Request Examples (V1 build half)', () => 
     expect(() => warnUnresolvedReferences('@x', [], undefined)).not.toThrow();
   });
 });
+
+// ── omni-video and motion-control (2b) ───────────────────────────────────────────────
+
+import { buildMotionControl, buildOmniVideo } from '../../../src/codecs/new-standard.js';
+import type { MotionControlParams, OmniVideoParams } from '../../../src/codecs/params.js';
+
+interface VendorContent { type: string; text?: string; url?: string; element_id?: string; id?: string }
+interface VendorOmniBody {
+  contents: VendorContent[];
+  settings?: Record<string, unknown>;
+  options?: { callback_url?: string; external_task_id?: string; watermark_info?: { enabled: boolean } };
+}
+
+const byTypeAndId = (a: VendorContent, b: VendorContent) => `${a.type}:${a.id ?? ''}`.localeCompare(`${b.type}:${b.id ?? ''}`);
+
+function omniParamsFrom(body: VendorOmniBody) {
+  const c = body.contents;
+  const p: OmniVideoParams = { prompt: c.find((x) => x.type === 'prompt')!.text! };
+  const media: { firstFrame?: string; lastFrame?: string; referImages?: string[] } = {};
+  const first = c.find((x) => x.type === 'first_frame');
+  const last = c.find((x) => x.type === 'last_frame');
+  if (first) { p.firstFrame = first.url!; media.firstFrame = first.url!; }
+  if (last) { p.lastFrame = last.url!; media.lastFrame = last.url!; }
+  const refs = c.filter((x) => x.type === 'refer_image');
+  if (refs.length) { p.referImages = refs.map((r) => ({ source: r.url!, id: r.id })); media.referImages = refs.map((r) => r.url!); }
+  const fv = c.find((x) => x.type === 'feature_video');
+  const bv = c.find((x) => x.type === 'base_video');
+  if (fv) p.featureVideo = { url: fv.url!, id: fv.id };
+  if (bv) p.baseVideo = { url: bv.url!, id: bv.id };
+  const els = c.filter((x) => x.type === 'element');
+  if (els.length) p.elements = els.map((e) => ({ elementId: e.element_id!, id: e.id }));
+  const s = body.settings ?? {};
+  if (s.resolution) p.resolution = s.resolution as OmniVideoParams['resolution'];
+  if (s.aspect_ratio) p.aspectRatio = s.aspect_ratio as OmniVideoParams['aspectRatio'];
+  if (s.duration !== undefined) p.duration = s.duration as number;
+  if (s.audio) p.audio = s.audio as OmniVideoParams['audio'];
+  if (s.multi_shot !== undefined) p.multiShot = s.multi_shot as boolean;
+  if (body.options?.callback_url) p.callbackUrl = body.options.callback_url;
+  if (body.options?.watermark_info) p.watermark = body.options.watermark_info.enabled;
+  return { params: p, media };
+}
+
+describe('buildOmniVideo — vendor Request Examples (V1 build half)', () => {
+  it.each(REQUEST_FIXTURES.filter((f) => f.startsWith('requests/omni-')))('%s round-trips (contents compared as a set — the vendor examples hold no fixed order)', (f) => {
+    const vendor = fixture(f) as VendorOmniBody;
+    const expected = structuredClone(vendor);
+    expected.options!.external_task_id = 'fixed-external-id';
+    const { params, media } = omniParamsFrom(vendor);
+    const warnings: string[] = [];
+    const built = buildOmniVideo(params, media, 'fixed-external-id', (m) => warnings.push(m));
+    expect([...built.contents!].sort(byTypeAndId as never)).toEqual([...expected.contents].sort(byTypeAndId));
+    expect(built.settings).toEqual(expected.settings);
+    expect(built.options).toEqual(expected.options);
+    expect(warnings).toEqual([]);
+  });
+
+  it('auto ids: image_n across first, last, refer images in order; video_1; element_n — explicit ids win', () => {
+    const body = buildOmniVideo(
+      { prompt: 'p', firstFrame: 'f', lastFrame: 'l', referImages: [{ source: 'r1' }, { source: 'r2', id: 'hat' }], featureVideo: { url: 'https://v/x.mp4' }, elements: [{ elementId: 'E' }] },
+      { firstFrame: 'https://a/f.png', lastFrame: 'https://a/l.png', referImages: ['https://a/r1.png', 'https://a/r2.png'] },
+      undefined
+    );
+    expect(body.contents!.map((c) => [c.type, c.id])).toEqual([
+      ['prompt', undefined],
+      ['first_frame', 'image_1'],
+      ['last_frame', 'image_2'],
+      ['refer_image', 'image_3'],
+      ['refer_image', 'hat'],
+      ['feature_video', 'video_1'],
+      ['element', 'element_1'],
+    ]);
+  });
+});
+
+describe('buildMotionControl — vendor Request Examples (V1 build half)', () => {
+  it.each(REQUEST_FIXTURES.filter((f) => f.startsWith('requests/motion-')))('%s round-trips', (f) => {
+    const vendor = fixture(f) as VendorOmniBody;
+    const expected = structuredClone(vendor);
+    expected.options!.external_task_id = 'fixed-external-id';
+    const c = vendor.contents;
+    const s = vendor.settings!;
+    const params: MotionControlParams = {
+      prompt: c.find((x) => x.type === 'prompt')?.text,
+      image: c.find((x) => x.type === 'image')!.url!,
+      video: c.find((x) => x.type === 'video')!.url!,
+      characterOrientation: s.character_orientation as 'image' | 'video',
+      audio: s.audio as 'original' | 'off' | undefined,
+      resolution: s.resolution as '720p' | '1080p' | undefined,
+      callbackUrl: vendor.options?.callback_url,
+      watermark: vendor.options?.watermark_info?.enabled,
+    };
+    expect(buildMotionControl(params, { image: params.image as string, video: params.video as string }, 'fixed-external-id')).toEqual(expected);
+  });
+
+  it('element and prompt are optional; settings always carries character_orientation; no duration/aspect_ratio', () => {
+    const body = buildMotionControl({ image: 'i', video: 'v', characterOrientation: 'image', element: { elementId: 'E' } }, { image: 'https://a/i.png', video: 'https://a/v.mp4' }, 'e');
+    expect(body).toEqual({
+      contents: [{ type: 'image', url: 'https://a/i.png' }, { type: 'video', url: 'https://a/v.mp4' }, { type: 'element', element_id: 'E', id: 'element_1' }],
+      settings: { character_orientation: 'image' },
+      options: { external_task_id: 'e' },
+    });
+  });
+});
