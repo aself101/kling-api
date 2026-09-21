@@ -183,8 +183,8 @@ export class KlingCodecError extends KlingError {
   /** JSON path of the offending field, e.g. `data.status`. */
   readonly path: string;
 
-  constructor(message: string, standard: Standard, path: string) {
-    super(message);
+  constructor(message: string, standard: Standard, path: string, options?: { cause?: unknown }) {
+    super(message, options);
     this.standard = standard;
     this.path = path;
   }

@@ -14,6 +14,7 @@ import { TasksApi } from './products/tasks.js';
 import { VideoApi } from './products/video.js';
 import { ImageApi } from './products/image.js';
 import { AudioApi, AvatarApi, ElementsApi, VoicesApi } from './products/resources.js';
+import { AccountApi } from './products/account.js';
 import { save as saveTask } from './handlers/saver.js';
 import type { SaveOptions, Task } from './codecs/task.js';
 
@@ -49,6 +50,8 @@ export class KlingClient {
   readonly avatar: AvatarApi;
   /** Text-to-speech — synchronous, returns `audio` outputs (spec D8). */
   readonly audio: AudioApi;
+  /** Resource packages and deduction ledgers (App. C §6): `usage`, `balanceLedger`, `packageLedger`. */
+  readonly account: AccountApi;
 
   constructor(config: KlingConfig = {}, internals: HttpCoreInternals = {}) {
     const key = loadApiKey(config.apiKey);
@@ -85,6 +88,7 @@ export class KlingClient {
     this.voices = new VoicesApi(this.http, productConfig);
     this.avatar = new AvatarApi(this.http, productConfig);
     this.audio = new AudioApi(this.http, productConfig);
+    this.account = new AccountApi(this.http, productConfig);
   }
 
   /**
