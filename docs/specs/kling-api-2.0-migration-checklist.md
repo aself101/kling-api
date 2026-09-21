@@ -68,24 +68,25 @@ Conventions: `[ ]` open · `[x]` done · `[-]` deliberately skipped (write why i
 
 ---
 
-## Phase 1a₂ — Transport core + client skeleton (additive) — budget ~265 src + ~260 test
+## Phase 1a₂ — Transport core + client skeleton (additive) — budget ~265 src + ~260 test — **actual 447 src + 357 test, two commits (`845f38c` core, `114a2bb` client + barrel)**
 
 `feat(http): fetch transport with deadline, retry policy, redirect handling; KlingClient skeleton`
 
 ### `http/core.ts` (D10, D11) (~220)
-- [ ] `HttpCore.request({ method, path, query?, body?, signal?, kind: 'read' | 'write', externalId?, timeoutMs? })`
-- [ ] `fetch` = `config.fetch ?? globalThis.fetch`; `Authorization: Bearer <apiKey>` and `Content-Type: application/json` on every request; base URL must start with `https://` (else `KlingValidationError`)
-- [ ] `redirect: 'manual'`; a 3xx → `KlingResponseError { location }`, never retried (test with a fake 302)
-- [ ] Deadline: one `AbortController` per attempt covering body write, headers and body read; default `timeout` 30 000 ms; **`timeoutMs` override per request** so products can scale it with body size (D11; the scaling itself is in 2a₃) — test with a fake fetch whose body stream stalls → `KlingTimeoutError { attempt, attempts, taskState }`
-- [ ] Caller `signal` is chained; caller abort surfaces as the caller's `AbortError`, not wrapped
-- [ ] Non-JSON body → `KlingResponseError` with first 200 bytes; JSON with `code !== 0` → `KlingAPIError`; fetch `TypeError` → `KlingNetworkError` with `taskState` from `cause.code`
-- [ ] **Retry (V11):** `kind: 'read'` retries on `KlingNetworkError`, `KlingTimeoutError`, HTTP 429/502/503/504 (except permanent `1102`/`1304`), transient business codes; backoff `baseDelayMs * 2^attempt` with `attempt` starting at 1 (default 1 000 ms → 2 s, 4 s; cap `maxDelayMs` 30 000; `maxAttempts` 3; worst case 96 s). `kind: 'write'` retries **only** on `KlingNetworkError` whose `cause.code ∈ {ENOTFOUND, ECONNREFUSED}`; never after any response; never on `ECONNRESET`/timeout — and the thrown error carries `externalId` and `taskState: 'may-exist'`
-- [ ] Tests: read `1303`→`200` = 2 calls, ≥ 2 s apart (fake timers); write `1303` = 1 call, `taskState 'not-created'`, `isRetryable() === false`; write `5002` = 1 call, `'may-exist'`; write `ECONNRESET` mid-body = 1 call, `KlingNetworkError` with `externalId`, `'may-exist'`; write `ECONNREFUSED` = retried; read `1102` under HTTP 429 = 1 call; read timeout on attempt 3 → `KlingTimeoutError { attempt: 3, attempts: 3 }`
+- [x] `HttpCore.request({ method, path, query?, body?, signal?, kind: 'read' | 'write', externalId?, timeoutMs? })`
+- [x] `fetch` = `config.fetch ?? globalThis.fetch`; `Authorization: Bearer <apiKey>` and `Content-Type: application/json` on every request; base URL must start with `https://` (else `KlingValidationError`)
+- [x] `redirect: 'manual'`; a 3xx → `KlingResponseError { location }`, never retried (test with a fake 302)
+- [x] Deadline: one `AbortController` per attempt covering body write, headers and body read; default `timeout` 30 000 ms; **`timeoutMs` override per request** so products can scale it with body size (D11; the scaling itself is in 2a₃) — tested with a fake fetch whose body stream stalls → `KlingTimeoutError { attempt, attempts, taskState: 'may-exist' }`
+- [x] Caller `signal` is chained; caller abort surfaces as the caller's `AbortError`, not wrapped
+- [x] Non-JSON body → `KlingResponseError` with first 200 bytes; JSON with `code !== 0` → `KlingAPIError`; fetch `TypeError` → `KlingNetworkError` with `taskState` from `cause.code`
+- [x] **Retry (V11):** `kind: 'read'` retries on `KlingNetworkError`, `KlingTimeoutError`, HTTP 429/502/503/504 (except permanent `1102`/`1304`), transient business codes; backoff `baseDelayMs * 2^attempt` with `attempt` starting at 1 (default 1 000 ms → 2 s, 4 s; cap `maxDelayMs` 30 000; `maxAttempts` 3; worst case 96 s). `kind: 'write'` retries **only** on `KlingNetworkError` whose `cause.code ∈ {ENOTFOUND, ECONNREFUSED, EAI_AGAIN}`; never after any response; never on `ECONNRESET`/timeout — and the thrown error carries `externalId` and `taskState: 'may-exist'`
+- [x] Tests: read `1303`→`200` = 2 calls, sleep 2 000 ms (injected sleep records the schedule); three transient → 2 000, 4 000; cap honoured; write `1303` = 1 call, `taskState 'not-created'`, `isRetryable() === false`; write `5002` = 1 call, `'may-exist'`; write `ECONNRESET` mid-body = 1 call, `KlingNetworkError` with `externalId`, `'may-exist'`; write `ECONNREFUSED` = retried; write timeout never retried; read `1102` under HTTP 429 = 1 call; non-JSON 502 retried, non-JSON 200 not; read timeout on attempt 3 → `KlingTimeoutError { attempt: 3, attempts: 3, taskState: 'n/a' }`
+- [x] **Key never serialisable:** `#apiKey`/`#fetchImpl`/`#sleep` are ECMAScript private fields; test asserts `JSON.stringify(core)` does not contain the key (it did, with TS `private` — caught by the test)
 
 ### `client.ts` + `index.ts` (skeleton) (~45)
-- [ ] `KlingConfig` per spec §6.4 (`apiKey?, baseUrl?, timeout?, retry?, fetch?, unknownModels?, capabilityValidation?, logger?`) + `RetryOptions`, `Logger` — defined in `http/core.ts`, re-exported from `index.ts`
-- [ ] `KlingClient` with config resolution and a `/** @internal */ http: HttpCore` member; no product namespaces yet
-- [ ] `src/index.ts` exports `KlingClient` and the error family; **not yet wired to `package.json#main`** (2a₀ does that)
+- [x] `KlingConfig` per spec §6.4 (`apiKey?, baseUrl?, timeout?, retry?, fetch?, unknownModels?, capabilityValidation?, logger?`) + `RetryOptions`, `Logger` — defined in `http/core.ts`, re-exported from `index.ts`
+- [x] `KlingClient` with config resolution and a `/** @internal */ http: HttpCore` member; no product namespaces yet
+- [x] `src/index.ts` exports `KlingClient` and the error family; **not yet wired to `package.json#main`** (2a₀ does that)
 
 ---
 
