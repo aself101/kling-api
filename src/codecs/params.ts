@@ -247,3 +247,75 @@ export interface OutpaintParams extends CommonOptions {
 export interface SubjectCompletionParams extends CommonOptions {
   frontalImage: MediaSource;
 }
+
+// ============================================================================
+// Resources (legacy standard) — spec §6.3; App. C §7.1, §7.2, §7.9, §7.10
+// ============================================================================
+
+/** Vendor tag ids for elements (`kling-omni-3.0-element-mgt.md`): o_101 Hottest … o_108 Others. */
+export type ElementTag = 'o_101' | 'o_102' | 'o_103' | 'o_104' | 'o_105' | 'o_106' | 'o_107' | 'o_108';
+
+export interface ElementCreateParams extends CommonOptions {
+  /** `element_name`, ≤ 20 characters. */
+  name: string;
+  /** `element_description`, ≤ 100 characters. */
+  description: string;
+  /** `image_refer` (multi-image element: frontal + 1–3 reference images) or `video_refer` (video character element: one 3–8 s 1080p clip). */
+  referenceType: 'image_refer' | 'video_refer';
+  /** Required for `image_refer`. ≤ 10 MB, ≥ 300 px, 1:2.5–2.5:1. */
+  frontalImage?: MediaSource;
+  /** 1–3 additional angles/close-ups; required for `image_refer`. */
+  referImages?: MediaSource[];
+  /** At most one; URL only (`.mp4/.mov`, 3–8 s, 1080p, 16:9 | 9:16, ≤ 200 MB — not checked client-side). Required for `video_refer`. */
+  referVideos?: (string | { url: string })[];
+  /** `element_voice_id` — bind an existing voice (character / humanoid image elements only). */
+  voiceId?: string;
+  /** `tag_list[].tag_id`. */
+  tags?: ElementTag[];
+}
+
+export interface ElementDeleteOptions {
+  /**
+   * The vendor documents two delete paths for one otherwise-identical surface:
+   * `/v1/general/delete-advanced-elements` (video element pages) and
+   * `/v1/general/delete-elements` (image element pages). Default `'video'`; whether the
+   * library behind them is shared is §11 Q7.
+   */
+  kind?: 'video' | 'image';
+  signal?: AbortSignal;
+}
+
+export interface VoiceCreateParams extends CommonOptions {
+  /** `voice_name`, ≤ 20 characters. */
+  name: string;
+  /** Exactly one of `voiceUrl` / `videoId`. `.mp3/.wav/.mp4/.mov`, one clean voice, 5–30 s; URL only. */
+  voiceUrl?: string;
+  /** A video generated with sound on 2.6, or through the Avatar / Lip-Sync APIs. */
+  videoId?: string;
+}
+
+export interface AvatarCreateParams extends CommonOptions {
+  /** `.jpg/.jpeg/.png`, ≤ 10 MB, ≥ 300 px, 1:2.5–2.5:1. */
+  image: MediaSource;
+  /** Exactly one of `audioId` / `soundFile`. A TTS / voice output ≤ 30 days old, 2–300 s. */
+  audioId?: string;
+  /** `.mp3/.wav/.m4a/.aac`, ≤ 5 MB, 2–300 s (duration not checked client-side). */
+  soundFile?: MediaSource;
+  /** ≤ 2500 — actions, emotions, camera moves. */
+  prompt?: string;
+  /** Default `std`. The one surviving use of `mode` in 2.0 (a legacy endpoint). */
+  mode?: 'std' | 'pro';
+}
+
+/** `POST /v1/audio/tts` is synchronous and has no `callback_url` / `external_task_id`; a lost response is unrecoverable (D8). */
+export interface TtsParams {
+  /** ≤ 1000 characters. */
+  text: string;
+  /** TTS has ITS OWN catalogue (e.g. `oversea_male1`, from the vendor's Voice Guide) — a `/v1/general/presets-voices` id returns `1201` [LIVE 2026-09-20]. */
+  voiceId: string;
+  /** The vendor marks it Required with a default of `zh`; the library requires it. */
+  voiceLanguage: 'zh' | 'en';
+  /** [0.8, 2.0], one decimal, default 1.0. */
+  voiceSpeed?: number;
+  signal?: AbortSignal;
+}

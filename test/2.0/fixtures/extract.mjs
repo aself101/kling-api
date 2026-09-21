@@ -64,6 +64,10 @@ const REQUEST_FIXTURES = [
   { out: 'requests/multi-image-to-image.json', doc: 'kling-image-2.1-multi-image-to-image.md', section: '## Create Task', request: true },
   { out: 'requests/outpaint.json', doc: 'kling-image-common-outpainting.md', section: '## Create Task', request: true },
   { out: 'requests/subject-completion.json', doc: 'kling-image-common-subject-completion.md', section: '## Create Task', request: true },
+  { out: 'requests/voice-create.json', doc: 'kling-omni-3.0-voice-mgt.md', section: '## Create Custom Voice', request: true },
+  { out: 'requests/voice-delete.json', doc: 'kling-omni-3.0-voice-mgt.md', section: '## Delete Custom Voice', request: true },
+  { out: 'requests/avatar-create.json', doc: 'kling-avatar.md', section: '## Create Task', request: true },
+  { out: 'requests/tts.json', doc: 'kling-text-to-speech.md', section: '## Create Task', request: true },
 ];
 
 /** @type {Array<{out: string, doc: string, section: string, subs?: Record<string, unknown>}>} */

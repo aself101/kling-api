@@ -13,6 +13,7 @@ import { KlingValidationError } from './http/errors.js';
 import { TasksApi } from './products/tasks.js';
 import { VideoApi } from './products/video.js';
 import { ImageApi } from './products/image.js';
+import { AudioApi, AvatarApi, ElementsApi, VoicesApi } from './products/resources.js';
 import { save as saveTask } from './handlers/saver.js';
 import type { SaveOptions, Task } from './codecs/task.js';
 
@@ -40,6 +41,14 @@ export class KlingClient {
   readonly video: VideoApi;
   /** Image generation on the legacy standard (spec D7): `generate`, `omni`, `multiImageToImage`, `outpaint`, `subjectCompletion`. */
   readonly image: ImageApi;
+  /** Element library (spec D8): `create`, `get`, `list`, `presets`, `delete(id, { kind })`. */
+  readonly elements: ElementsApi;
+  /** Voice library (spec D8): `create`, `get`, `list`, `presets`, `delete`. */
+  readonly voices: VoicesApi;
+  /** Avatar (talking-head) video from an image and a sound (spec D8). */
+  readonly avatar: AvatarApi;
+  /** Text-to-speech — synchronous, returns `audio` outputs (spec D8). */
+  readonly audio: AudioApi;
 
   constructor(config: KlingConfig = {}, internals: HttpCoreInternals = {}) {
     const key = loadApiKey(config.apiKey);
@@ -72,6 +81,10 @@ export class KlingClient {
     };
     this.video = new VideoApi(this.http, productConfig);
     this.image = new ImageApi(this.http, productConfig);
+    this.elements = new ElementsApi(this.http, productConfig);
+    this.voices = new VoicesApi(this.http, productConfig);
+    this.avatar = new AvatarApi(this.http, productConfig);
+    this.audio = new AudioApi(this.http, productConfig);
   }
 
   /**

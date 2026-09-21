@@ -18,12 +18,16 @@
  * `test/2.0/fixtures/legacy/` are those examples.
  */
 import type {
+  AvatarCreateParams,
   CommonOptions,
+  ElementCreateParams,
   ImageGenerateParams,
   MultiImageToImageParams,
   OmniImageParams,
   OutpaintParams,
   SubjectCompletionParams,
+  TtsParams,
+  VoiceCreateParams,
 } from './params.js';
 import type { AudioOutput, BillingEntry, ElementOutput, ImageOutput, Task, TaskOutput, VideoOutput, VoiceOutput } from './task.js';
 import {
@@ -335,4 +339,53 @@ export function buildOutpaint(params: OutpaintParams, image: string, externalId:
 /** `POST /v1/general/ai-multi-shot` (kling-image-common-subject-completion.md). */
 export function buildSubjectCompletion(params: SubjectCompletionParams, frontalImage: string, externalId: string | undefined): LegacyBody {
   return { element_frontal_image: frontalImage, ...commonFields(params, externalId) };
+}
+
+// ── resources (4a/4b) ─────────────────────────────────────────────────────────────────
+
+/** `POST /v1/general/advanced-custom-elements` (kling-omni-3.0-element-mgt.md; live-verified body shape, Phase 0). */
+export function buildElementCreate(
+  params: ElementCreateParams,
+  media: { frontalImage?: string; referImages?: string[]; referVideos?: string[] },
+  externalId: string | undefined
+): LegacyBody {
+  const body: LegacyBody = { element_name: params.name, element_description: params.description, reference_type: params.referenceType };
+  if (media.frontalImage !== undefined || media.referImages !== undefined) {
+    const list: LegacyBody = {};
+    if (media.frontalImage !== undefined) list.frontal_image = media.frontalImage;
+    if (media.referImages !== undefined) list.refer_images = media.referImages.map((image_url) => ({ image_url }));
+    body.element_image_list = list;
+  }
+  if (media.referVideos !== undefined) body.element_video_list = { refer_videos: media.referVideos.map((video_url) => ({ video_url })) };
+  if (params.voiceId !== undefined) body.element_voice_id = params.voiceId;
+  if (params.tags !== undefined) body.tag_list = params.tags.map((tag_id) => ({ tag_id }));
+  Object.assign(body, commonFields(params, externalId));
+  return body;
+}
+
+/** `POST /v1/general/custom-voices` (kling-omni-3.0-voice-mgt.md; live-verified, Phase 0). */
+export function buildVoiceCreate(params: VoiceCreateParams, externalId: string | undefined): LegacyBody {
+  const body: LegacyBody = { voice_name: params.name };
+  if (params.voiceUrl !== undefined) body.voice_url = params.voiceUrl;
+  if (params.videoId !== undefined) body.video_id = params.videoId;
+  Object.assign(body, commonFields(params, externalId));
+  return body;
+}
+
+/** `POST /v1/videos/avatar/image2video` (kling-avatar.md; live-verified with audio_id, Phase 0). */
+export function buildAvatarCreate(params: AvatarCreateParams, media: { image: string; soundFile?: string }, externalId: string | undefined): LegacyBody {
+  const body: LegacyBody = { image: media.image };
+  if (params.audioId !== undefined) body.audio_id = params.audioId;
+  if (media.soundFile !== undefined) body.sound_file = media.soundFile;
+  if (params.prompt !== undefined) body.prompt = params.prompt;
+  if (params.mode !== undefined) body.mode = params.mode;
+  Object.assign(body, commonFields(params, externalId));
+  return body;
+}
+
+/** `POST /v1/audio/tts` (kling-text-to-speech.md; live-verified, Phase 0). No callback / external id fields exist. */
+export function buildTts(params: TtsParams): LegacyBody {
+  const body: LegacyBody = { text: params.text, voice_id: params.voiceId, voice_language: params.voiceLanguage };
+  if (params.voiceSpeed !== undefined) body.voice_speed = params.voiceSpeed;
+  return body;
 }

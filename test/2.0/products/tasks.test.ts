@@ -203,7 +203,8 @@ describe('tasks.getByProduct / listByProduct / recover', () => {
     expect(calls[0].url.searchParams.get('pageSize')).toBe('10');
     expect(list[0]).toMatchObject({ product: 'voice', standard: 'legacy' });
     await expect(tasks.listByProduct('voice', { pageNum: 0 })).rejects.toThrow(/pageNum/);
-    await expect(tasks.listByProduct('voice', { pageSize: 501 })).rejects.toThrow(/pageSize/);
+    await expect(tasks.listByProduct('voice', { pageSize: 1001 })).rejects.toThrow(/pageSize must be an integer in 1–1000/);
+    await expect(tasks.listByProduct('element', { pageSize: 501 })).rejects.toThrow(/pageSize must be an integer in 1–500/);
     await expect(tasks.listByProduct('text-to-video' as never)).rejects.toThrow(/new-standard/);
     expect(calls).toHaveLength(1);
   });

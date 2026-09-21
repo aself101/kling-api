@@ -331,3 +331,48 @@ describe('legacy builders — vendor Request Examples (V1 build half)', () => {
     expect(buildImageGeneration({ prompt: 'p', extraSettings: { style_preset: 'anime' } }, 'kling-v3', undefined, undefined)).toEqual({ model_name: 'kling-v3', prompt: 'p', style_preset: 'anime' });
   });
 });
+
+// ── resources (4a/4b) ─────────────────────────────────────────────────────────────────
+
+import { buildAvatarCreate, buildElementCreate, buildTts, buildVoiceCreate } from '../../../src/codecs/legacy.js';
+
+describe('resource builders — vendor Request Examples and the live-verified Phase 0 shapes', () => {
+  it('voice create (kling-omni-3.0-voice-mgt.md) round-trips — the vendor sends video_id: "" beside voice_url', () => {
+    const v = fixture('requests/voice-create.json') as LegacyBody;
+    expect(buildVoiceCreate({ name: v.voice_name as string, voiceUrl: v.voice_url as string, videoId: v.video_id as string, callbackUrl: v.callback_url as string }, undefined)).toEqual(v);
+  });
+
+  it('avatar create (kling-avatar.md) round-trips', () => {
+    const v = fixture('requests/avatar-create.json') as LegacyBody;
+    const built = buildAvatarCreate({ image: v.image as string, soundFile: v.sound_file as string, prompt: v.prompt as string, mode: v.mode as 'std', callbackUrl: v.callback_url as string }, { image: v.image as string, soundFile: v.sound_file as string }, 'fixed-external-id');
+    expect(built).toEqual(withId(v));
+  });
+
+  it('tts (kling-text-to-speech.md) round-trips; no callback / external id fields exist', () => {
+    const v = fixture('requests/tts.json') as LegacyBody;
+    expect(buildTts({ text: v.text as string, voiceId: v.voice_id as string, voiceLanguage: v.voice_language as 'en', voiceSpeed: v.voice_speed as number })).toEqual(v);
+  });
+
+  it('element create — the docs page has no --data example; this is the body the Phase 0 probe sent live (image_refer), plus every optional field', () => {
+    const built = buildElementCreate(
+      { name: 'probe-woman', description: 'smiling woman, grey background', referenceType: 'image_refer', frontalImage: 'f', referImages: ['r1', 'r2'], voiceId: 'v-1', tags: ['o_102', 'o_101'] },
+      { frontalImage: 'https://a/f.png', referImages: ['https://a/r1.png', 'https://a/r2.png'] },
+      'e-1'
+    );
+    expect(built).toEqual({
+      element_name: 'probe-woman',
+      element_description: 'smiling woman, grey background',
+      reference_type: 'image_refer',
+      element_image_list: { frontal_image: 'https://a/f.png', refer_images: [{ image_url: 'https://a/r1.png' }, { image_url: 'https://a/r2.png' }] },
+      element_voice_id: 'v-1',
+      tag_list: [{ tag_id: 'o_102' }, { tag_id: 'o_101' }],
+      external_task_id: 'e-1',
+    });
+    expect(buildElementCreate({ name: 'n', description: 'd', referenceType: 'video_refer', referVideos: ['x'] }, { referVideos: ['https://a/v.mp4'] }, undefined)).toEqual({
+      element_name: 'n',
+      element_description: 'd',
+      reference_type: 'video_refer',
+      element_video_list: { refer_videos: [{ video_url: 'https://a/v.mp4' }] },
+    });
+  });
+});

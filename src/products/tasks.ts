@@ -192,7 +192,9 @@ export class TasksApi {
     if (standardOf(product) !== 'legacy') throw new KlingValidationError('product', `${product} is a new-standard product; use tasks.list()`);
     const { pageNum, pageSize } = options;
     if (pageNum !== undefined && (!Number.isInteger(pageNum) || pageNum < 1 || pageNum > 1000)) throw new KlingValidationError('pageNum', `pageNum must be an integer in 1–1000, got ${pageNum}`);
-    if (pageSize !== undefined && (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 500)) throw new KlingValidationError('pageSize', `pageSize must be an integer in 1–500, got ${pageSize}`);
+    // pageSize 1–500 everywhere except the voice endpoints, which document 1–1000 (App. C §7.10).
+    const maxPageSize = product === 'voice' ? 1000 : 500;
+    if (pageSize !== undefined && (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > maxPageSize)) throw new KlingValidationError('pageSize', `pageSize must be an integer in 1–${maxPageSize}, got ${pageSize}`);
     const res = await this.#core.request({ method: 'GET', path: LEGACY_PRODUCT_PATHS[product], query: { pageNum, pageSize }, kind: 'read', signal: options.signal });
     return legacy.parseList(res.envelope, this.#ctx(product));
   }

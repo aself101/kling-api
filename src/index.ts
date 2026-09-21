@@ -73,7 +73,11 @@ export type {
   KnownVideoModel,
   MediaSource,
   Resolution,
+  AvatarCreateParams,
+  ElementCreateParams,
+  ElementDeleteOptions,
   ElementKind,
+  ElementTag,
   ImageAspectRatio,
   ImageGenerateParams,
   ImageToVideoParams,
@@ -86,6 +90,7 @@ export type {
   OmniVideoParams,
   TextToVideoParams,
   VideoModel,
+  VoiceCreateParams,
 } from './codecs/params.js';
 export { TasksApi, LEGACY_PRODUCT_PATHS, standardOf, type GetOptions, type ListOptions, type ProductType } from './products/tasks.js';
 export type { CursorPage, NewStandardBody } from './codecs/new-standard.js';
@@ -93,6 +98,7 @@ export type { LegacyBody } from './codecs/legacy.js';
 export { MODELED_LEGACY_FIELDS } from './config/constants.js';
 export { VideoApi } from './products/video.js';
 export { ImageApi } from './products/image.js';
+export { AudioApi, AvatarApi, ElementsApi, VoicesApi, RESOURCE_PATHS, type DeleteResult } from './products/resources.js';
 export { createTimeoutMs, recordOf, redactMedia, type ProductApiConfig } from './products/shared.js';
 export { MediaBudget, resolveMediaSource, sniffAudio, sniffImage, type ImageInfo, type MediaKind, type ResolvedMedia, type ResolveOptions } from './media/source.js';
 export { fetchToBuffer, type FetchToBufferOptions, type FetchedResource } from './media/download.js';

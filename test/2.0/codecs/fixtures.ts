@@ -48,4 +48,8 @@ export const REQUEST_FIXTURES = [
   'requests/multi-image-to-image.json',
   'requests/outpaint.json',
   'requests/subject-completion.json',
+  'requests/voice-create.json',
+  'requests/voice-delete.json',
+  'requests/avatar-create.json',
+  'requests/tts.json',
 ] as const;
