@@ -315,12 +315,29 @@ export class KlingSaveError extends KlingError {
   readonly task: Task;
   readonly written: string[];
   readonly failedUrl: string;
+  /**
+   * Set when the failed write's temp file (`<file>.<pid>.part`) could not be removed either —
+   * the one case where a path on disk is named by neither `written` nor the target. Consumers
+   * that clean up from `written` must also remove `leftover.path` (ship run #6, code-auditor).
+   */
+  readonly leftover?: { path: string; cause: unknown };
 
-  constructor(task: Task, written: string[], failedUrl: string, cause: unknown) {
-    super(`save failed on ${failedUrl} after ${written.length} file(s) were written: ${cause instanceof Error ? cause.message : String(cause)}`, { cause });
+  constructor(
+    task: Task,
+    written: string[],
+    failedUrl: string,
+    cause: unknown,
+    leftover?: { path: string; cause: unknown }
+  ) {
+    const why = cause instanceof Error ? cause.message : String(cause);
+    const tail = leftover
+      ? ` (temp file ${leftover.path} could not be removed: ${leftover.cause instanceof Error ? leftover.cause.message : String(leftover.cause)})`
+      : '';
+    super(`save failed on ${failedUrl} after ${written.length} file(s) were written: ${why}${tail}`, { cause });
     this.task = task;
     this.written = written;
     this.failedUrl = failedUrl;
+    if (leftover) this.leftover = leftover;
   }
 }
 

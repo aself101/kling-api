@@ -25,7 +25,7 @@ import type {
   WaitOptions,
 } from '../codecs/task.js';
 import { DEFAULT_POLL_INTERVAL, DEFAULT_POLL_TIMEOUT, ERROR_CODES } from '../config/constants.js';
-import { poll } from '../handlers/poller.js';
+import { assertDeadlineMs, assertIntervalMs, poll } from '../handlers/poller.js';
 import type { HttpCore, Logger } from '../http/core.js';
 import {
   KlingAPIError,
@@ -423,8 +423,10 @@ export function createHandle(
 
   const wait = (options: WaitOptions = {}): Promise<Task> =>
     new Promise<Task>((resolve, reject) => {
-      const intervalMs = options.intervalMs ?? DEFAULT_POLL_INTERVAL;
-      const deadlineMs = options.deadlineMs ?? DEFAULT_POLL_TIMEOUT;
+      // Throwing here rejects the promise — a bad option surfaces as KlingValidationError, not
+      // as a 1 ms poll storm or an instant KlingPollTimeoutError (ship run #6).
+      const intervalMs = assertIntervalMs(options.intervalMs ?? DEFAULT_POLL_INTERVAL);
+      const deadlineMs = assertDeadlineMs(options.deadlineMs ?? DEFAULT_POLL_TIMEOUT);
       const started = Date.now();
       const cleanup = () => {
         clearTimeout(timer);

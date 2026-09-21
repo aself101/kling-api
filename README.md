@@ -108,6 +108,8 @@ interface TaskHandle {
 }
 ```
 
+`wait()` rejects with `KlingValidationError` before its first request if `intervalMs` is not a finite number > 0 or `deadlineMs` is not > 0 and either `Infinity` or ≤ 2 147 483 647 ms (`setTimeout`'s ceiling, ~24.8 days) — so an unset `Number(process.env.POLL_MS)` cannot turn into a 1 ms poll storm.
+
 and every query returns a **`Task`**:
 
 ```ts
@@ -303,7 +305,7 @@ Every error extends `KlingError` (`requestId` when a response was received):
 | `KlingValidationError` | a parameter failed a rule | `field` |
 | `KlingTaskFailedError` / `KlingPollTimeoutError` | `wait()` | `task`, `code` (always `null` today — neither standard puts a code on a failed record; read `task.message`) / `task` (the last state this handle polled, `null` if it never got a response), `elapsedMs`. `wait()` also rethrows read errors — see [How it fits together](#how-it-fits-together) |
 | `KlingTaskNotFoundError` | a single-task lookup the vendor cannot see | `product`, `id`, `byExternalId` |
-| `KlingNoOutputsError` / `KlingOutputsExpiredError` / `KlingSaveError` | `save()` | `task` / `task` / `task`, `written`, `failedUrl`, `cause`. `cause` is a `KlingDownloadError { url, reason: 'too-large' \| 'too-many-redirects' \| 'blocked-host' \| 'http' \| 'timeout' \| 'invalid-redirect', httpStatus }` when a download failed, or the Node fs error (`ENOSPC`, `EACCES`, …) when a write failed — then `failedUrl` is the file path. Check `cause instanceof KlingDownloadError` before reading `reason` |
+| `KlingNoOutputsError` / `KlingOutputsExpiredError` / `KlingSaveError` | `save()` | `task` / `task` / `task`, `written`, `failedUrl`, `cause`, `leftover?` (`{ path, cause }` — set only when the failed write's `<file>.<pid>.part` could not be removed either; remove it alongside `written` when cleaning up). `cause` is a `KlingDownloadError { url, reason: 'too-large' \| 'too-many-redirects' \| 'blocked-host' \| 'http' \| 'timeout' \| 'invalid-redirect', httpStatus }` when a download failed, or the Node fs error (`ENOSPC`, `EACCES`, …) when a write failed — then `failedUrl` is the file path. Check `cause instanceof KlingDownloadError` before reading `reason` |
 | `KlingBatchError` | a `tasks.get` chunk failed | `tasks`, `missing`, `unattempted`, `cause` |
 | `KlingWebhookError` | `parseCallback` with a secret | `reason: 'missing-headers' \| 'bad-signature' \| 'stale-timestamp'` |
 

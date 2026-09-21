@@ -16,7 +16,7 @@
  * fires at 15:00, not at the next tick after it.
  */
 import { DEFAULT_POLL_INTERVAL, DEFAULT_POLL_TIMEOUT } from '../config/constants.js';
-import { KlingPollTimeoutError } from '../http/errors.js';
+import { KlingPollTimeoutError, KlingValidationError } from '../http/errors.js';
 import type { Task } from '../codecs/task.js';
 
 export interface PollOptions<T> {
@@ -29,6 +29,33 @@ export interface PollOptions<T> {
   signal?: AbortSignal;
 }
 
+/** Largest delay `setTimeout` honours; above it Node warns and fires after 1 ms. */
+export const MAX_TIMER_MS = 2_147_483_647;
+
+/**
+ * A poll interval must be a finite number of milliseconds above zero. `NaN` (an unset
+ * `Number(process.env.X)`) and `0` both reach `setTimeout` as a 1 ms timer and poll the vendor
+ * at ~800 req/s until its 429 backoff bites (ship run #6, code-auditor probe).
+ */
+export function assertIntervalMs(value: number): number {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0)
+    throw new KlingValidationError('intervalMs', `intervalMs must be a finite number > 0, got ${String(value)}`);
+  return value;
+}
+
+/**
+ * A poll deadline must be above zero and either `Infinity` or within `setTimeout`'s range —
+ * `wait()` arms one raw timer for it, and a value past 2^31-1 ms (~24.8 days) fires at once.
+ */
+export function assertDeadlineMs(value: number): number {
+  if (typeof value !== 'number' || Number.isNaN(value) || value <= 0 || (value !== Infinity && value > MAX_TIMER_MS))
+    throw new KlingValidationError(
+      'deadlineMs',
+      `deadlineMs must be > 0 and either Infinity or <= ${MAX_TIMER_MS} ms, got ${String(value)}`
+    );
+  return value;
+}
+
 /**
  * Call `fn` every `intervalMs` until `until(value)` holds; the library's poller behind
  * `TaskHandle.wait()`. Rejects with the caller's abort reason, `KlingPollTimeoutError(last,
@@ -39,10 +66,13 @@ export async function poll<T extends Task>(
   options: PollOptions<T>
 ): Promise<T> {
   const { until, signal } = options;
-  const deadlineMs = options.deadlineMs ?? DEFAULT_POLL_TIMEOUT;
+  const deadlineMs = assertDeadlineMs(options.deadlineMs ?? DEFAULT_POLL_TIMEOUT);
   const configured = options.intervalMs;
+  // A constant interval is checked before the first call; a function's return, before each sleep.
   const interval: () => number =
-    typeof configured === 'function' ? configured : () => configured ?? DEFAULT_POLL_INTERVAL;
+    typeof configured === 'function'
+      ? () => assertIntervalMs(configured())
+      : ((fixed) => () => fixed)(assertIntervalMs(configured ?? DEFAULT_POLL_INTERVAL));
   const started = Date.now();
   let last: T | null = null;
 

@@ -1,8 +1,8 @@
 /** Library poller (spec D13; checklist 2a₁). Fake timers drive interval, deadline and abort. */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Task } from '../../../src/codecs/task.js';
-import { poll, sleep } from '../../../src/handlers/poller.js';
-import { KlingPollTimeoutError } from '../../../src/http/errors.js';
+import { MAX_TIMER_MS, poll, sleep } from '../../../src/handlers/poller.js';
+import { KlingPollTimeoutError, KlingValidationError } from '../../../src/http/errors.js';
 
 const task = (status: Task['status']): Task => ({ id: 't', standard: 'new', status, outputs: [], raw: {} });
 const terminal = (t: Task) => t.status === 'succeeded' || t.status === 'failed';
@@ -125,5 +125,43 @@ describe('poll — deadline boundary (ship run #4)', () => {
     // would pass at 0 and `sleep(0)` would arm a second timer before the post-sleep check threw.
     expect(timersArmed).toHaveBeenCalledTimes(1);
     timersArmed.mockRestore();
+  });
+});
+
+describe('poll — ship run #6 option validation (code-auditor probe)', () => {
+  const never = vi.fn(async () => task('processing'));
+
+  it.each([NaN, 0, -1, Infinity])('intervalMs %s is KlingValidationError(intervalMs) before the first call', async (intervalMs) => {
+    never.mockClear();
+    const err = await poll(never, { until: terminal, intervalMs }).catch((e) => e as KlingValidationError);
+    expect(err).toBeInstanceOf(KlingValidationError);
+    expect(err.field).toBe('intervalMs');
+    expect(never).not.toHaveBeenCalled();
+  });
+
+  it('a function interval that returns NaN is rejected at the first sleep, not slept for 1 ms', async () => {
+    const seq = [task('processing'), task('processing')];
+    const fn = vi.fn(async () => seq.shift() ?? task('processing'));
+    const p = poll(fn, { until: terminal, intervalMs: () => NaN });
+    const rejects = expect(p).rejects.toMatchObject({ field: 'intervalMs' });
+    await advance(0);
+    await rejects;
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([NaN, 0, -5, MAX_TIMER_MS + 1])('deadlineMs %s is KlingValidationError(deadlineMs)', async (deadlineMs) => {
+    const err = await poll(never, { until: terminal, intervalMs: 1000, deadlineMs }).catch((e) => e as KlingValidationError);
+    expect(err).toBeInstanceOf(KlingValidationError);
+    expect(err.field).toBe('deadlineMs');
+  });
+
+  it('control: Infinity and MAX_TIMER_MS deadlines are accepted (the check can pass)', async () => {
+    const seq = [task('processing'), task('succeeded')];
+    const fn = vi.fn(async () => seq.shift() ?? task('succeeded'));
+    const p = poll(fn, { until: terminal, intervalMs: 1000, deadlineMs: Infinity });
+    await advance(1000);
+    await expect(p).resolves.toMatchObject({ status: 'succeeded' });
+    const seq2 = [task('succeeded')];
+    await expect(poll(async () => seq2[0]!, { until: terminal, intervalMs: 1, deadlineMs: MAX_TIMER_MS })).resolves.toMatchObject({ status: 'succeeded' });
   });
 });

@@ -132,12 +132,15 @@ function writeTo(file: string, data: Buffer | string, task: Task, written: strin
     writeFileSync(tmp, data);
     renameSync(tmp, file);
   } catch (cause) {
+    // The write error is the one to throw; a cleanup failure (EACCES on the directory, EBUSY
+    // on Windows) rides along as `leftover` so the orphaned temp file is named somewhere.
+    let leftover: { path: string; cause: unknown } | undefined;
     try {
       rmSync(tmp, { force: true });
-    } catch {
-      // AUDIT-OK(no_empty_catch): best-effort cleanup of the temp file; the write error below is the one to report.
+    } catch (rmCause) {
+      leftover = { path: tmp, cause: rmCause };
     }
-    throw new KlingSaveError(task, written, file, cause);
+    throw new KlingSaveError(task, written, file, cause, leftover);
   }
 }
 

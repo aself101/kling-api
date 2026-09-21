@@ -407,3 +407,33 @@ describe('TaskHandle — ship run #4 regressions', () => {
     expect(err.elapsedMs).toBeGreaterThanOrEqual(2500);
   });
 });
+
+describe('TaskHandle — ship run #6 wait() option validation', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('wait({ intervalMs: NaN }) rejects with KlingValidationError and never polls (no 1 ms storm)', async () => {
+    const { core, logger, calls } = rig(() => ok([newRec('v1', 'processing')]));
+    const h = createHandle(core, logger, 'text-to-video', 'v1', {});
+    const err = await h.wait({ intervalMs: Number('') }).catch((e) => e as KlingValidationError);
+    expect(err).toBeInstanceOf(KlingValidationError);
+    expect(err.field).toBe('intervalMs');
+    await vi.advanceTimersByTimeAsync(200);
+    expect(calls).toHaveLength(0);
+  });
+
+  it('wait({ deadlineMs: 30 days }) rejects with KlingValidationError instead of timing out in 1 ms', async () => {
+    const { core, logger } = rig(() => ok([newRec('v1', 'processing')]));
+    const h = createHandle(core, logger, 'text-to-video', 'v1', {});
+    const err = await h.wait({ intervalMs: 1000, deadlineMs: 30 * 86_400_000 }).catch((e) => e as KlingValidationError);
+    expect(err).toBeInstanceOf(KlingValidationError);
+    expect(err.field).toBe('deadlineMs');
+    // control: Infinity disables the deadline and the handle still resolves.
+    const statuses = ['processing', 'succeeded'];
+    const r2 = rig(() => ok([newRec('v2', statuses.length > 1 ? statuses.shift()! : statuses[0])]));
+    const h2 = createHandle(r2.core, r2.logger, 'text-to-video', 'v2', {});
+    const p = h2.wait({ intervalMs: 1000, deadlineMs: Infinity });
+    await vi.advanceTimersByTimeAsync(2000);
+    await expect(p).resolves.toMatchObject({ status: 'succeeded' });
+  });
+});
