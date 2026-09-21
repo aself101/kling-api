@@ -10,7 +10,7 @@
  * Imports: `codecs/task` (types) and `config/constants` (the vendor table). No HTTP.
  */
 
-import type { Standard, Task, TaskState } from '../codecs/task.js';
+import type { Product, Standard, Task, TaskState } from '../codecs/task.js';
 import {
   PERMANENT_429_CODES,
   TRANSIENT_ERROR_CODES,
@@ -217,6 +217,28 @@ export class KlingTaskFailedError extends KlingError {
 }
 
 /** `wait()` hit its deadline. `task` is the last state seen, or `null` if no poll completed. */
+/**
+ * `tasks.getByProduct` / `TaskHandle.get()` could not see the task. Not in the spec D10
+ * family — added at 2a₁ because the unified `GET /tasks` answers `200 data: []` for an
+ * unknown id, so a new-standard lookup has no vendor error to surface; the legacy path
+ * reaches the same class when the vendor answers not-found (live: HTTP 400 / `1201`
+ * "Task not found by id/external id", not the table's `1203`). `null` from `tasks.recover` is
+ * the soft form of the same fact; `get()` is the hard one because a handle's caller asked
+ * for exactly one task. Means "not visible to this account", not "never created".
+ */
+export class KlingTaskNotFoundError extends KlingError {
+  readonly product: Product;
+  readonly id: string;
+  readonly byExternalId: boolean;
+
+  constructor(product: Product, id: string, byExternalId = false, options?: { requestId?: string; cause?: unknown }) {
+    super(`task ${byExternalId ? 'with external id ' : ''}${id} (${product}) is not visible to this account`, options);
+    this.product = product;
+    this.id = id;
+    this.byExternalId = byExternalId;
+  }
+}
+
 export class KlingPollTimeoutError extends KlingError {
   readonly task: Task | null;
   readonly elapsedMs: number;
