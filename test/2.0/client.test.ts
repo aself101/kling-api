@@ -56,7 +56,7 @@ describe('public barrel (src/index.ts)', () => {
       'KlingClient', 'HttpCore', 'KlingError', 'KlingAPIError', 'KlingNetworkError', 'KlingTimeoutError',
       'KlingResponseError', 'KlingCodecError', 'KlingValidationError', 'KlingTaskFailedError', 'KlingPollTimeoutError',
       'KlingNoOutputsError', 'KlingOutputsExpiredError', 'KlingBatchError', 'KlingDownloadError', 'KlingWebhookError',
-      'ERROR_CODES_V2', 'BASE_URL', 'loadApiKey',
+      'ERROR_CODES', 'BASE_URL', 'loadApiKey',
     ]) {
       expect(pkg, name).toHaveProperty(name);
     }

@@ -1,11 +1,11 @@
 /**
- * ERROR_CODES_V2 must be a faithful transcription of the vendor's error table.
+ * ERROR_CODES must be a faithful transcription of the vendor's error table.
  * The oracle is the snapshot itself: docs/api/kling-get-started-error-codes.md.
  */
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
-  ERROR_CODES_V2,
+  ERROR_CODES,
   PERMANENT_429_CODES,
   TRANSIENT_ERROR_CODES,
   VENDOR_HTTP_STATUS,
@@ -24,15 +24,15 @@ function vendorRows(): Map<number, number> {
   return rows;
 }
 
-describe('ERROR_CODES_V2 — vendor table transcription', () => {
+describe('ERROR_CODES — vendor table transcription', () => {
   const rows = vendorRows();
 
   it('the snapshot has 22 rows (21 codes + success) — the count the spec states', () => {
     expect(rows.size).toBe(22);
   });
 
-  it('every ERROR_CODES_V2 value is a vendor code, and every vendor code has a name', () => {
-    const ours = new Set(Object.values(ERROR_CODES_V2));
+  it('every ERROR_CODES value is a vendor code, and every vendor code has a name', () => {
+    const ours = new Set(Object.values(ERROR_CODES));
     expect([...ours].sort()).toEqual([...rows.keys()].sort());
   });
 
@@ -44,7 +44,7 @@ describe('ERROR_CODES_V2 — vendor table transcription', () => {
 
   it('the phantom 1.x code 1104 is not in the table', () => {
     expect(rows.has(1104)).toBe(false);
-    expect(Object.values(ERROR_CODES_V2)).not.toContain(1104);
+    expect(Object.values(ERROR_CODES)).not.toContain(1104);
   });
 
   it('control: a row parser that could not fail would be worthless — a made-up code is absent', () => {

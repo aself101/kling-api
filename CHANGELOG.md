@@ -17,9 +17,10 @@ static API Key the only credential for it; 1.x cannot generate video against the
 
 ### Changed
 - *(2.0.0, pending)* `TaskStatus` value `succeed` → `succeeded` (same type, different value — a semantics-without-signature change); every default model; a bare-string media argument is a URL or Base64, never a filesystem path.
+- *(2.0.0, pending)* `engines.node` `>=18` → `>=20` (native `fetch`; CI matrix is 20 and 22). Package entry points `dist/api.js` → `dist/index.js`; `bin.kling` → `dist/cli/index.js`.
 
 ### Removed
-- *(2.0.0, pending)* AccessKey/SecretKey JWT authentication; `extendVideo`; `multiImageToVideo`; the `./auth`, `./utils`, `./config`, `./types` subpath exports; semantic-release automation.
+- *(2.0.0, pending)* AccessKey/SecretKey JWT authentication; `extendVideo`; `multiImageToVideo`; the `./api`, `./auth`, `./utils`, `./config`, `./types` subpath exports (only `.` and `./package.json` remain); the `axios` and `jsonwebtoken` runtime dependencies; semantic-release automation.
 
 ## [1.0.0] - 2025-12-27
 

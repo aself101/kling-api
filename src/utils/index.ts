@@ -1,8 +1,9 @@
 /**
- * Utils Module
+ * Utils barrel — logger, security, file I/O (spec §5: `utils/*` are kept).
  *
- * Barrel export for all utility functions and types.
- * Maintains backwards compatibility with the original utils.ts exports.
+ * The 1.x media helpers moved to `docs/reference/1x-utils-media.ts` at 2a₀ as the port
+ * reference for 2c (`media/source.ts`, `media/download.ts`); they were built on the 1.x HTTP
+ * client, which 2.0 does not ship. `downloads.ts` and `polling.ts` were deleted at 2a₀.
  */
 
 // Constants
@@ -30,22 +31,3 @@ export {
   saveMetadata,
 } from './file-io.js';
 
-// Media processing
-export {
-  isHttpUrl,
-  processMediaSource,
-  imageToBase64,
-  validateImageBuffer,
-  validateImageExtension,
-  audioToBase64,
-  validateAudioExtension,
-  copyOptionalParams,
-} from './media.js';
-export type { MediaConverter } from './media.js';
-
-// Downloads
-export { downloadVideo, downloadImage } from './downloads.js';
-
-// Polling
-export { pollWithSpinner, sleep, formatDuration } from './polling.js';
-export type { PollOptions } from './polling.js';

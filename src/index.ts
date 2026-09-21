@@ -59,5 +59,5 @@ export type {
   VoiceOutput,
   WaitOptions,
 } from './codecs/task.js';
-export { BASE_URL, ERROR_CODES_V2, VENDOR_HTTP_STATUS, type VendorErrorCode } from './config/constants.js';
+export { BASE_URL, ERROR_CODES, VENDOR_HTTP_STATUS, type VendorErrorCode } from './config/constants.js';
 export { MISSING_API_KEY_MESSAGE, loadApiKey, type ApiKeySource } from './config/loaders.js';

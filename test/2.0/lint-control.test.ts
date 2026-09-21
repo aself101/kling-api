@@ -45,8 +45,10 @@ describe('import-graph zones (production config)', () => {
     expect(await lint(`export { HttpCore } from '../http/core.js';\n`, 'src/products/legal.ts')).toHaveLength(0);
   });
 
-  it('a product importing a handler other than poller is rejected (using the existing 1.x result-poller as the forbidden file)', async () => {
-    expect(await lint(`export * from '../handlers/result-poller.js';\n`, 'src/products/x.ts')).toHaveLength(1);
+  it('a product importing the client is rejected; config importing http/core is rejected (zones added at 2a₀)', async () => {
+    expect(await lint(`export * from '../client.js';\n`, 'src/products/x.ts')).toHaveLength(1);
+    expect(await lint(`export * from '../http/core.js';\n`, 'src/config/whatever.ts')).toHaveLength(1);
+    expect(await lint(`export * from '../codecs/shared.js';\n`, 'src/utils/whatever.ts')).toHaveLength(1);
   });
 
   it('an UNRESOLVABLE import is invisible to the zones rule — so no-unresolved must catch it', async () => {
@@ -65,7 +67,12 @@ describe('import-graph zones (production config)', () => {
     expect(await lint(`import { randomUUID } from 'node:crypto';\nexport const id = randomUUID();\n`, 'src/codecs/x.ts')).toHaveLength(0);
   });
 
-  it('files outside the zones (1.x during the additive window) are not subject to the rule', async () => {
-    expect(await lint(`export * from '../http/core.js';\n`, 'src/config/whatever.ts')).toHaveLength(0);
+  it('carve-outs hold: config may import codecs/task and http/errors; utils may import config/constants', async () => {
+    expect(await lint(`export type { Task } from '../codecs/task.js';\nexport * from '../http/errors.js';\n`, 'src/config/whatever.ts')).toHaveLength(0);
+    expect(await lint(`export * from '../config/constants.js';\n`, 'src/utils/whatever.ts')).toHaveLength(0);
+  });
+
+  it('src/cli is the one tree with no zone — it may import the client', async () => {
+    expect(await lint(`export * from '../client.js';\n`, 'src/cli/whatever.ts')).toHaveLength(0);
   });
 });

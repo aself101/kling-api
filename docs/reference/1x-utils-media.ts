@@ -1,3 +1,11 @@
+// ---------------------------------------------------------------------------------------
+// PORT REFERENCE — NOT COMPILED, NOT SHIPPED.
+// This is `src/utils/media.ts` from 1.x, moved here at the 2a₀ removal commit (spec §3.1
+// says it stays "as the port reference until 2c"). It imports axios and the 1.x config
+// barrel, neither of which exists in 2.0, so it cannot live under `src/`. Phase 2c ports
+// the media-source resolution and download logic into `src/media/{source,download}.ts`
+// (spec D12) and deletes this file.
+// ---------------------------------------------------------------------------------------
 /**
  * Media Module
  *

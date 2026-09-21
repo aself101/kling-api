@@ -9,10 +9,11 @@ import { createTypeScriptImportResolver } from 'eslint-import-resolver-typescrip
  *
  * Each zone names a TARGET directory (the importer) and the paths it may NOT import
  * from; `except` carves out the allowed files inside a forbidden directory. Zones are
- * scoped to the 2.0 directories only — 1.x files under `src/config`, `src/utils`,
- * `src/operations`, … live beside the new code until the 2a₀ removal commit and must not
- * be linted against rules written for their replacements (run #3 A44). `src/config` and
- * `src/utils` gain zones at 2a₀.
+ * scoped to every `src/` tree except `src/cli/`. During Phase 1 they covered only the
+ * new directories — 1.x files under `src/config`, `src/utils`, `src/operations`, … lived
+ * beside the new code until the 2a₀ removal commit and were not linted against rules
+ * written for their replacements (run #3 A44); `src/config` and `src/utils` gained their
+ * zones at 2a₀.
  *
  * `node:*` built-ins are unrestricted everywhere. A test (`test/2.0/lint-control.test.ts`)
  * lints a virtual file INSIDE a zone against this very config and asserts the rule fires —
@@ -87,6 +88,32 @@ const zones = [
   { target: `${SRC}/client.ts`, from: `${SRC}/handlers`, except: ['./saver.ts'], message: 'client may import handlers/saver only (spec §5)' },
   { target: `${SRC}/client.ts`, from: `${SRC}/cli`, message: 'client must not import the CLI (spec §5)' },
   { target: `${SRC}/client.ts`, from: `${SRC}/index.ts`, message: 'client must not import the barrel (spec §5)' },
+
+  // config/{constants,loaders,models}.ts: codecs/task (types) only. config/validators/*:
+  // config/models, config/constants, http/errors, codecs/task. Zones added at 2a₀ once the
+  // 1.x config files were gone (the 1.x validators imported types.ts and the operations).
+  { target: `${SRC}/config`, from: `${SRC}/codecs`, except: ['./task.ts'], message: 'config may import codecs/task only (spec §5)' },
+  { target: `${SRC}/config`, from: `${SRC}/http`, except: ['./errors.ts'], message: 'config may import http/errors only (spec §5)' },
+  { target: `${SRC}/config`, from: `${SRC}/products`, message: 'config must not import products (spec §5)' },
+  { target: `${SRC}/config`, from: `${SRC}/media`, message: 'config must not import media (spec §5)' },
+  { target: `${SRC}/config`, from: `${SRC}/handlers`, message: 'config must not import handlers (spec §5)' },
+  { target: `${SRC}/config`, from: `${SRC}/utils`, message: 'config must not import utils (spec §5)' },
+  { target: `${SRC}/config`, from: `${SRC}/webhooks.ts`, message: 'config must not import webhooks (spec §5)' },
+  { target: `${SRC}/config`, from: `${SRC}/client.ts`, message: 'config must not import the client (spec §5)' },
+  { target: `${SRC}/config`, from: `${SRC}/index.ts`, message: 'config must not import the barrel (spec §5)' },
+  { target: `${SRC}/config`, from: `${SRC}/cli`, message: 'config must not import the CLI (spec §5)' },
+
+  // utils/*: config/constants and sibling utils only
+  { target: `${SRC}/utils`, from: `${SRC}/config`, except: ['./constants.ts'], message: 'utils may import config/constants only (spec §5)' },
+  { target: `${SRC}/utils`, from: `${SRC}/codecs`, message: 'utils must not import codecs (spec §5)' },
+  { target: `${SRC}/utils`, from: `${SRC}/http`, message: 'utils must not import http (spec §5)' },
+  { target: `${SRC}/utils`, from: `${SRC}/products`, message: 'utils must not import products (spec §5)' },
+  { target: `${SRC}/utils`, from: `${SRC}/media`, message: 'utils must not import media (spec §5)' },
+  { target: `${SRC}/utils`, from: `${SRC}/handlers`, message: 'utils must not import handlers (spec §5)' },
+  { target: `${SRC}/utils`, from: `${SRC}/webhooks.ts`, message: 'utils must not import webhooks (spec §5)' },
+  { target: `${SRC}/utils`, from: `${SRC}/client.ts`, message: 'utils must not import the client (spec §5)' },
+  { target: `${SRC}/utils`, from: `${SRC}/index.ts`, message: 'utils must not import the barrel (spec §5)' },
+  { target: `${SRC}/utils`, from: `${SRC}/cli`, message: 'utils must not import the CLI (spec §5)' },
 ];
 
 export default tseslint.config(
@@ -123,9 +150,12 @@ export default tseslint.config(
     },
   },
   {
-    // 2.0 import graph enforcement (spec §5). Scoped to the 2.0 directories by name.
+    // 2.0 import graph enforcement (spec §5). Every src/ directory since 2a₀ removed the
+    // 1.x files; `src/cli/**` is the one tree with no zone (it may import anything).
     files: [
       'src/codecs/**/*.ts',
+      'src/config/**/*.ts',
+      'src/utils/**/*.ts',
       'src/http/**/*.ts',
       'src/media/**/*.ts',
       'src/handlers/**/*.ts',
@@ -133,8 +163,6 @@ export default tseslint.config(
       'src/webhooks.ts',
       'src/client.ts',
     ],
-    // 1.x files that share a 2.0 directory until the 2a₀ removal commit deletes them.
-    ignores: ['src/handlers/result-poller.ts', 'src/handlers/file-saver.ts', 'src/handlers/index.ts'],
     plugins: { 'import-x': importX },
     settings: {
       'import-x/resolver-next': [

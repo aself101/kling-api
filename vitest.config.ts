@@ -10,16 +10,8 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'lcov'],
-      exclude: [
-        'node_modules/**',
-        'test/**',
-        'datasets/**',
-        'docs/**',
-        '*.config.ts',
-        '*.config.js',
-        'src/cli.ts' // Exclude CLI from coverage (hard to test interactively)
-      ],
-      include: ['src/api.ts', 'src/auth.ts', 'src/utils.ts', 'src/config.ts'],
+      exclude: ['node_modules/**', 'test/**', 'datasets/**', 'docs/**', '*.config.ts', '*.config.js', 'src/cli/**'],
+      include: ['src/**/*.ts'],
       thresholds: {
         lines: 70,
         functions: 70,
