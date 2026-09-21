@@ -186,6 +186,13 @@ export const TIMESTAMP_SECONDS_CEILING = 1e11;
 export const MODELED_SETTINGS: ReadonlySet<string> = new Set(['resolution', 'aspect_ratio', 'duration', 'audio', 'multi_shot', 'character_orientation']);
 /** `options` keys the builders write (App. B §2.0). */
 export const MODELED_OPTIONS: ReadonlySet<string> = new Set(['callback_url', 'external_task_id', 'watermark_info']);
+/** Top-level keys the legacy (flat-body) image builders write; `extraSettings` may not carry one (run #3 A41). */
+export const MODELED_LEGACY_FIELDS: ReadonlySet<string> = new Set([
+  'model_name', 'prompt', 'negative_prompt', 'image', 'image_reference', 'image_fidelity', 'human_fidelity', 'element_list', 'image_list',
+  'resolution', 'result_type', 'series_amount', 'n', 'aspect_ratio', 'subject_image_list', 'scene_image', 'style_image',
+  'up_expansion_ratio', 'down_expansion_ratio', 'left_expansion_ratio', 'right_expansion_ratio', 'element_frontal_image',
+  'watermark_info', 'callback_url', 'external_task_id',
+]);
 
 // ============================================================================
 // 2.0 — inline media caps (spec D12, run #2 A22, run #3 A45)

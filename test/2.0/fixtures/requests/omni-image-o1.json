@@ -1,0 +1,23 @@
+{
+  "model_name": "kling-image-o1",
+  "prompt": "Merge all the people in the images into the <<<object_1>>> image",
+  "element_list": [
+    {
+      "element_id": 829836802793406600
+    }
+  ],
+  "image_list": [
+    {
+      "image": "https://v1-kling.klingai.com/kcdn/cdn-kcdn112452/kling-qa-test/multi-4.png"
+    },
+    {
+      "image": "https://p2-kling.klingai.com/kcdn/cdn-kcdn112452/kling-qa-test/video_effects/1.png"
+    },
+    {
+      "image": "https://p2-kling.klingai.com/kcdn/cdn-kcdn112452/kling-qa-test/video_effects/4.png"
+    }
+  ],
+  "resolution": "2k",
+  "n": 1,
+  "aspect_ratio": "3:2"
+}

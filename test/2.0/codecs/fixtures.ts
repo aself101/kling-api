@@ -42,4 +42,10 @@ export const REQUEST_FIXTURES = [
   'requests/omni-kling-o1-base-refer.json',
   'requests/motion-kling-3.0.json',
   'requests/motion-kling-2.6.json',
+  'requests/image-generation.json',
+  'requests/omni-image-o1.json',
+  'requests/omni-image-v3-omni.json',
+  'requests/multi-image-to-image.json',
+  'requests/outpaint.json',
+  'requests/subject-completion.json',
 ] as const;

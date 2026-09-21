@@ -58,6 +58,12 @@ const REQUEST_FIXTURES = [
   { out: 'requests/omni-kling-o1-base-refer.json', doc: 'kling-o1-video.md', section: '### Base_video & refer_image', request: true },
   { out: 'requests/motion-kling-3.0.json', doc: 'kling-omni-3.0-motion-control.md', section: '## Create Task', request: true },
   { out: 'requests/motion-kling-2.6.json', doc: 'kling-2.6-motion-control.md', section: '## Create Task', request: true },
+  { out: 'requests/image-generation.json', doc: 'kling-image-2.1-generation.md', section: '## Create Task', request: true },
+  { out: 'requests/omni-image-o1.json', doc: 'kling-image-o1-generation.md', section: '## Create Task', request: true },
+  { out: 'requests/omni-image-v3-omni.json', doc: 'kling-image-omni-3.0-image-omni.md', section: '### Image Generation with Element', request: true },
+  { out: 'requests/multi-image-to-image.json', doc: 'kling-image-2.1-multi-image-to-image.md', section: '## Create Task', request: true },
+  { out: 'requests/outpaint.json', doc: 'kling-image-common-outpainting.md', section: '## Create Task', request: true },
+  { out: 'requests/subject-completion.json', doc: 'kling-image-common-subject-completion.md', section: '## Create Task', request: true },
 ];
 
 /** @type {Array<{out: string, doc: string, section: string, subs?: Record<string, unknown>}>} */

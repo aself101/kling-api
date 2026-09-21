@@ -69,3 +69,31 @@ describe('VIDEO_MODELS grounding (V3)', () => {
     }
   });
 });
+
+// ── image registry (3a) ───────────────────────────────────────────────────────────────
+
+import { DEFAULT_IMAGE_MODEL, DEFAULT_OMNI_IMAGE_MODEL, IMAGE_MODELS, IMAGE_MODEL_SOURCES, MULTI_IMAGE_MODEL } from '../../../src/config/models.js';
+
+describe('IMAGE_MODELS grounding (V3)', () => {
+  it('has the four ids of spec §6.2; defaults are rows', () => {
+    expect(Object.keys(IMAGE_MODELS).sort()).toEqual(['kling-image-o1', 'kling-v2-1', 'kling-v3', 'kling-v3-omni']);
+    expect(IMAGE_MODELS[DEFAULT_IMAGE_MODEL].id).toBe('kling-v3');
+    expect(IMAGE_MODELS[DEFAULT_OMNI_IMAGE_MODEL].id).toBe('kling-v3-omni');
+    expect(IMAGE_MODELS[MULTI_IMAGE_MODEL].products).toContain('multi-image-to-image');
+  });
+
+  it.each(Object.values(IMAGE_MODELS).map((r) => [r.id] as const))('%s: the cited page names the id in its model_name enum and carries every resolution / ratio value', (id) => {
+    const caps = IMAGE_MODELS[id];
+    const doc = page(IMAGE_MODEL_SOURCES[id]);
+    expect(doc).toContain(`\`${id}\``);
+    for (const product of caps.products) for (const r of caps.resolutions[product] ?? []) expect(doc, `${id} resolution ${r}`).toContain(`\`${r}\``);
+    for (const a of caps.aspectRatios) expect(doc, `${id} ratio ${a}`).toContain(`\`${a}\``);
+  });
+
+  it('control: kling-v3 does not carry auto or 4k (its page has neither)', () => {
+    const doc = page(IMAGE_MODEL_SOURCES['kling-v3']);
+    expect(doc).not.toContain('`auto`');
+    expect(doc).not.toContain('`4k`');
+    expect(IMAGE_MODELS['kling-v3'].aspectRatios).not.toContain('auto');
+  });
+});

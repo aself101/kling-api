@@ -1,0 +1,9 @@
+{
+  "model_name": "kling-v2-1",
+  "prompt": "Generate a Pixar-style puppy",
+  "negative_prompt": "",
+  "image": "https://p1-kling.klingai.com/kcdn/cdn-kcdn112452/kling-qa-test/dog.png",
+  "n": 2,
+  "external_task_id": "",
+  "callback_url": ""
+}

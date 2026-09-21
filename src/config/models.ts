@@ -150,16 +150,77 @@ export const DEFAULT_OMNI_VIDEO_MODEL: KnownVideoModel = 'kling-3.0-omni';
 export const DEFAULT_MOTION_CONTROL_MODEL: KnownVideoModel = 'kling-3.0';
 
 // ============================================================================
-// Image (legacy standard, `model_name`) — filled in 3a from App. B §4.2
+// Image (legacy standard, `model_name`) — App. B §4.2; `kling-guide-capability-map-image.md`
 // ============================================================================
 
 export interface ImageModelCaps {
   id: KnownImageModel;
   products: Product[];
   resolutions: Partial<Record<Product, ImageResolution[]>>;
+  /** `auto` appears only on the omni-image endpoint. */
   aspectRatios: string[];
-  /** Max `n` per request. */
-  maxN: number;
+  /** `image_reference` / `human_fidelity` (character & face feature reference) — 2.1 only. */
+  featureReference: boolean;
+  /** `result_type: series` — capability map "Series Image Generation". */
+  series: boolean;
+  maxPromptLength: number;
 }
 
-export const IMAGE_MODELS: Readonly<Record<KnownImageModel, ImageModelCaps>> = {} as Record<KnownImageModel, ImageModelCaps>;
+const EIGHT_RATIOS = ['16:9', '9:16', '1:1', '4:3', '3:4', '3:2', '2:3', '21:9'];
+
+export const IMAGE_MODELS: Readonly<Record<KnownImageModel, ImageModelCaps>> = {
+  // docs/api/kling-image-2.1-generation.md (the page is titled 2.1 but its enum is v2-1 | v3, default v3).
+  'kling-v3': {
+    id: 'kling-v3',
+    products: ['image-generation'],
+    resolutions: { 'image-generation': ['1k', '2k'] },
+    aspectRatios: EIGHT_RATIOS,
+    featureReference: false,
+    series: false,
+    maxPromptLength: 2500,
+  },
+  // docs/api/kling-image-2.1-generation.md, kling-image-2.1-multi-image-to-image.md. The only
+  // model with image_reference / human_fidelity (capability map: Character / Face Feature Reference).
+  'kling-v2-1': {
+    id: 'kling-v2-1',
+    products: ['image-generation', 'multi-image-to-image'],
+    resolutions: { 'image-generation': ['1k', '2k'] },
+    aspectRatios: EIGHT_RATIOS,
+    featureReference: true,
+    series: false,
+    maxPromptLength: 2500,
+  },
+  // docs/api/kling-image-omni-3.0-image-omni.md; capability map: 1K/2K/4K, series supported, auto ratio.
+  'kling-v3-omni': {
+    id: 'kling-v3-omni',
+    products: ['omni-image'],
+    resolutions: { 'omni-image': ['1k', '2k', '4k'] },
+    aspectRatios: [...EIGHT_RATIOS, 'auto'],
+    featureReference: false,
+    series: true,
+    maxPromptLength: 2500,
+  },
+  // docs/api/kling-image-o1-generation.md; capability map: 1K/2K only ("4K" is 3.0 Omni), series NOT supported.
+  'kling-image-o1': {
+    id: 'kling-image-o1',
+    products: ['omni-image'],
+    resolutions: { 'omni-image': ['1k', '2k'] },
+    aspectRatios: [...EIGHT_RATIOS, 'auto'],
+    featureReference: false,
+    series: false,
+    maxPromptLength: 2500,
+  },
+};
+
+export const IMAGE_MODEL_SOURCES: Readonly<Record<KnownImageModel, string>> = {
+  'kling-v3': 'kling-image-2.1-generation.md',
+  'kling-v2-1': 'kling-image-2.1-generation.md',
+  'kling-v3-omni': 'kling-image-omni-3.0-image-omni.md',
+  'kling-image-o1': 'kling-image-o1-generation.md',
+};
+
+/** Image defaults (D7): newest model per endpoint. */
+export const DEFAULT_IMAGE_MODEL: KnownImageModel = 'kling-v3';
+export const DEFAULT_OMNI_IMAGE_MODEL: KnownImageModel = 'kling-v3-omni';
+/** The multi-image endpoint documents exactly one model. */
+export const MULTI_IMAGE_MODEL: KnownImageModel = 'kling-v2-1';

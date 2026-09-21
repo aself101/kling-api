@@ -7,7 +7,7 @@
  * `task_result.{videos,images,audios,elements,voices}[]`, with deductions as two flat
  * fields instead of a `billing[]` array. Its callback body is the record without the
  * envelope (`docs/api/kling-get-started-callbacks.md`, "Legacy Callback Function"). The
- * build half (`buildImageGeneration`, …) lands in 3a.
+ * build half is at the bottom of the file (3a/3b).
  *
  * Every vendor-spelled field name in this file is read HERE and nowhere else (D3).
  * Sources, all `docs/api/`: `kling-image-2.1-generation.md` (create/query/list),
@@ -17,6 +17,14 @@
  * `kling-omni-3.0-element-mgt.md`, `kling-omni-3.0-voice-mgt.md`. The fixtures under
  * `test/2.0/fixtures/legacy/` are those examples.
  */
+import type {
+  CommonOptions,
+  ImageGenerateParams,
+  MultiImageToImageParams,
+  OmniImageParams,
+  OutpaintParams,
+  SubjectCompletionParams,
+} from './params.js';
 import type { AudioOutput, BillingEntry, ElementOutput, ImageOutput, Task, TaskOutput, VideoOutput, VoiceOutput } from './task.js';
 import {
   envelopeData,
@@ -232,4 +240,99 @@ function parseDeductions(rec: JsonObject): BillingEntry[] {
     }
   }
   return out;
+}
+
+// ============================================================================
+// Build half (spec D3, D7; App. B §4.2; spec §2.3) — landed in 3a/3b
+// ============================================================================
+
+/** Legacy bodies are flat: every field at the top level, `model_name` selects the model. */
+export type LegacyBody = Record<string, unknown>;
+
+/** Shared tail of every legacy create: `watermark_info?`, `callback_url?`, `external_task_id?` (only when set — TTS has none). */
+function commonFields(params: CommonOptions, externalId: string | undefined): LegacyBody {
+  const out: LegacyBody = {};
+  if (params.watermark !== undefined) out.watermark_info = { enabled: params.watermark };
+  if (params.callbackUrl !== undefined) out.callback_url = params.callbackUrl;
+  if (externalId !== undefined) out.external_task_id = externalId;
+  return out;
+}
+
+/**
+ * `element_list[].element_id` is typed `long` by the vendor and its examples send numbers.
+ * The library takes strings (an 18-digit id is not exactly representable as a JS number)
+ * and sends a NUMBER when the string is a safe integer, else the string as-is [VERIFY
+ * live, Phase 7: whether the vendor accepts a string for an unsafe id].
+ */
+export function legacyElementId(id: string): number | string {
+  return /^\d{1,15}$/.test(id) && Number.isSafeInteger(Number(id)) ? Number(id) : id;
+}
+
+/** `POST /v1/images/generations` (kling-image-2.1-generation.md). `image` is already resolved (URL or Base64). */
+export function buildImageGeneration(params: ImageGenerateParams, model: string, image: string | undefined, externalId: string | undefined): LegacyBody {
+  const body: LegacyBody = { model_name: model, prompt: params.prompt };
+  if (params.negativePrompt !== undefined) body.negative_prompt = params.negativePrompt;
+  if (image !== undefined) body.image = image;
+  if (params.imageReference !== undefined) body.image_reference = params.imageReference;
+  if (params.imageFidelity !== undefined) body.image_fidelity = params.imageFidelity;
+  if (params.humanFidelity !== undefined) body.human_fidelity = params.humanFidelity;
+  if (params.elements !== undefined) body.element_list = params.elements.map((e) => ({ element_id: legacyElementId(e.elementId) }));
+  if (params.resolution !== undefined) body.resolution = params.resolution;
+  if (params.n !== undefined) body.n = params.n;
+  if (params.aspectRatio !== undefined) body.aspect_ratio = params.aspectRatio;
+  Object.assign(body, commonFields(params, externalId), params.extraSettings);
+  return body;
+}
+
+/** `POST /v1/images/omni-image` (kling-image-omni-3.0-image-omni.md, kling-image-o1-generation.md). */
+export function buildOmniImage(params: OmniImageParams, model: string, images: string[] | undefined, externalId: string | undefined): LegacyBody {
+  const body: LegacyBody = { model_name: model, prompt: params.prompt };
+  if (images !== undefined) body.image_list = images.map((image) => ({ image }));
+  if (params.elements !== undefined) body.element_list = params.elements.map((e) => ({ element_id: legacyElementId(e.elementId) }));
+  if (params.resolution !== undefined) body.resolution = params.resolution;
+  if (params.resultType !== undefined) body.result_type = params.resultType;
+  if (params.seriesAmount !== undefined) body.series_amount = params.seriesAmount;
+  if (params.n !== undefined) body.n = params.n;
+  if (params.aspectRatio !== undefined) body.aspect_ratio = params.aspectRatio;
+  Object.assign(body, commonFields(params, externalId), params.extraSettings);
+  return body;
+}
+
+/** `POST /v1/images/multi-image2image` (kling-image-2.1-multi-image-to-image.md). Model fixed to kling-v2-1 by the caller. */
+export function buildMultiImageToImage(
+  params: MultiImageToImageParams,
+  model: string,
+  media: { subjectImages: string[]; sceneImage?: string; styleImage?: string },
+  externalId: string | undefined
+): LegacyBody {
+  const body: LegacyBody = { model_name: model };
+  if (params.prompt !== undefined) body.prompt = params.prompt;
+  if (params.negativePrompt !== undefined) body.negative_prompt = params.negativePrompt;
+  body.subject_image_list = media.subjectImages.map((subject_image) => ({ subject_image }));
+  if (media.sceneImage !== undefined) body.scene_image = media.sceneImage;
+  if (media.styleImage !== undefined) body.style_image = media.styleImage;
+  if (params.n !== undefined) body.n = params.n;
+  if (params.aspectRatio !== undefined) body.aspect_ratio = params.aspectRatio;
+  Object.assign(body, commonFields(params, externalId), params.extraSettings);
+  return body;
+}
+
+/** `POST /v1/images/editing/expand` (kling-image-common-outpainting.md). */
+export function buildOutpaint(params: OutpaintParams, image: string, externalId: string | undefined): LegacyBody {
+  const body: LegacyBody = {
+    image,
+    up_expansion_ratio: params.up,
+    down_expansion_ratio: params.down,
+    left_expansion_ratio: params.left,
+    right_expansion_ratio: params.right,
+  };
+  if (params.prompt !== undefined) body.prompt = params.prompt;
+  if (params.n !== undefined) body.n = params.n;
+  Object.assign(body, commonFields(params, externalId), params.extraSettings);
+  return body;
+}
+
+/** `POST /v1/general/ai-multi-shot` (kling-image-common-subject-completion.md). */
+export function buildSubjectCompletion(params: SubjectCompletionParams, frontalImage: string, externalId: string | undefined): LegacyBody {
+  return { element_frontal_image: frontalImage, ...commonFields(params, externalId) };
 }

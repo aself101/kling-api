@@ -1,0 +1,26 @@
+{
+  "model_name": "kling-v3-omni",
+  "prompt": "Generate a recommended cover for each subject <<element_1>> based on the style of the reference image <<image_1>>",
+  "element_list": [
+    {
+      "element_id": 160
+    },
+    {
+      "element_id": 161
+    }
+  ],
+  "image_list": [
+    {
+      "image": "xxx"
+    },
+    {
+      "image": "xxx"
+    }
+  ],
+  "resolution": "2k",
+  "result_type": "series",
+  "series_amount": 2,
+  "aspect_ratio": "auto",
+  "external_task_id": "",
+  "callback_url": ""
+}

@@ -1,0 +1,17 @@
+{
+  "model_name": "kling-v2-1",
+  "prompt": "Wearing a flowing red dress on the grassland, in Ghibli style.",
+  "negative_prompt": "",
+  "subject_image_list": [
+    {
+      "subject_image": "https://v1-kling.klingai.com/kcdn/cdn-kcdn112452/kling-qa-test/multi-1.png"
+    },
+    {
+      "subject_image": "https://v1-kling.klingai.com/kcdn/cdn-kcdn112452/kling-qa-test/multi-2.png"
+    }
+  ],
+  "scene_image": "https://v1-kling.klingai.com/kcdn/cdn-kcdn112452/kling-qa-test/background.jpeg",
+  "style_image": "https://v1-kling.klingai.com/kcdn/cdn-kcdn112452/kling-qa-test/16x9_jipuli.png",
+  "n": 2,
+  "aspect_ratio": "9:16"
+}

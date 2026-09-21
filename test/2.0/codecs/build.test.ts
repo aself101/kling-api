@@ -178,7 +178,7 @@ function omniParamsFrom(body: VendorOmniBody) {
 }
 
 describe('buildOmniVideo — vendor Request Examples (V1 build half)', () => {
-  it.each(REQUEST_FIXTURES.filter((f) => f.startsWith('requests/omni-')))('%s round-trips (contents compared as a set — the vendor examples hold no fixed order)', (f) => {
+  it.each(REQUEST_FIXTURES.filter((f) => f.startsWith('requests/omni-kling-')))('%s round-trips (contents compared as a set — the vendor examples hold no fixed order)', (f) => {
     const vendor = fixture(f) as VendorOmniBody;
     const expected = structuredClone(vendor);
     expected.options!.external_task_id = 'fixed-external-id';
@@ -236,5 +236,98 @@ describe('buildMotionControl — vendor Request Examples (V1 build half)', () =>
       settings: { character_orientation: 'image' },
       options: { external_task_id: 'e' },
     });
+  });
+});
+
+// ── legacy image builders (3a/3b) ─────────────────────────────────────────────────────
+
+import {
+  buildImageGeneration,
+  buildMultiImageToImage,
+  buildOmniImage,
+  buildOutpaint,
+  buildSubjectCompletion,
+  legacyElementId,
+  type LegacyBody,
+} from '../../../src/codecs/legacy.js';
+
+const withId = (body: LegacyBody) => ({ ...body, external_task_id: 'fixed-external-id' });
+const asStr = (v: unknown) => (v === undefined ? undefined : String(v));
+
+describe('legacy builders — vendor Request Examples (V1 build half)', () => {
+  it('image-generation (kling-image-2.1-generation.md) round-trips; empty-string fields are the caller\'s values and are sent', () => {
+    const v = fixture('requests/image-generation.json') as LegacyBody;
+    const built = buildImageGeneration(
+      { model: v.model_name as string, prompt: v.prompt as string, negativePrompt: v.negative_prompt as string, n: v.n as number, callbackUrl: v.callback_url as string },
+      v.model_name as string,
+      v.image as string,
+      'fixed-external-id'
+    );
+    expect(built).toEqual(withId(v));
+  });
+
+  it('omni-image O1 (kling-image-o1-generation.md) round-trips — except the element id, which the example writes as an 18-digit number', () => {
+    // 829836802793406551 is above 2^53: JSON.parse has already turned it into 829836802793406600
+    // in the fixture, which is exactly why the library takes element ids as STRINGS and sends an
+    // unsafe one as a string [VERIFY live, Phase 7]. The rest of the body is compared exactly.
+    const v = fixture('requests/omni-image-o1.json') as LegacyBody & { element_list: { element_id: number }[]; image_list: { image: string }[] };
+    const built = buildOmniImage(
+      { model: v.model_name as string, prompt: v.prompt as string, elements: [{ elementId: '829836802793406551' }], images: v.image_list.map((i) => i.image), resolution: v.resolution as '2k', n: v.n as number, aspectRatio: v.aspect_ratio as '3:2' },
+      v.model_name as string,
+      v.image_list.map((i) => i.image),
+      undefined
+    );
+    const { element_list: builtElements, ...builtRest } = built;
+    const { element_list: vendorElements, ...vendorRest } = v;
+    expect(builtRest).toEqual(vendorRest);
+    expect(builtElements).toEqual([{ element_id: '829836802793406551' }]);
+    expect(vendorElements).toEqual([{ element_id: 829836802793406600 }]); // the mangling, pinned
+  });
+
+  it('omni-image 3.0 Omni series example (kling-image-omni-3.0-image-omni.md) round-trips', () => {
+    const v = fixture('requests/omni-image-v3-omni.json') as LegacyBody & { element_list: { element_id: number }[]; image_list: { image: string }[] };
+    const built = buildOmniImage(
+      { model: v.model_name as string, prompt: v.prompt as string, elements: v.element_list.map((e) => ({ elementId: String(e.element_id) })), images: v.image_list.map((i) => i.image), resolution: '2k', resultType: 'series', seriesAmount: v.series_amount as number, aspectRatio: 'auto', callbackUrl: v.callback_url as string },
+      v.model_name as string,
+      v.image_list.map((i) => i.image),
+      'fixed-external-id'
+    );
+    expect(built).toEqual(withId(v));
+  });
+
+  it('multi-image-to-image (kling-image-2.1-multi-image-to-image.md) round-trips, negative_prompt included', () => {
+    const v = fixture('requests/multi-image-to-image.json') as LegacyBody & { subject_image_list: { subject_image: string }[] };
+    const built = buildMultiImageToImage(
+      { prompt: v.prompt as string, negativePrompt: v.negative_prompt as string, subjectImages: v.subject_image_list.map((s) => s.subject_image), sceneImage: asStr(v.scene_image), styleImage: asStr(v.style_image), n: v.n as number, aspectRatio: v.aspect_ratio as '9:16' },
+      'kling-v2-1',
+      { subjectImages: v.subject_image_list.map((s) => s.subject_image), sceneImage: asStr(v.scene_image), styleImage: asStr(v.style_image) },
+      undefined
+    );
+    expect(built).toEqual(v);
+  });
+
+  it('outpaint (kling-image-common-outpainting.md) round-trips', () => {
+    const v = fixture('requests/outpaint.json') as LegacyBody;
+    const built = buildOutpaint(
+      { image: v.image as string, up: v.up_expansion_ratio as number, down: v.down_expansion_ratio as number, left: v.left_expansion_ratio as number, right: v.right_expansion_ratio as number, prompt: v.prompt as string, n: v.n as number },
+      v.image as string,
+      'fixed-external-id'
+    );
+    expect(built).toEqual(withId(v));
+  });
+
+  it('subject-completion (kling-image-common-subject-completion.md) round-trips', () => {
+    const v = fixture('requests/subject-completion.json') as LegacyBody;
+    expect(buildSubjectCompletion({ frontalImage: v.element_frontal_image as string, callbackUrl: v.callback_url as string }, v.element_frontal_image as string, 'fixed-external-id')).toEqual(withId(v));
+  });
+
+  it('legacyElementId: safe integers become numbers (the vendor types element_id long); unsafe or non-numeric stay strings', () => {
+    expect(legacyElementId('321922438904313')).toBe(321922438904313);
+    expect(legacyElementId('829836802793406551')).toBe('829836802793406551'); // 18 digits — not exactly representable
+    expect(legacyElementId('abc')).toBe('abc');
+  });
+
+  it('extraSettings merge at the top level of a legacy body', () => {
+    expect(buildImageGeneration({ prompt: 'p', extraSettings: { style_preset: 'anime' } }, 'kling-v3', undefined, undefined)).toEqual({ model_name: 'kling-v3', prompt: 'p', style_preset: 'anime' });
   });
 });

@@ -31,7 +31,7 @@ export type ContentType =
   | 'image'
   | 'video';
 
-export type KnownImageModel = 'kling-v3' | 'kling-v3-omni' | 'kling-v2-1' | 'kling-v2' | 'kling-image-o1';
+export type KnownImageModel = 'kling-v3' | 'kling-v3-omni' | 'kling-image-o1' | 'kling-v2-1';
 export type ImageModel = KnownImageModel | (string & {});
 export type ImageResolution = '1k' | '2k' | '4k';
 
@@ -172,4 +172,78 @@ export interface MotionControlParams extends CommonOptions {
   /** 720p | 1080p — no 4k on motion control. */
   resolution?: '720p' | '1080p';
   extraContents?: Record<string, unknown>[];
+}
+
+// ============================================================================
+// Image (legacy standard) — spec §6.2; App. B §4.2
+// ============================================================================
+
+export type ImageAspectRatio = AspectRatio | '4:3' | '3:4' | '3:2' | '2:3' | '21:9';
+
+export interface ImageGenerateParams extends CommonOptions {
+  /** Default `kling-v3` (D7). `kling-v2-1` is the other value. */
+  model?: ImageModel;
+  prompt: string;
+  negativePrompt?: string;
+  /** Reference image (URL or Base64; ≤ 10 MB, ≥ 300 px, 1:2.5–2.5:1). */
+  image?: MediaSource;
+  /** `kling-v2-1` only. */
+  imageReference?: 'subject' | 'face';
+  /** [0, 1], vendor default 0.5. */
+  imageFidelity?: number;
+  /** [0, 1], vendor default 0.45; `kling-v2-1` only and "only takes effect when image_reference is subject". */
+  humanFidelity?: number;
+  elements?: { elementId: string }[];
+  resolution?: '1k' | '2k';
+  /** 1–9. */
+  n?: number;
+  aspectRatio?: ImageAspectRatio;
+  /** Extra top-level body fields the library does not model yet (legacy bodies are flat). */
+  extraSettings?: Record<string, unknown>;
+}
+
+export interface OmniImageParams extends CommonOptions {
+  /** Default `kling-v3-omni` (§10.2 settled; the vendor's documented default is the older `kling-image-o1`). */
+  model?: ImageModel;
+  /** References images as `<<<image_1>>>` (O1 page) / `<<image_1>>` (3.0 Omni page) — the vendor's own notation differs between pages. */
+  prompt: string;
+  images?: MediaSource[];
+  elements?: { elementId: string }[];
+  resolution?: ImageResolution;
+  resultType?: 'single' | 'series';
+  /** 2–9 or `'auto'`; meaningful only with `resultType: 'series'`. */
+  seriesAmount?: number | 'auto';
+  /** 1–9; ignored by the vendor when `resultType` is `series`. */
+  n?: number;
+  aspectRatio?: ImageAspectRatio | 'auto';
+  extraSettings?: Record<string, unknown>;
+}
+
+export interface MultiImageToImageParams extends CommonOptions {
+  prompt?: string;
+  /** The vendor's Request Example sends `negative_prompt` although its table omits it. */
+  negativePrompt?: string;
+  /** 1–4. */
+  subjectImages: MediaSource[];
+  sceneImage?: MediaSource;
+  styleImage?: MediaSource;
+  n?: number;
+  aspectRatio?: ImageAspectRatio;
+  extraSettings?: Record<string, unknown>;
+}
+
+export interface OutpaintParams extends CommonOptions {
+  image: MediaSource;
+  /** Each in [0, 2] as a multiple of the source height (up/down) or width (left/right); `(1+up+down)×(1+left+right) ≤ 3`. */
+  up: number;
+  down: number;
+  left: number;
+  right: number;
+  prompt?: string;
+  n?: number;
+  extraSettings?: Record<string, unknown>;
+}
+
+export interface SubjectCompletionParams extends CommonOptions {
+  frontalImage: MediaSource;
 }

@@ -1,0 +1,10 @@
+{
+  "up_expansion_ratio": 0.1495,
+  "down_expansion_ratio": 0.1495,
+  "left_expansion_ratio": 0.6547,
+  "right_expansion_ratio": 0.6547,
+  "prompt": "",
+  "image": "https://p1-kling.klingai.com/kcdn/cdn-kcdn112452/kling-qa-test/dog.png",
+  "n": 2,
+  "external_task_id": ""
+}
