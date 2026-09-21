@@ -1,0 +1,15 @@
+{
+  "prompt": "A girl sat on the train, looking out the window with a melancholic expression, her head swaying with the train.",
+  "options": {
+    "callback_url": "https://xxx/callback",
+    "watermark_info": {
+      "enabled": false
+    },
+    "external_task_id": ""
+  },
+  "settings": {
+    "duration": 3,
+    "resolution": "720p",
+    "aspect_ratio": "9:16"
+  }
+}

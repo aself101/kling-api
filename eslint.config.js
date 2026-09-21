@@ -49,7 +49,7 @@ const zones = [
   // media: http/errors, utils/security, config/constants
   { target: `${SRC}/media`, from: `${SRC}/http`, except: ['./errors.ts'], message: 'media may import http/errors only (spec §5)' },
   { target: `${SRC}/media`, from: `${SRC}/config`, except: ['./constants.ts'], message: 'media may import config/constants only (spec §5)' },
-  { target: `${SRC}/media`, from: `${SRC}/codecs`, message: 'media must not import codecs (spec §5)' },
+  { target: `${SRC}/media`, from: `${SRC}/codecs`, except: ['./params.ts'], message: 'media may import codecs/params (the MediaSource type) only (spec §5)' },
   { target: `${SRC}/media`, from: `${SRC}/products`, message: 'media must not import products (spec §5)' },
   { target: `${SRC}/media`, from: `${SRC}/handlers`, message: 'media must not import handlers (spec §5)' },
   { target: `${SRC}/media`, from: `${SRC}/webhooks.ts`, message: 'media must not import webhooks (spec §5)' },
@@ -92,7 +92,7 @@ const zones = [
   // config/{constants,loaders,models}.ts: codecs/task (types) only. config/validators/*:
   // config/models, config/constants, http/errors, codecs/task. Zones added at 2a₀ once the
   // 1.x config files were gone (the 1.x validators imported types.ts and the operations).
-  { target: `${SRC}/config`, from: `${SRC}/codecs`, except: ['./task.ts'], message: 'config may import codecs/task only (spec §5)' },
+  { target: `${SRC}/config`, from: `${SRC}/codecs`, except: ['./task.ts', './params.ts'], message: 'config may import codecs/task and codecs/params (types) only (spec §5)' },
   { target: `${SRC}/config`, from: `${SRC}/http`, except: ['./errors.ts'], message: 'config may import http/errors only (spec §5)' },
   { target: `${SRC}/config`, from: `${SRC}/products`, message: 'config must not import products (spec §5)' },
   { target: `${SRC}/config`, from: `${SRC}/media`, message: 'config must not import media (spec §5)' },

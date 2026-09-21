@@ -177,3 +177,12 @@ export const OUTPUT_RETENTION_MS = 30 * 86_400_000;
  * 1e11 s is the year 5138, so no ms value ever falls below the line.
  */
 export const TIMESTAMP_SECONDS_CEILING = 1e11;
+
+// ============================================================================
+// 2.0 — new-standard field names the library models (spec D9, run #3 A41)
+// ============================================================================
+
+/** `settings` keys the builders write. An `extraSettings` key among these is rejected — the hatch cannot override a validated field. */
+export const MODELED_SETTINGS: ReadonlySet<string> = new Set(['resolution', 'aspect_ratio', 'duration', 'audio', 'multi_shot']);
+/** `options` keys the builders write (App. B §2.0). */
+export const MODELED_OPTIONS: ReadonlySet<string> = new Set(['callback_url', 'external_task_id', 'watermark_info']);

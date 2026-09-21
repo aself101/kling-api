@@ -23,3 +23,4 @@ export const LEGACY_FIXTURES = [
   'legacy/voice-list.json',
   'legacy/callback.json',
 ] as const;
+export const REQUEST_FIXTURES = ['requests/t2v-kling-3.0-turbo.json', 'requests/t2v-kling-3.0.json', 'requests/t2v-kling-2.6.json', 'requests/t2v-kling-2.5-turbo.json'] as const;

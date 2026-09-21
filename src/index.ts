@@ -61,22 +61,24 @@ export type {
   WaitOptions,
 } from './codecs/task.js';
 export { BASE_URL, ERROR_CODES, VENDOR_HTTP_STATUS, type VendorErrorCode } from './config/constants.js';
-export {
-  IMAGE_MODELS,
-  VIDEO_MODELS,
-  type AspectRatio,
-  type AudioMode,
-  type ContentType,
-  type ImageModel,
-  type ImageModelCaps,
-  type ImageResolution,
-  type KnownImageModel,
-  type KnownVideoModel,
-  type Resolution,
-  type VideoModel,
-  type VideoModelCaps,
-} from './config/models.js';
+export { DEFAULT_VIDEO_MODEL, IMAGE_MODELS, VIDEO_MODELS, type ImageModelCaps, type VideoModelCaps } from './config/models.js';
+export type {
+  AspectRatio,
+  AudioMode,
+  CommonOptions,
+  ContentType,
+  ImageModel,
+  ImageResolution,
+  KnownImageModel,
+  KnownVideoModel,
+  MediaSource,
+  Resolution,
+  TextToVideoParams,
+  VideoModel,
+} from './codecs/params.js';
 export { TasksApi, LEGACY_PRODUCT_PATHS, standardOf, type GetOptions, type ListOptions, type ProductType } from './products/tasks.js';
-export type { CursorPage } from './codecs/new-standard.js';
+export type { CursorPage, NewStandardBody } from './codecs/new-standard.js';
+export { VideoApi, type VideoApiConfig } from './products/video.js';
+export { MODELED_OPTIONS, MODELED_SETTINGS } from './config/constants.js';
 export { poll, type PollOptions } from './handlers/poller.js';
 export { MISSING_API_KEY_MESSAGE, loadApiKey, type ApiKeySource } from './config/loaders.js';

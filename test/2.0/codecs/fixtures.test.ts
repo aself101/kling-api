@@ -13,10 +13,10 @@ import { cpSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync }
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { FIXTURES_DIR, LEGACY_FIXTURES, NEW_FIXTURES } from './fixtures.js';
+import { FIXTURES_DIR, LEGACY_FIXTURES, NEW_FIXTURES, REQUEST_FIXTURES } from './fixtures.js';
 
 const onDisk = (): string[] =>
-  ['new', 'legacy'].flatMap((d) => readdirSync(join(FIXTURES_DIR, d)).map((f) => `${d}/${f}`)).sort();
+  ['new', 'legacy', 'requests'].flatMap((d) => readdirSync(join(FIXTURES_DIR, d)).map((f) => `${d}/${f}`)).sort();
 
 describe('codec fixtures — provenance', () => {
   it('every fixture on disk has an INDEX.md row, and every named fixture is on disk', () => {
@@ -24,7 +24,7 @@ describe('codec fixtures — provenance', () => {
     const files = onDisk();
     expect(files.length).toBeGreaterThan(0);
     for (const f of files) expect(index, `${f} has no INDEX row`).toContain(`| \`${f}\` |`);
-    expect(files).toEqual([...NEW_FIXTURES, ...LEGACY_FIXTURES].sort());
+    expect(files).toEqual([...NEW_FIXTURES, ...LEGACY_FIXTURES, ...REQUEST_FIXTURES].sort());
   });
 
   it('the extractor reproduces the tree byte-for-byte (and a mutated copy is detected)', () => {
