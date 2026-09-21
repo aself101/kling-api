@@ -40,28 +40,31 @@ Conventions: `[ ]` open · `[x]` done · `[-]` deliberately skipped (write why i
 
 ---
 
-## Phase 1a₁ — Errors, constants, credentials (additive) — budget ~250 src + ~120 test
+## Phase 1a₁ — Errors, constants, credentials (additive) — budget ~250 src + ~120 test — **actual 786 src + 309 test, landed as two commits (`a14f839` config, `841f69e` types + errors)**
+
+> **Budget note (2026-09-21).** The estimate was low by ~3× on src. Two causes, both deliberate: (1) `codecs/task.ts` (234 lines) moved here from 1b because the error family references `Task`; (2) the error family and task types carry the decision record in JSDoc — roughly 40 % of their lines are comments explaining *why* (`taskState` semantics, the double-bill case, dual-stack unwrapping). Per D20 the sub-phase was split rather than the comments trimmed. Re-estimate for the rest of §9: multiply the src numbers by ~1.5 where a module carries decision-heavy documentation.
 
 `feat(http): error family, vendor error table, API-key loader (beside the 1.x core)`
 
 **Nothing is deleted in 1a₁/1a₂/1c.** 1.x keeps building and its tests keep running; new tests live under `test/2.0/`. Deletion is the single 2a₀ commit (spec §3.1).
 
 ### `config/constants.ts` rewrite (~60 net)
-- [ ] Replace the six `import type … from '../types.js'` (lines 7-14) with local type aliases so the file survives `types.ts`'s deletion in 2a₀ (run #3 architect F-1)
-- [ ] Add the **22-row** vendor error table as `ERROR_CODES_V2` (renamed to `ERROR_CODES` in 2a₀); names from the *Explanation* column; `1003`/`1004` present and commented "unreachable without AK/SK"; no `1104`
-- [ ] Remove the `VALID_*` arrays 2.0 does not use; keep `BASE_URL`, `DEFAULT_TIMEOUT`, `DEFAULT_POLL_INTERVAL`, `DEFAULT_POLL_TIMEOUT`, size constants
+- [x] Replace the six `import type … from '../types.js'` (lines 7-14) with local type aliases so the file survives `types.ts`'s deletion in 2a₀ (run #3 architect F-1) — `madge --circular` on the full 1.x+2.0 tree: **none** (the Phase 0 cycle is gone)
+- [x] Add the **22-row** vendor error table as `ERROR_CODES_V2` (renamed to `ERROR_CODES` in 2a₀); names from the *Explanation* column; `1003`/`1004` present and commented "unreachable without AK/SK"; no `1104` — plus `VENDOR_HTTP_STATUS`, `TRANSIENT_ERROR_CODES`, `PERMANENT_429_CODES`, `WRITE_NOT_CREATED_CODES`; test checks every row against the snapshot with a control
+- [-] Remove the `VALID_*` arrays 2.0 does not use — **deferred to 2a₀**: 1.x validators import them and 1a is additive (1.x must keep building). Spec §3.1 row for `constants.ts` amended accordingly.
 
 ### Credentials (D2) (~20)
-- [ ] `KlingConfig` per spec §6.4: `apiKey?, baseUrl?, timeout?, retry?, fetch?, unknownModels?, capabilityValidation?, logger?`
-- [ ] `loadApiKey(explicit?)` in `config/loaders.ts` reads `explicit ?? process.env.KLING_API_KEY` **only** (beside the 1.x `loadCredentials`, removed in 2a₀); the `./.env` / `~/.kling/.env` chain is implemented in `src/cli/index.ts` in 6a₁
-- [ ] Missing-key error names the constructor option, `KLING_API_KEY`, and `https://kling.ai/dev/api-key`
-- [ ] `.env.example` → `KLING_API_KEY=`
+- [ ] `KlingConfig` per spec §6.4: `apiKey?, baseUrl?, timeout?, retry?, fetch?, unknownModels?, capabilityValidation?, logger?` — **moved to 1a₂** (it belongs with `HttpCore`/`KlingClient`, which do not exist yet)
+- [x] `loadApiKey(explicit?)` in `config/loaders.ts` reads `explicit ?? process.env.KLING_API_KEY` **only** (beside the 1.x `loadCredentials`, removed in 2a₀); the `./.env` / `~/.kling/.env` chain is implemented in `src/cli/index.ts` in 6a₁; returns `{ apiKey, source }`
+- [x] Missing-key error names the constructor option, `KLING_API_KEY`, and `https://kling.ai/dev/api-key` (`MISSING_API_KEY_MESSAGE`)
+- [x] `.env.example` → `KLING_API_KEY=` (1.x AK/SK lines kept, marked legacy, until 2a₀)
 
 ### `http/errors.ts` (D10) (~170)
-- [ ] Error family exactly as D10: `KlingError`, `KlingAPIError{code,httpStatus,request{kind,method,path,externalId?},taskState,isTransient(),isRetryable()}`, `KlingNetworkError{cause,externalId?,taskState}`, `KlingTimeoutError{deadlineMs,attempt,attempts,externalId?,taskState}`, `KlingResponseError{httpStatus,bodySnippet,location?}`, `KlingCodecError{standard,path}`, `KlingValidationError{field}`, `KlingTaskFailedError{task,code}`, `KlingPollTimeoutError{task,elapsedMs}`, `KlingNoOutputsError{task}`, `KlingOutputsExpiredError{task}`, `KlingBatchError{tasks,missing,unattempted,cause}`, `KlingDownloadError{url,reason,httpStatus?}`, `KlingWebhookError{reason}`
-- [ ] `taskState` derivation for writes: `'not-created'` for business codes `1100`–`1304` (incl. `1303`) and HTTP 4xx; `'may-exist'` for `5000`/`5002`, HTTP 502/503/504, unparseable responses, post-request network errors, timeouts; `'n/a'` for reads. Tests: `1303` write → `'not-created'`; `5002` write → `'may-exist'`; `1303` read → `'n/a'` (run #3 A35/F11)
-- [ ] `isTransient()`: `1302`, `1303`, `5000`, `5001`, `5002` or `httpStatus ∈ {429,502,503,504}` → true. `isRetryable()`: `isTransient() && request.kind === 'read'` **and the business code is not a permanent 429** (`1102`, `1304` → false — run #3 anxiety F7). Tests: `1303` read → both true; `1303` write → transient true, retryable false; `1002` → both false; `1102` read → false
-- [ ] Constructing `KlingAPIError` from `{"code":1303,"message":"…","request_id":"…"}` (no `data`) does not throw
+- [x] `codecs/task.ts` types (moved forward from 1b — the error family references `Task`): `TaskStatus`, `Standard`, `Product`, `NewStandardProduct`, `LegacyProduct`, `Task`, `TaskOutput` union, `BillingEntry`, `RequestOptions`, `WaitOptions`, `PageOptions`, `SaveOptions`, `TaskHandle`, `TaskState`; imports nothing from `src/`
+- [x] Error family exactly as D10: `KlingError`, `KlingAPIError{code,httpStatus,request{kind,method,path,externalId?},taskState,isTransient(),isRetryable()}`, `KlingNetworkError{cause,externalId?,taskState}`, `KlingTimeoutError{deadlineMs,attempt,attempts,externalId?,taskState}`, `KlingResponseError{httpStatus,bodySnippet,location?}`, `KlingCodecError{standard,path}`, `KlingValidationError{field}`, `KlingTaskFailedError{task,code}`, `KlingPollTimeoutError{task,elapsedMs}`, `KlingNoOutputsError{task}`, `KlingOutputsExpiredError{task}`, `KlingBatchError{tasks,missing,unattempted,cause}`, `KlingDownloadError{url,reason,httpStatus?}`, `KlingWebhookError{reason}`
+- [x] `taskState` derivation for writes: `'not-created'` for business codes `1000`–`1304` (incl. `1303`) and HTTP 4xx; `'may-exist'` for `5000`/`5002`, HTTP 502/503/504, unparseable responses, post-request network errors, timeouts; `'n/a'` for reads. Tests: `1303` write → `'not-created'`; `5002` write → `'may-exist'`; `1303` read → `'n/a'`; `ECONNREFUSED` → `'not-created'`, `ECONNRESET` → `'may-exist'`, dual-stack `AggregateError` of refusals → `'not-created'`, code-less cause → `'may-exist'` (run #3 A35/F11)
+- [x] `isTransient()`: `1302`, `1303`, `5000`, `5001`, `5002` or `httpStatus ∈ {429,502,503,504}` → true. `isRetryable()`: `isTransient() && request.kind === 'read'` **and the business code is not a permanent 429** (`1102`, `1304` → false — run #3 anxiety F7). Tests: `1303` read → both true; `1303` write → transient true, retryable false; `1002` → both false; `1102`/`1304` read → false
+- [x] Constructing `KlingAPIError` from `{"code":1303,"message":"…","request_id":"…"}` (no `data`) does not throw
 
 ---
 
@@ -80,6 +83,7 @@ Conventions: `[ ]` open · `[x]` done · `[-]` deliberately skipped (write why i
 - [ ] Tests: read `1303`→`200` = 2 calls, ≥ 2 s apart (fake timers); write `1303` = 1 call, `taskState 'not-created'`, `isRetryable() === false`; write `5002` = 1 call, `'may-exist'`; write `ECONNRESET` mid-body = 1 call, `KlingNetworkError` with `externalId`, `'may-exist'`; write `ECONNREFUSED` = retried; read `1102` under HTTP 429 = 1 call; read timeout on attempt 3 → `KlingTimeoutError { attempt: 3, attempts: 3 }`
 
 ### `client.ts` + `index.ts` (skeleton) (~45)
+- [ ] `KlingConfig` per spec §6.4 (`apiKey?, baseUrl?, timeout?, retry?, fetch?, unknownModels?, capabilityValidation?, logger?`) + `RetryOptions`, `Logger` — defined in `http/core.ts`, re-exported from `index.ts`
 - [ ] `KlingClient` with config resolution and a `/** @internal */ http: HttpCore` member; no product namespaces yet
 - [ ] `src/index.ts` exports `KlingClient` and the error family; **not yet wired to `package.json#main`** (2a₀ does that)
 
@@ -384,6 +388,22 @@ Gate: **both Phase 0 write probes ticked.** This is the commit where the JWT pat
 - [ ] **(V15) Release-blocking blanks filled** in this file: Phase 0 all five probes, 1c smoke `code`, 2a₁ Q2 and Q13, 2a₂ V6 (incl. audio-track check) and Q11, 3a V10 image, Q15 per legacy product. (Not blocking: 2b V10 omni, 5 Q1, Q9-revoked. The three Phase 0 resource probes ARE blocking — §10.15.)
 - [ ] Push `main`; `npm publish` (Alex); `npm view kling-api version` → `2.0.0`
 - [ ] Install into a consumer; one `video.textToVideo` end-to-end
+
+---
+
+## Phase 7 — Post-release live parameter battery (Alex, 2026-09-21)
+
+`test(live): full request-parameter battery against the published 2.0.0 tarball`
+
+Not part of the 2.0.0 publish gate (V15 is). Runs after 6c, against the package **as installed** — published to local Verdaccio first, installed into a scratch consumer with the `@uluops`-style `.npmrc` opt-in, so what is exercised is the packed tarball (files field, exports, types), not the source tree. Spends real units; the packs expire 2026-10-20/21, so this runs inside that window or on a renewed pack.
+
+- [ ] `npm publish --registry http://localhost:4873/` of the 2.0.0 candidate; `npm install kling-api@2.0.0` in `scratch/live-battery/` with `.npmrc` → Verdaccio; remove `.npmrc` and jq-scan the lockfile afterwards (CLAUDE.md Verdaccio discipline)
+- [ ] `scripts/live-battery.mjs`: for each create endpoint, one call per **enum value** of each settings field (resolution × duration × aspect ratio × audio, one axis varied at a time from the cheapest baseline), each `contents[].type` the model supports, `extraSettings` passthrough of a harmless unknown key, and one deliberately invalid value per field to confirm the vendor's `1201` message names the field the way our validator does
+- [ ] Legacy image products: `model_name` × `resolution` × `aspect_ratio` (incl. `auto` on omni), `image_reference` on `kling-v2-1`, `result_type: series` on `kling-v3-omni`, outpaint ratios at the `3×` boundary
+- [ ] Resources: element `image_refer` and `video_refer` (a hosted clip), voice from `video_id`, avatar `pro`, TTS both languages
+- [ ] Recovery: `tasks.recover(product, externalId)` for every product created above — closes §11 Q15 per product; `tasks.get` with 100 ids (Q13 re-check on the published build)
+- [ ] Record per call: request body, `code`, `task_state`, deduction, wall time; totals per pack; anything the vendor accepted that our validator rejects (or vice versa) becomes an issue against `config/models.ts`
+- [ ] Budget: estimate before running (cheapest settings ≈ 0.3–0.8 video units per 3–5 s clip; image 1k ≈ 8 units on `kling-v3`); confirm with Alex if the total exceeds what §10.17 authorised
 
 ---
 

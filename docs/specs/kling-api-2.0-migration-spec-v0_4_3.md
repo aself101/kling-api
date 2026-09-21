@@ -155,7 +155,7 @@ Run #2 F1: Phase 1a as written in v0.3.0 deleted `src/client/` and `src/auth.ts`
 | `src/utils/polling.ts`, `src/utils/downloads.ts` | deleted (replaced by `handlers/poller.ts`, `media/download.ts`) | 2a₀ |
 | `src/utils/media.ts` | **kept through 2a₀, deleted in 2c** after `media/source.ts` ports its `validateImageBuffer`/`validateAudioExtension` checks — the only 1.x source file that outlives 2a₀, because its checks are the port's reference (run #3 anxiety F1) | 2c |
 | `src/utils/index.ts`, `src/config/index.ts` (barrels) | **trimmed in 2a₀**: re-exports of deleted modules removed; `utils/index.ts` keeps `media.js` until 2c | 2a₀ |
-| `src/config/constants.ts` | **rewritten in 1a**: the six `import type … from '../types.js'` (lines 7-14) replaced by local aliases so the file survives `types.ts`'s deletion; vendor error table added; `VALID_*` arrays 2.0 does not use removed | 1a |
+| `src/config/constants.ts` | **rewritten in 1a₁** (done `a14f839`): the six `import type … from '../types.js'` (lines 7-14) replaced by local aliases so the file survives `types.ts`'s deletion; vendor error table added as `ERROR_CODES_V2`. The `VALID_*` arrays 1.x validators import are **removed in 2a₀**, not 1a — 1a is additive | 1a₁ / 2a₀ |
 | `vitest.config.ts` coverage `include` | rewritten to `src/**/*.ts` (today it names `src/api.ts`, `src/auth.ts`, and two nonexistent files) | 2a₀ |
 | `package.json` `exports['./api']` (undocumented in App. A §0's table but present at lines 16-19), `scripts.kling*` (point at `dist/cli.js`) | removed / repointed | 2a₀ |
 | `src/utils/{logger,security,file-io,constants}.ts` | kept; `security.ts` hardened in 2c (D12) | — |
