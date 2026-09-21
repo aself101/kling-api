@@ -51,6 +51,15 @@ describe('KlingAPIError — taskState (the consumer decision field)', () => {
   });
 });
 
+describe('KlingAPIError — externalId (ship run #6: the README recovery key must exist on the error a 5002 produces)', () => {
+  it('mirrors request.externalId on a write; absent on a read (no key on the descriptor)', () => {
+    const mayExist = api(5002, 500, write);
+    expect(mayExist.taskState).toBe('may-exist');
+    expect(mayExist.externalId).toBe('ext-1');
+    expect(api(1201, 400, read).externalId).toBeUndefined();
+  });
+});
+
 describe('KlingAPIError — isTransient vs isRetryable', () => {
   it('1303 on a read: transient and retryable', () => {
     const e = api(1303, 429, read);

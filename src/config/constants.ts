@@ -19,7 +19,12 @@ export const DEFAULT_TIMEOUT = 30000;
 /** Default polling interval in milliseconds */
 export const DEFAULT_POLL_INTERVAL = 3000;
 
-/** Default polling timeout in milliseconds (15 minutes for video, accommodates pro mode) */
+/**
+ * Default polling timeout in milliseconds: 15 minutes. Inherited from 1.x, where it accommodated
+ * "pro mode"; under 2.0 the expensive tail (kling-3.0 at 4k × 15 s × multi-shot) has NOT been
+ * timed — the longest observed 2.0 task is a 3 s omni clip at 83 s (2026-09-20). A timeout does
+ * not cancel or refund the task; see README "wait()".
+ */
 export const DEFAULT_POLL_TIMEOUT = 900000;
 
 // ============================================================================

@@ -129,7 +129,7 @@ interface Task {
 }
 ```
 
-`handle.wait()` resolves on `succeeded`, throws `KlingTaskFailedError` on `failed`, and `KlingPollTimeoutError` on the deadline. **It also rethrows any read error the poll itself hits** once that read's own retries are exhausted (~96 s of vendor read trouble at defaults): a `KlingAPIError`/`KlingNetworkError`/`KlingTimeoutError` with `taskState: 'n/a'` — *n/a* means the task is unaffected; the vendor just could not be asked about it. Do not treat that as a failed create: call `wait()` again on the same handle, or `get()`. Two concurrent `wait()` calls on one handle share a single poll loop; each caller's `deadlineMs` and `signal` apply to that caller only.
+`handle.wait()` resolves on `succeeded`, throws `KlingTaskFailedError` on `failed`, `KlingPollTimeoutError` on the deadline (the task is **still running and still billed** — a timeout is not a failure; `handle.get()` later, do not re-submit), and `KlingTaskNotFoundError` if a poll answers `200` with no record for the id — the vendor said the task does not exist, which is not retried and fails every `wait()` on that handle. Whether a just-created task can be briefly invisible to `GET /tasks` is unmeasured (Known limits), so a `KlingTaskNotFoundError` on the *first* poll after a create is worth one `handle.get()` before you treat the task as gone. **It also rethrows any read error the poll itself hits** once that read's own retries are exhausted (~96 s of vendor read trouble at defaults): a `KlingAPIError`/`KlingNetworkError`/`KlingTimeoutError` with `taskState: 'n/a'` — *n/a* means the task is unaffected; the vendor just could not be asked about it. Do not treat that as a failed create: call `wait()` again on the same handle, or `get()`. Two concurrent `wait()` calls on one handle share a single poll loop; each caller's `deadlineMs` and `signal` apply to that caller only.
 
 `outputsExpireAt` is derived, not vendor-supplied, from the vendor's stated 30-day retention. On the one task where it was compared (a legacy image task, 2026-09-20), the vendor's signed URL carried an `Expires=` within 2 seconds of the derived value; new-standard video URLs have not been compared yet. `save()` refuses an expired task unless `force: true`.
 
@@ -278,6 +278,8 @@ const files = await client.save(task, './output', { includeWatermark: false, req
 // ./output/<task.id>.json          { product, standard, request, outputs, files, raw }
 ```
 
+**Downloads are not retried.** One CDN 5xx or a reset mid-body is a `KlingSaveError` (`written` lists what landed); calling `save()` again re-downloads every output, not just the missing ones. The retry table above applies to requests against the vendor API only.
+
 Downloads go through the client's `fetch` with a byte cap (default 500 MiB — also the per-call heap ceiling, since the body is buffered before it is written), a redirect cap (5), a per-hop deadline (120 s for videos, 60 s for images/audio; `timeoutMs` overrides — re-armed on each of up to 5 redirects, so a pathological chain can take 6× that; your `signal` is the overall ceiling), and a per-hop URL safety check (below). `KlingOutputsExpiredError` is thrown **before any fetch** once `outputsExpireAt` has passed (`force: true` bypasses); `KlingNoOutputsError` for a `succeeded` task with no outputs. A download that fails after earlier files were written throws `KlingSaveError { written, failedUrl, cause }` — the files already on disk are listed, and no sidecar is written. The vendor's `task.id` is checked to be a single path segment before it becomes a file name. The sidecar's `request` is the handle's redacted record — a 20 MB inline frame is a `{ kind, bytes, sha256 }` triple there, not a second copy.
 
 ## Account and billing
@@ -297,7 +299,7 @@ Every error extends `KlingError` (`requestId` when a response was received):
 
 | Class | When | Fields |
 |---|---|---|
-| `KlingAPIError` | the vendor answered with a business code | `code`, `httpStatus`, `request { kind, method, path, externalId }`, `taskState`, `isTransient()`, `isRetryable()` |
+| `KlingAPIError` | the vendor answered with a business code | `code`, `httpStatus`, `request { kind, method, path, externalId }`, `externalId`, `taskState`, `isTransient()`, `isRetryable()` |
 | `KlingNetworkError` | `fetch` failed | `cause`, `externalId`, `taskState` |
 | `KlingTimeoutError` | the per-attempt deadline fired | `deadlineMs`, `attempt`, `attempts`, `externalId`, `taskState` |
 | `KlingResponseError` | non-JSON body or an unexpected 3xx | `httpStatus`, `bodySnippet`, `location` |
@@ -321,7 +323,25 @@ Every error extends `KlingError` (`requestId` when a response was received):
 
 `isTransient()` is the vendor's "try later" signal and says nothing about whether the task exists; `isRetryable()` is always `false` for a create.
 
-**Recovery.** Every create carries an `external_task_id` — yours, or a UUID the library generates (opt out with `externalTaskId: false`). After a `may-exist` failure, `err.externalId` is set; call `client.tasks.recover(product, externalId)`. `null` means *not visible to this account*, not *never created* — and immediately after a lost response it can also mean *not visible yet*: whether the vendor's reads lag its writes has not been probed under load (see Known limits), so treat a `null` in the first seconds as inconclusive and recover again after a pause before considering a re-submit. The vendor also **rejects a duplicate `external_task_id`** (`400 / 1201 "already exists"` — observed once, on a `text-to-video` create re-submitted immediately after a successful one; not yet observed on legacy creates, across products, after a failed original, or after time has passed). Where that holds, re-submitting with the same id after `may-exist` cannot double-bill — but it cannot succeed either, so recovery is the path forward. TTS carries no external id and is unrecoverable.
+**Recovery.** Every create carries an `external_task_id` — yours, or a UUID the library generates (opt out with `externalTaskId: false`). After a `may-exist` failure, `err.externalId` is set; call `client.tasks.recover(product, externalId)`. `null` means *not visible to this account*, not *never created* — and immediately after a lost response it can also mean *not visible yet*: whether the vendor's reads lag its writes has not been probed under load (see Known limits), so treat a `null` in the first seconds as inconclusive and recover again after a pause before considering a re-submit. The vendor also **rejects a duplicate `external_task_id`** (`400 / 1201 "already exists"` — observed once, on a `text-to-video` create re-submitted immediately after a successful one; not yet observed on legacy creates, across products, after a failed original, or after time has passed). **If you do re-submit after a `may-exist`, re-submit with the same id** — `externalTaskId: err.externalId` — never a fresh one. A fresh UUID (the default when you pass nothing) bypasses the vendor's duplicate check, so a task the vendor did create but has not shown you yet bills twice. With the same id there are only two outcomes, and both are safe: `1201` (the original exists — go back to `recover()`) or a normal create (it never existed). Where the duplicate check holds, the same-id re-submit is what closes the double-bill corridor; where it does not (unobserved cases above), nothing does, which is why the pause-and-recover step comes first. TTS carries no external id and is unrecoverable.
+
+```ts
+async function submit(params: TextToVideoParams): Promise<TaskHandle> {
+  try {
+    return await client.video.textToVideo(params);
+  } catch (err) {
+    const carries = err instanceof KlingAPIError || err instanceof KlingNetworkError || err instanceof KlingTimeoutError || err instanceof KlingResponseError;
+    if (!carries || err.taskState !== 'may-exist' || !err.externalId) throw err;
+    for (const delayMs of [0, 10_000]) {                       // reads may lag writes — see Known limits
+      await new Promise((r) => setTimeout(r, delayMs));
+      const found = await client.tasks.recover('text-to-video', err.externalId);
+      if (found) return client.tasks.handle('text-to-video', found.id);
+    }
+    // Same id, or the vendor's duplicate check cannot protect you.
+    return await client.video.textToVideo({ ...params, externalTaskId: err.externalId });
+  }
+}
+```
 
 Concurrency refusals (`1303 "parallel task over resource pack limit"`) surface immediately as `KlingAPIError` with `taskState: 'not-created'` — the library does not queue creates for you.
 

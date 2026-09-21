@@ -74,6 +74,8 @@ export class KlingAPIError extends KlingError {
   readonly code: number;
   readonly httpStatus: number;
   readonly request: RequestDescriptor;
+  /** The create's `external_task_id` — the recovery key. Mirrors `request.externalId`, as on the other request-bearing errors (ship run #6). */
+  readonly externalId?: string;
   readonly taskState: TaskState;
 
   constructor(message: string, init: KlingAPIErrorInit) {
@@ -81,6 +83,7 @@ export class KlingAPIError extends KlingError {
     this.code = init.code;
     this.httpStatus = init.httpStatus;
     this.request = init.request;
+    if (init.request.externalId) this.externalId = init.request.externalId;
     this.taskState = deriveTaskStateFromResponse(init.request.kind, init.code, init.httpStatus);
   }
 
