@@ -90,27 +90,27 @@ Conventions: `[ ]` open · `[x]` done · `[-]` deliberately skipped (write why i
 
 ---
 
-## Phase 1c — Tooling, real-undici integration, smoke — budget ~140 config + ~190 test
+## Phase 1c — Tooling, real-undici integration, smoke — budget ~140 config + ~190 test — **actual: eslint.config.js +110, ci.yml +3, package.json script; tests 249 (lint-control 84, undici 130, smoke.mjs 35). Within budget. Commit `eb05948`.**
 
 `chore(ci): import-graph lint with control, cycle check, real-undici integration matrix, live smoke`
 
 ### Tooling
-- [ ] devDependencies: `madge`, `eslint-plugin-import`, `eslint-import-resolver-typescript`
-- [ ] `eslint.config.js`: `import/no-restricted-paths` zones transcribed from spec §5, **scoped by directory to `src/codecs`, `src/http`, `src/products`, `src/media`, `src/handlers`, `src/webhooks.ts`** so 1.x files in the additive window are not linted against 2.0 rules (run #3 A44); `node:*` unrestricted; `npm run check:cycles` = `madge --circular --extensions ts src` (scoped to the same directories if 1.x has cycles — Phase 0 result)
-- [ ] **Control (V12):** a test calls `new ESLint()` with the production config and `lintText('import { HttpCore } from "../http/core.js"', { filePath: 'src/codecs/illegal.ts' })` — a **virtual path inside a zone** — and asserts an `import/no-restricted-paths` message; a second call with `filePath: 'src/products/x.ts'` and the same import asserts **no** message (run #3 A39 — a fixture under `test/` is outside every zone)
-- [ ] `ci.yml` runs `check:cycles` and lint
+- [x] devDependencies: `madge`, **`eslint-plugin-import-x`** (the maintained, flat-config-native fork — `eslint-plugin-import` + the TS resolver hit an `@typescript-eslint/utils ≥8.56` peer conflict), `eslint-import-resolver-typescript`, `undici` (for the V14 Agent); `typescript-eslint` bumped `^8.20 → ^8.70` inside its caret to satisfy the resolver's peer; lockfile: 0 `localhost:4873`
+- [x] `eslint.config.js`: `import-x/no-restricted-paths` zones transcribed from spec §5, **scoped by directory to `src/codecs`, `src/http`, `src/products`, `src/media`, `src/handlers`, `src/webhooks.ts`, `src/client.ts`** so 1.x files in the additive window are not linted against 2.0 rules (run #3 A44); the three 1.x `handlers/*` files that share a zone directory are excluded by name until 2a₀; `node:*` unrestricted; **plus `import-x/no-unresolved`** — the zones rule cannot judge an import the resolver cannot resolve, so an unresolvable path (typo, not-yet-existing module) must be an error in its own right or it bypasses the graph (found while writing the control); `npm run check:cycles` = `madge --circular --extensions ts src` on the full tree (the 1.x cycle was removed by 1a₁)
+- [x] **Control (V12):** `test/2.0/lint-control.test.ts` lints source text at a **virtual path inside a zone** (`src/codecs/illegal.ts` importing `../http/core.js`) with the production config via `ESLint.lintText` → exactly one `import-x/no-restricted-paths` message; the same import at `src/products/x.ts` → none; carve-outs (`http/errors`, `handlers/poller`), `node:*`, out-of-zone 1.x paths, and the unresolved-import case each asserted. Only the two type-aware style rules are switched off for the virtual file (not in the tsconfig program)
+- [x] `ci.yml` runs `check:cycles` and lint
 
 ### Real-undici integration tests (V14) — `test/2.0/integration/undici.test.ts`, **through `HttpCore`**
-- [ ] Local **`https.createServer`** with a self-signed cert generated at test start; `HttpCore` constructed with `baseUrl: 'https://localhost:<port>'` and `fetch` bound to an undici `Agent({ connect: { rejectUnauthorized: false } })`; `validateUrl` is not on the API path (it guards downloads), so nothing else is relaxed (run #3 A36/F3)
-- [ ] 302 with `Location` → `KlingResponseError { location }` (proves `redirect: 'manual'` exposes the header through the core)
-- [ ] Connection refused to **`https://localhost:<closed port>`** (a hostname, so Node 20's dual-stack `AggregateError` path is the one exercised) → `KlingNetworkError` with `cause.code === 'ECONNREFUSED'` — record whether the code arrives directly or via `errors[0]` (run #3 anxiety F6)
-- [ ] Server writes half a JSON body and stalls → `KlingTimeoutError` (proves the deadline covers the body read under real undici)
-- [ ] CI matrix: Node 20 and 22
+- [x] Local **`https.createServer`** with a self-signed cert minted by `openssl` at test start (suite skips if `openssl` is absent); `HttpCore` constructed with `baseUrl: 'https://localhost:<port>'` and `fetch` = undici's bound to an `Agent({ connect: { rejectUnauthorized: false } })`; nothing in production relaxed (run #3 A36/F3)
+- [x] 302 with `Location` → `KlingResponseError { httpStatus: 302, location }` through the core
+- [x] Connection refused to **`https://localhost:<closed port>`** (a hostname) → `KlingNetworkError` with `ECONNREFUSED` in the cause chain, `taskState 'not-created'`, `externalId` carried; the test accepts the code directly or via `AggregateError.errors[]` (Q14 — passing on Node 24 locally; CI covers 20/22)
+- [x] Server writes half a JSON body and stalls → `KlingTimeoutError { deadlineMs: 300 }`, `taskState 'may-exist'` on a write — the deadline covers the body read under real undici
+- [x] CI matrix: Node 20 and 22 (set in Phase 0)
 
 ### Smoke (`scripts/smoke.mjs`) **(V5)** — raw core calls (no namespaces exist yet)
-- [ ] `client['http'].request({method:'GET', path:'/tasks', query:{task_ids:'0'}, kind:'read'})`, `POST /tasks {limit:1}`, `GET /account/costs`, `GET /v1/general/presets-voices` → all `code: 0`
-- [ ] Control: `apiKey: 'garbage'` → `KlingAPIError` with `httpStatus 401`; record `code` here: `________` (closes §11 Q9 for garbage keys)
-- [ ] Exit 1 on any expected-success failure or on the control succeeding
+- [x] `scripts/smoke.mjs` via `client['http'].request(...)` on the built `dist/`: `GET /tasks?task_ids=0`, `POST /tasks {limit:1}`, `GET /account/costs`, `GET /v1/general/presets-voices` → all HTTP 200 `code 0` (2026-09-21, attempt 1 each)
+- [x] Control: `apiKey: 'garbage-not-a-key'` → `KlingAPIError` HTTP 401 **code `1002`**, message *"Authentication error. The current API does not support AK/SK; please go to the console … to create API key."* — the same code and the same (misleading) text as the JWT rejection. **§11 Q9 closed for garbage keys:** `1002` = "authorization invalid" generally; the README must say the vendor message is not diagnostic (a revoked key is untested — needs Alex to rotate one)
+- [x] Exit 1 on any expected-success failure or on the control succeeding
 
 ---
 
@@ -432,7 +432,7 @@ Not part of the 2.0.0 publish gate (V15 is). Runs after 6c, against the package 
 | §10.16 concurrency queue stays out of scope? | settled 2026-09-20 | out of scope for 2.0 (Alex) |
 | §10.17 live-programme budget (~8–10 units) | settled 2026-09-20 | up to ~20 units authorised as a block; pack expires **2026-10-20** — run the live items before then; record each spend in its blank (Alex) |
 | Q15 legacy `GET /v1/<product>/{external_task_id}` per product | 2a₁ live / V10 blanks | `________` |
-| Q14 undici behaviours on Node 20/22 | Phase 1a (V14) | `________` |
+| Q14 undici behaviours on Node 20/22 | 1c (V14) | all three hold on Node 24 locally; CI matrix 20/22 on every push |
 | Q4 omni `duration` with reference video; `shot_type` | Phase 2b (document only) | `________` |
 | Q7 element delete path / shared library | Phase 4a | `________` |
 | Q9 code for a garbage key; revoked key | Phase 1a smoke control | `________` |
