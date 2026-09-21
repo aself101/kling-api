@@ -320,31 +320,39 @@ Gate: **both Phase 0 write probes ticked.** This is the commit where the JWT pat
 
 ---
 
-## Phase 3a — Image generate + omni — budget ~200 src (IMAGE_MODELS ~40, builders ~70, products ~40, validators ~50) + ~220 test
+## Phase 3a — Image generate + omni — budget ~200 src (IMAGE_MODELS ~40, builders ~70, products ~40, validators ~50) + ~220 test — **actual (3a + 3b together, they share `codecs/legacy.ts` and `validators/image.ts`): ≈520 src + ≈330 test; split per D20 into `35b7084` (params, registry, builders, rules, fixtures) and `2feec3f` (ImageApi, client, V10 live). 372 tests. Spend: 8 image units.**
 
 `feat(image)!: image generation and omni-image on the legacy standard`
 
-- [ ] `IMAGE_MODELS`: `kling-v3` (generations; `1k|2k`; 8 ratios), `kling-v2-1` (generations + multi-image2image; `imageReference`-capable), `kling-v3-omni` (omni-image; `1k|2k|4k`; `auto`; series), `kling-image-o1` (omni-image; `1k|2k` per capability map — `4k` rejected with the doc cited); each row commented with source
-- [ ] `legacy.buildGenerate(params)` → flat body `{ model_name, prompt, negative_prompt?, image?, image_reference?, image_fidelity?, human_fidelity?, element_list[]{element_id}, resolution, n, aspect_ratio, watermark_info?, callback_url?, external_task_id? }`
-- [ ] `legacy.buildOmniImage(params)` → `{ model_name, prompt, image_list[]{image}, element_list[]{element_id}, resolution, result_type, series_amount, n, aspect_ratio, … }`
-- [ ] `image.generate` (default `kling-v3`), `image.omni` (default `kling-v3-omni`) → `POST /v1/images/…` `kind: 'write'` → `TaskHandle` (`standard: 'legacy'`)
-- [ ] **(V1)** bodies deep-equal the vendor *Request Example*s in `kling-image-2.1-generation.md` and `kling-image-o1-generation.md`
-- [ ] **(V3)** rules with `[shape]`/`[capability]` labels: `[capability]` `imageReference`/`humanFidelity` with model ≠ `kling-v2-1` → **error**; `humanFidelity` with `imageReference !== 'subject'` → **warning** (vendor: "only takes effect when … subject"); `imageFidelity`/`humanFidelity` ∈ [0,1]; `n` 1–9; `resolution` per model; `aspectRatio` `auto` only on omni; `seriesAmount` 2–9|`auto`, only with `resultType: 'series'`; `images.length + elements.length ≤ 10` on omni
-- [ ] Unknown `model_name` passthrough/reject per `unknownModels`; `capabilityValidation: 'warn'` and `extraSettings` (merged top-level for legacy) behave as in 2a₂
-- [ ] **V10 (release-blocking):** `image.generate({ prompt, n: 1 })` → `succeeded`, one `image` output (the Phase 0 probe task may be reused as first evidence via `tasks.getByProduct('image-generation', id)`). Record: `________`
+**Deviations, recorded:**
+- **`kling-image-o1` has no `series`** (capability map "Series Image Generation — Not Supported") and no 4k — both `[capability]` errors; the checklist named only 4k.
+- **`element_list[].element_id`** is typed `long` by the vendor; the library takes strings and sends a safe-integer string as a number, an 18-digit one as a string `[VERIFY live, Phase 7]`. The vendor's own O1 example id `829836802793406551` is above 2^53 — JSON.parse mangles it to `…600` in the fixture, which is the reason for the string type; the test pins the mangling rather than hide it.
+- **`MultiImageToImageParams.negativePrompt`** added — the vendor's Request Example sends `negative_prompt` though its table omits it.
+- **`kling-v2` removed** from `KnownImageModel` (the 1a₂ skeleton had it; §6.2 and V7 do not).
+- **`products/shared.ts`** holds `recordOf` / `redactMedia` / `createTimeoutMs` / `ProductApiConfig` so `products/image.ts` does not import `products/video.ts`.
+- **Live confirmation of the 30-day derivation:** the vendor's signed output URL carries `Expires=1792550193` (2026-10-21T02:36:33Z); the library's `outputsExpireAt` for the same task is 2026-10-21T02:36:35Z — a 2 s difference (the CDN signs at `updated_at` ± its own clock). D4's derivation is the vendor's actual retention, not just its prose.
+
+- [x] `IMAGE_MODELS`: `kling-v3` (generations; `1k|2k`; 8 ratios), `kling-v2-1` (generations + multi-image2image; `imageReference`-capable), `kling-v3-omni` (omni-image; `1k|2k|4k`; `auto`; series), `kling-image-o1` (omni-image; `1k|2k` per capability map — `4k` rejected with the doc cited; series rejected likewise); each row commented with source
+- [x] `legacy.buildGenerate(params)` → flat body `{ model_name, prompt, negative_prompt?, image?, image_reference?, image_fidelity?, human_fidelity?, element_list[]{element_id}, resolution, n, aspect_ratio, watermark_info?, callback_url?, external_task_id? }`
+- [x] `legacy.buildOmniImage(params)` → `{ model_name, prompt, image_list[]{image}, element_list[]{element_id}, resolution, result_type, series_amount, n, aspect_ratio, … }`
+- [x] `image.generate` (default `kling-v3`), `image.omni` (default `kling-v3-omni`) → `POST /v1/images/…` `kind: 'write'` → `TaskHandle` (`standard: 'legacy'`)
+- [x] **(V1)** bodies deep-equal the vendor *Request Example*s in `kling-image-2.1-generation.md` and `kling-image-o1-generation.md`
+- [x] **(V3)** rules with `[shape]`/`[capability]` labels: `[capability]` `imageReference`/`humanFidelity` with model ≠ `kling-v2-1` → **error**; `humanFidelity` with `imageReference !== 'subject'` → **warning** (vendor: "only takes effect when … subject"); `imageFidelity`/`humanFidelity` ∈ [0,1]; `n` 1–9; `resolution` per model; `aspectRatio` `auto` only on omni; `seriesAmount` 2–9|`auto`, only with `resultType: 'series'`; `images.length + elements.length ≤ 10` on omni
+- [x] Unknown `model_name` passthrough/reject per `unknownModels`; `capabilityValidation: 'warn'` and `extraSettings` (merged top-level for legacy) behave as in 2a₂
+- [x] **V10 (release-blocking):** `image.generate({ prompt, n: 1, resolution: '1k', aspectRatio: '1:1' })` on `kling-v3` → **`succeeded` in 24 s**, task **`930840436553031693`**, one `image` output, billing **`[{ unit, 8 }, { cash, 0 }]`**; `tasks.recover('image-generation', externalId)` found it (Q15 positive for this product); `client.save` wrote the png + sidecar (2026-09-20)
 
 ---
 
-## Phase 3b — Image multi / outpaint / subject-completion — budget ~140 src + ~160 test
+## Phase 3b — Image multi / outpaint / subject-completion — budget ~140 src + ~160 test — **delivered with 3a (`35b7084`, `2feec3f`); see 3a for actuals and deviations.**
 
 `feat(image): multi-image-to-image, outpainting, subject completion`
 
-- [ ] `legacy.buildMultiImageToImage` → `{ model_name: 'kling-v2-1', prompt?, subject_image_list[]{subject_image}, scene_image?, style_image?, n, aspect_ratio, … }`; `subjectImages` 1–4
-- [ ] `legacy.buildOutpaint` → `{ image, up_expansion_ratio, down_…, left_…, right_…, prompt?, n, … }`; each ratio ∈ [0,2]; `(1+up+down)*(1+left+right) ≤ 3` (retain `MAX_TOTAL_EXPANSION`)
-- [ ] `legacy.buildSubjectCompletion` → `{ element_frontal_image, callback_url?, external_task_id? }`
-- [ ] `image.multiImageToImage`, `image.outpaint`, `image.subjectCompletion` → `TaskHandle`
-- [ ] **(V1)** bodies deep-equal vendor examples (`kling-image-2.1-multi-image-to-image.md`, `kling-image-common-outpainting.md`, `kling-image-common-subject-completion.md`)
-- [ ] `tasks.listByProduct` for all five image products parses via `legacy.parseList` (fixture per product where the doc has a list example)
+- [x] `legacy.buildMultiImageToImage` → `{ model_name: 'kling-v2-1', prompt?, subject_image_list[]{subject_image}, scene_image?, style_image?, n, aspect_ratio, … }`; `subjectImages` 1–4
+- [x] `legacy.buildOutpaint` → `{ image, up_expansion_ratio, down_…, left_…, right_…, prompt?, n, … }`; each ratio ∈ [0,2]; `(1+up+down)*(1+left+right) ≤ 3` (retain `MAX_TOTAL_EXPANSION`)
+- [x] `legacy.buildSubjectCompletion` → `{ element_frontal_image, callback_url?, external_task_id? }`
+- [x] `image.multiImageToImage`, `image.outpaint`, `image.subjectCompletion` → `TaskHandle`
+- [x] **(V1)** bodies deep-equal vendor examples (`kling-image-2.1-multi-image-to-image.md`, `kling-image-common-outpainting.md`, `kling-image-common-subject-completion.md`)
+- [x] `tasks.listByProduct` for all five image products parses via `legacy.parseList` — routing table covers all five (`tasks.test.ts`); list fixtures exist for image-generation (1b); the other four pages' list examples are the same shape (verified by eye, not fixtured — `[VERIFY]` in Phase 7 live)
 
 ---
 
@@ -483,7 +491,7 @@ Not part of the 2.0.0 publish gate (V15 is). Runs after 6c, against the package 
 | §10.15 resource live creates release-blocking? | settled 2026-09-20 | blocking — the three Phase 0 resource probes are in V15 (Alex) |
 | §10.16 concurrency queue stays out of scope? | settled 2026-09-20 | out of scope for 2.0 (Alex) |
 | §10.17 live-programme budget (~8–10 units) | settled 2026-09-20 | up to ~20 units authorised as a block; pack expires **2026-10-20** — run the live items before then; record each spend in its blank (Alex) |
-| Q15 legacy `GET /v1/<product>/{external_task_id}` per product | 2a₁ live / V10 blanks | **partial 2026-09-20 [LIVE]** — `image-generation`: an unknown value in the `{id}` segment answers HTTP 400 / `1201` "Task not found by id/external id: <value>" (so the segment is matched against both, and **not-found is `1201`, not the table's `1203`**); the library maps `1201` + `/task not found/i` → `KlingTaskNotFoundError` / `recover() → null`. Positive per-product acceptance (a real external id resolving) still lands in the V10 blanks. |
+| Q15 legacy `GET /v1/<product>/{external_task_id}` per product | 2a₁ live / V10 blanks | **partial 2026-09-20 [LIVE]** — `image-generation`: an unknown value in the `{id}` segment answers HTTP 400 / `1201` "Task not found by id/external id: <value>" (so the segment is matched against both, and **not-found is `1201`, not the table's `1203`**); the library maps `1201` + `/task not found/i` → `KlingTaskNotFoundError` / `recover() → null`. **Positive: `image-generation` resolved a real external id (`v10-image-…` → task `930840436553031693`) on 2026-09-20.** The other legacy products still land in the Phase 7 battery. |
 | Q14 undici behaviours on Node 20/22 | 1c (V14) | **closed 2026-09-20** — all three hold on Node 24 locally and on the CI matrix (20 and 22 both green on `f8b1150`); the one surprise was the *dev* dependency, not the behaviours: undici 8 does not load on Node 20 |
 | Q4 omni `duration` with reference video; `shot_type` | Phase 2b (document only) | `________` |
 | Q7 element delete path / shared library | Phase 4a | `________` |
