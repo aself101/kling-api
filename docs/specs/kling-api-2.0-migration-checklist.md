@@ -356,28 +356,34 @@ Gate: **both Phase 0 write probes ticked.** This is the commit where the JWT pat
 
 ---
 
-## Phase 4a — Elements + voices — budget ~230 src (types ~60, elements ~90, voices ~80) + ~220 test
+## Phase 4a — Elements + voices — budget ~230 src (types ~60, elements ~90, voices ~80) + ~220 test — **actual (4a + 4b together in `40a7f63`): ≈410 src + ≈190 test — +17 % on src, the first phase inside the D20 line. 391 tests. Spend: 0.1 units (TTS 0.05 + voice 0.05; the element was 0).**
 
 `feat(resources): element and voice management`
 
-- [ ] Transcribe spec §6.3 `ElementCreateParams`, `VoiceCreateParams`, `PageOptions`, `ElementDeleteOptions` into `products/elements.ts` / `products/voices.ts`; one test per required field asserting the snake_case key in the body
-- [ ] `elements.create({ name, description, referenceType, frontalImage?, referImages?, referVideos?, voiceId?, tags?, … })` → `POST /v1/general/advanced-custom-elements` → `TaskHandle` (product `element`); image inputs via `resolveMediaSource`, videos URL-only
-- [ ] `elements.get(id)`, `elements.list({pageNum,pageSize})`, `elements.presets()` → `Task`/`Task[]` with `element` outputs
-- [ ] `elements.delete(id, { kind = 'video' })` → `/v1/general/delete-advanced-elements` | `/v1/general/delete-elements`; `kind: 'write'`
-- [ ] `voices.create({ name, voiceUrl? | videoId?, … })` (exactly one of the two) → `POST /v1/general/custom-voices` → `TaskHandle`; `voices.get/list/presets/delete` (list `pageSize ≤ 1000`)
-- [ ] **(V1)** contract tests for all create/delete bodies
-- [ ] **Live, read-only:** `voices.presets()` and `elements.presets()` each return ≥1 output
-- [ ] **§11 Q7 probe (spends an element create):** create one element via the video path; delete it via `kind: 'image'`; record whether delete returns `code: 0`: `________`
+**Live findings and deviations, recorded:**
+- **Delete endpoints answer `code 0` with no `data`** (docs: `data { task_id, task_status }`). The element delete did; the voice delete returned a full task record. `DeleteResult.taskId/status` are optional; `code 0` alone is success. The first draft threw `KlingCodecError` on the live shape.
+- **§11 Q7 closed:** one element store behind both delete paths (see the row below).
+- **`elements.get(taskId)`** takes the creation *task* id (the vendor's query path is task-keyed); the element id is `outputs[0].id`. `elements.delete(elementId)` takes the *element* id. Documented on both methods.
+- **`pageSize` bound is per product** in `tasks.listByProduct` (voices 1000, else 500) — the 2a₁ implementation had a flat 500.
+
+- [x] Spec §6.3 types live in `codecs/params.ts` (with the other params); `ElementsApi` / `VoicesApi` / `AvatarApi` / `AudioApi` share one file `products/resources.ts` (a legacy base class); builder tests assert every snake_case key
+- [x] `elements.create({ name, description, referenceType, frontalImage?, referImages?, referVideos?, voiceId?, tags?, … })` → `POST /v1/general/advanced-custom-elements` → `TaskHandle` (product `element`); image inputs via `resolveMediaSource`, videos URL-only
+- [x] `elements.get(id)`, `elements.list({pageNum,pageSize})`, `elements.presets()` → `Task`/`Task[]` with `element` outputs
+- [x] `elements.delete(id, { kind = 'video' })` → `/v1/general/delete-advanced-elements` | `/v1/general/delete-elements`; `kind: 'write'`
+- [x] `voices.create({ name, voiceUrl? | videoId?, … })` (exactly one of the two) → `POST /v1/general/custom-voices` → `TaskHandle`; `voices.get/list/presets/delete` (list `pageSize ≤ 1000`)
+- [x] **(V1)** contract tests for all create/delete bodies
+- [x] **Live, read-only:** `voices.presets({pageSize:5})` → 5 tasks, first voice "Owen" (`owned_by: kling`); `elements.presets({pageSize:5})` → 5, first "Grace" (2026-09-20)
+- [x] **§11 Q7 probe:** `elements.create` (image_refer, 0 units) → element `321930081569316` (task `930842216413663301`); `elements.delete(id, { kind: 'image' })` → **`code: 0`**; `elements.get` → output `status: 'deleted'`; second delete → `400 / 1201 "Element already be deleted for id"`. **One element store behind both paths** (2026-09-20)
 
 ---
 
-## Phase 4b — Avatar + TTS — budget ~120 src + ~130 test
+## Phase 4b — Avatar + TTS — budget ~120 src + ~130 test — **delivered with 4a in `40a7f63`. Live through the library: `audio.tts` → 5.04 s clip (0.05 units); `voices.create` from that clip → succeeded in ~10 s (0.05); `voices.delete` → `code 0`; `tasks.recover('voice', externalId)` found the task (Q15 positive for voice). Avatar create was live-probed in Phase 0 with the raw body this builder now emits; not re-spent (4.4 units).**
 
 `feat(resources): avatar and text-to-speech`
 
-- [ ] `avatar.create(AvatarCreateParams)` (spec §6.3) — logic ported from the deleted `src/operations/avatar.ts` + `validators/avatar.ts` (retrieve from git history at `4f23c27`); `soundFile` via `resolveMediaSource(kind:'audio', standard:'legacy')` (≤ 5 MB, `mp3/wav/m4a/aac`); `image` cap 10 MB → `TaskHandle` (product `avatar`)
-- [ ] `audio.tts(TtsParams)` → `POST /v1/audio/tts` synchronous (`kind: 'write'`) → `TaskOutput[]` (type `audio`); `text ≤ 1000`; `voiceSpeed ∈ [0.8, 2.0]`; `voiceLanguage` required
-- [ ] **(V1)** contract tests
+- [x] `avatar.create(AvatarCreateParams)` (spec §6.3) — rules re-derived from `kling-avatar.md` rather than ported (the 1.x validator's `audioId XOR soundFile`, mode enum and prompt cap are the same three rules); `soundFile` via `resolveMediaSource(kind:'audio', standard:'legacy')` (≤ 5 MB, `mp3/wav/m4a/aac`); `image` cap 10 MB → `TaskHandle` (product `avatar`)
+- [x] `audio.tts(TtsParams)` → `POST /v1/audio/tts` synchronous (`kind: 'write'`) → `TaskOutput[]` (type `audio`); `text ≤ 1000`; `voiceSpeed ∈ [0.8, 2.0]`; `voiceLanguage` required
+- [x] **(V1)** contract tests
 
 ---
 
@@ -491,10 +497,10 @@ Not part of the 2.0.0 publish gate (V15 is). Runs after 6c, against the package 
 | §10.15 resource live creates release-blocking? | settled 2026-09-20 | blocking — the three Phase 0 resource probes are in V15 (Alex) |
 | §10.16 concurrency queue stays out of scope? | settled 2026-09-20 | out of scope for 2.0 (Alex) |
 | §10.17 live-programme budget (~8–10 units) | settled 2026-09-20 | up to ~20 units authorised as a block; pack expires **2026-10-20** — run the live items before then; record each spend in its blank (Alex) |
-| Q15 legacy `GET /v1/<product>/{external_task_id}` per product | 2a₁ live / V10 blanks | **partial 2026-09-20 [LIVE]** — `image-generation`: an unknown value in the `{id}` segment answers HTTP 400 / `1201` "Task not found by id/external id: <value>" (so the segment is matched against both, and **not-found is `1201`, not the table's `1203`**); the library maps `1201` + `/task not found/i` → `KlingTaskNotFoundError` / `recover() → null`. **Positive: `image-generation` resolved a real external id (`v10-image-…` → task `930840436553031693`) on 2026-09-20.** The other legacy products still land in the Phase 7 battery. |
+| Q15 legacy `GET /v1/<product>/{external_task_id}` per product | 2a₁ live / V10 blanks | **partial 2026-09-20 [LIVE]** — `image-generation`: an unknown value in the `{id}` segment answers HTTP 400 / `1201` "Task not found by id/external id: <value>" (so the segment is matched against both, and **not-found is `1201`, not the table's `1203`**); the library maps `1201` + `/task not found/i` → `KlingTaskNotFoundError` / `recover() → null`. **Positive: `image-generation` (`v10-image-…` → task `930840436553031693`) and `voice` (UUID → task `930842561898479651`) resolved real external ids on 2026-09-20.** The other legacy products still land in the Phase 7 battery. |
 | Q14 undici behaviours on Node 20/22 | 1c (V14) | **closed 2026-09-20** — all three hold on Node 24 locally and on the CI matrix (20 and 22 both green on `f8b1150`); the one surprise was the *dev* dependency, not the behaviours: undici 8 does not load on Node 20 |
 | Q4 omni `duration` with reference video; `shot_type` | Phase 2b (document only) | `________` |
-| Q7 element delete path / shared library | Phase 4a | `________` |
+| Q7 element delete path / shared library | Phase 4a | **closed 2026-09-20 [LIVE]** — element created via `advanced-custom-elements`, deleted via `/v1/general/delete-elements` → `code 0`, status `deleted`; re-delete → `1201` "already be deleted". Shared store; `kind` only picks the path. |
 | Q9 code for a garbage key; revoked key | Phase 1a smoke control | `________` |
 | Q11 `external_task_id` idempotency | Phase 2a | **closed 2026-09-20 [LIVE]** — duplicate → 400 / `1201` "External_task_id … already exists"; not-created, no charge. It IS an idempotency key. |
 | Q12 legacy image timestamps ms | Phase 1b fixtures (normalise-and-warn) | **closed 2026-09-20 [LIVE]** — `GET /v1/images/generations/930810057590833241` → `outputsExpireAt 1792542950357`, i.e. `updated_at` was ms (a seconds value would have produced a warning and a 1970s expiry). Normalise-and-warn stays as the guard. |
