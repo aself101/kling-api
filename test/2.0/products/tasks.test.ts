@@ -358,3 +358,52 @@ describe('TaskHandle', () => {
     expect(calls).toHaveLength(0);
   });
 });
+
+// ── ship run #4 fixes ─────────────────────────────────────────────────────────────────
+
+describe('TaskHandle — ship run #4 regressions', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('abort-then-retry on one handle: the second wait() polls and resolves instead of inheriting the dying loop\'s AbortError', async () => {
+    const statuses = ['processing', 'processing', 'succeeded'];
+    const { core, logger, calls } = rig(() => ok([newRec('v1', statuses.length > 1 ? statuses.shift()! : statuses[0])]));
+    const h = createHandle(core, logger, 'text-to-video', 'v1', {});
+    const ac = new AbortController();
+    const first = h.wait({ intervalMs: 1000, signal: ac.signal });
+    const firstRejects = expect(first).rejects.toThrow('gave up');
+    await vi.advanceTimersByTimeAsync(500);
+    ac.abort(new Error('gave up'));
+    await firstRejects;
+    // The idiomatic retry, in the same microtask window the dying loop's catch runs in.
+    const second = h.wait({ intervalMs: 1000, deadlineMs: 10_000 });
+    await vi.advanceTimersByTimeAsync(3000);
+    await expect(second).resolves.toMatchObject({ status: 'succeeded' });
+    expect(calls.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it('wait().catch(() => wait()) — the chained form — also polls again', async () => {
+    const statuses = ['processing', 'succeeded'];
+    const { core, logger, calls } = rig(() => ok([newRec('v1', statuses.length > 1 ? statuses.shift()! : statuses[0])]));
+    const h = createHandle(core, logger, 'text-to-video', 'v1', {});
+    const ac = new AbortController();
+    const p = h.wait({ intervalMs: 1000, signal: ac.signal }).catch(() => h.wait({ intervalMs: 1000, deadlineMs: 10_000 }));
+    await vi.advanceTimersByTimeAsync(100);
+    ac.abort('stop');
+    await vi.advanceTimersByTimeAsync(3000);
+    await expect(p).resolves.toMatchObject({ status: 'succeeded' });
+    expect(calls.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('a per-caller timeout carries the last task the loop saw (not null once a poll has completed)', async () => {
+    const { core, logger } = rig(() => ok([newRec('v1', 'processing', { message: 'still rendering' })]));
+    const h = createHandle(core, logger, 'text-to-video', 'v1', {});
+    const p = h.wait({ intervalMs: 1000, deadlineMs: 2500 });
+    const rej = expect(p).rejects.toBeInstanceOf(KlingPollTimeoutError);
+    await vi.advanceTimersByTimeAsync(2500);
+    await rej;
+    const err = await p.catch((e) => e as KlingPollTimeoutError);
+    expect(err.task).toMatchObject({ id: 'v1', status: 'processing', message: 'still rendering' });
+    expect(err.elapsedMs).toBeGreaterThanOrEqual(2500);
+  });
+});

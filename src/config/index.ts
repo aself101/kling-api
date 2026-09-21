@@ -1,7 +1,7 @@
 /**
- * Config barrel (spec §5). Constants and the 2.0 credential loader only; the 1.x
- * `loadCredentials`/`loadConfig`, model tables and validators were removed at 2a₀ —
- * `config/models.ts` and `config/validators/*` are re-created by 2a₁/2a₂/3a.
+ * Config barrel (spec §5): constants and the credential loader. The model registry
+ * (`config/models.ts`) and the validators (`config/validators/*`) are imported directly by
+ * the product modules, not re-exported here.
  */
 export * from './constants.js';
 export { loadApiKey, MISSING_API_KEY_MESSAGE, type ApiKeySource } from './loaders.js';

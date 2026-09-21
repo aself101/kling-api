@@ -116,3 +116,54 @@ describe('fetchToBuffer', () => {
     await expect(fetchToBuffer('https://cdn.example/slow', opts(fetchImpl, { signal: pre.signal }))).rejects.toBe('early');
   });
 });
+
+// ── ship run #4 fixes ─────────────────────────────────────────────────────────────────
+
+describe('fetchToBuffer — ship run #4 regressions', () => {
+  it("a caller abort DURING the body read is rethrown as the caller's own reason, not wrapped as 'http'", async () => {
+    const ac = new AbortController();
+    // Like real undici, the body stream errors when the request signal aborts (1c proved that live).
+    const fetchImpl = (async (_u: unknown, init?: RequestInit) => {
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array(10));
+          init?.signal?.addEventListener('abort', () => controller.error(init.signal?.reason));
+        },
+      });
+      return new Response(body, { status: 200 });
+    }) as typeof fetch;
+    const p = fetchToBuffer('https://cdn.example/slow-body', opts(fetchImpl, { signal: ac.signal }));
+    await new Promise((r) => setTimeout(r, 10));
+    ac.abort('caller-cancel');
+    await expect(p).rejects.toBe('caller-cancel');
+  });
+
+  it("the hop deadline mid-body → KlingDownloadError('timeout'), not 'http'", async () => {
+    const fetchImpl = (async (_u: unknown, init?: RequestInit) =>
+      new Response(new ReadableStream<Uint8Array>({ start(controller) { init?.signal?.addEventListener('abort', () => controller.error(init.signal?.reason)); } }), { status: 200 })) as typeof fetch;
+    const err = await fetchToBuffer('https://cdn.example/stall', opts(fetchImpl, { timeoutMs: 30 })).catch((e) => e as KlingDownloadError);
+    expect(err).toBeInstanceOf(KlingDownloadError);
+    expect(err.reason).toBe('timeout');
+  });
+
+  it("a malformed Location header → KlingDownloadError('invalid-redirect'), never a raw TypeError", async () => {
+    const { fetchImpl } = routed({ 'https://cdn.example/a': { status: 302, headers: { location: 'https://exa mple.com/x' } } });
+    const err = await fetchToBuffer('https://cdn.example/a', opts(fetchImpl)).catch((e) => e as KlingDownloadError);
+    expect(err).toBeInstanceOf(KlingDownloadError);
+    expect(err.reason).toBe('invalid-redirect');
+    const noLoc = routed({ 'https://cdn.example/a': { status: 302 } });
+    expect((await fetchToBuffer('https://cdn.example/a', opts(noLoc.fetchImpl)).catch((e) => e as KlingDownloadError)).reason).toBe('invalid-redirect');
+  });
+
+  it('a hung DNS lookup is bounded by the hop deadline and honours the caller abort', async () => {
+    const hang = () => new Promise<never>(() => undefined);
+    const { fetchImpl, calls } = routed({});
+    const err = await fetchToBuffer('https://slow-dns.example/x', opts(fetchImpl, { lookup: hang, timeoutMs: 30 })).catch((e) => e as KlingDownloadError);
+    expect(err.reason).toBe('timeout');
+    const ac = new AbortController();
+    const p = fetchToBuffer('https://slow-dns.example/x', opts(fetchImpl, { lookup: hang, signal: ac.signal }));
+    setTimeout(() => ac.abort('cancelled-during-dns'), 5);
+    await expect(p).rejects.toBe('cancelled-during-dns');
+    expect(calls).toEqual([]);
+  });
+});

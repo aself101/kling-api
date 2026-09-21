@@ -108,10 +108,12 @@ function isPublicV6(a: string): boolean {
   if ((first & 0xfe00) === 0xfc00) return false; // fc00::/7 unique local
   if ((first & 0xffc0) === 0xfe80) return false; // fe80::/10 link-local
   if ((first & 0xff00) === 0xff00) return false; // ff00::/8 multicast
+  const embeddedV4 = `${hextets[6] >> 8}.${hextets[6] & 0xff}.${hextets[7] >> 8}.${hextets[7] & 0xff}`;
   // ::ffff:0:0/96 written in hex form (::ffff:7f00:1)
-  if (hextets.slice(0, 5).every((h) => h === 0) && hextets[5] === 0xffff) {
-    return isPublicV4(`${hextets[6] >> 8}.${hextets[6] & 0xff}.${hextets[7] >> 8}.${hextets[7] & 0xff}`);
-  }
+  if (hextets.slice(0, 5).every((h) => h === 0) && hextets[5] === 0xffff) return isPublicV4(embeddedV4);
+  // ::/96 IPv4-compatible (deprecated, still routable on some stacks) in hex form (::7f00:1), and 64:ff9b::/96 NAT64 in hex form
+  if (hextets.slice(0, 6).every((h) => h === 0)) return isPublicV4(embeddedV4);
+  if (hextets[0] === 0x64 && hextets[1] === 0xff9b && hextets.slice(2, 6).every((h) => h === 0)) return isPublicV4(embeddedV4);
   return true;
 }
 
@@ -131,7 +133,7 @@ function expandV6(a: string): number[] | null {
 }
 
 // ============================================================================
-// Key redaction and error sanitisation — unchanged from 1.x
+// Key redaction
 // ============================================================================
 
 /** Last four characters only — for logs and `--debug` output. */
@@ -140,26 +142,4 @@ export function redactKey(key: string): string {
     return '****';
   }
   return `***${key.slice(-4)}`;
-}
-
-/**
- * Production error messages: generic unless the message is a validation message
- * ("Invalid", "required", "must be"), which is safe to show.
- */
-export function sanitizeError(error: unknown, isDevelopment = false): string {
-  if (isDevelopment) {
-    if (error instanceof Error) {
-      return error.message;
-    }
-    return String(error);
-  }
-  const message = error instanceof Error ? error.message : String(error);
-  if (message.includes('Invalid') || message.includes('required') || message.includes('must be')) {
-    return message;
-  }
-  return 'An error occurred while processing your request';
-}
-
-export function isProduction(): boolean {
-  return process.env.NODE_ENV === 'production';
 }

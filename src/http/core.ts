@@ -129,6 +129,15 @@ const BODY_SNIPPET_BYTES = 200;
 // Core
 // ============================================================================
 
+/** Never resolves; rejects with the signal's reason when it aborts (or immediately if it already has). Without a signal, never settles. */
+function abortRejection(signal: AbortSignal | undefined): Promise<never> {
+  return new Promise((_, reject) => {
+    if (!signal) return;
+    if (signal.aborted) reject(signal.reason);
+    else signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+  });
+}
+
 export class HttpCore {
   readonly baseUrl: string;
   readonly timeout: number;
@@ -199,7 +208,9 @@ export class HttpCore {
         this.logger.debug(
           `kling: ${req.method} ${req.path} attempt ${attempt}/${attempts} failed (${(err as Error).name}); retrying in ${delay} ms`
         );
-        await this.#sleep(delay);
+        // The backoff is abortable: a caller cancel during the sleep rejects now, not at the
+        // next attempt's pre-check up to maxDelayMs later (ship run #4).
+        await Promise.race([this.#sleep(delay), abortRejection(req.signal)]);
       }
     }
   }
@@ -295,16 +306,18 @@ export class HttpCore {
 
     let envelope: VendorEnvelope<T>;
     try {
+      // SAFETY: the cast is validated on the next line (object with a numeric `code`); `T`
+      // is the codecs' concern — every caller passes the envelope to a parser that checks it.
       envelope = JSON.parse(text) as VendorEnvelope<T>;
       if (typeof envelope !== 'object' || envelope === null || typeof envelope.code !== 'number') {
         throw new Error('not a vendor envelope');
       }
-    } catch {
+    } catch (cause) {
       // HTML from a CDN, an empty body, a proxy page: no business code to reason from.
       throw new KlingResponseError(
         `${req.method} ${req.path} returned HTTP ${response.status} with a non-envelope body`,
         descriptor,
-        { httpStatus: response.status, bodySnippet: text.slice(0, BODY_SNIPPET_BYTES), requestId }
+        { httpStatus: response.status, bodySnippet: text.slice(0, BODY_SNIPPET_BYTES), requestId, cause }
       );
     }
 

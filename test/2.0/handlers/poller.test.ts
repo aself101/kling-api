@@ -99,3 +99,26 @@ describe('sleep', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 });
+
+describe('poll — deadline boundary (ship run #4)', () => {
+  it('when remaining hits exactly 0 at the pre-sleep check, no extra sleep is scheduled — the throw comes from that check', async () => {
+    // deadline == interval: after the first poll, elapsed 0, remaining 3000 → sleep 3000 → post-sleep check trips.
+    // With a 3000 deadline and an fn that itself takes 3000 ms (fake timers), the pre-sleep check sees remaining === 0.
+    let calls = 0;
+    const timersArmed = vi.spyOn(globalThis, 'setTimeout');
+    const fn = vi.fn(async () => {
+      calls++;
+      await new Promise((r) => setTimeout(r, 3000)); // the poll itself consumes the whole deadline
+      return task('processing');
+    });
+    const p = poll(fn, { until: terminal, intervalMs: 3000, deadlineMs: 3000 });
+    const rej = expect(p).rejects.toBeInstanceOf(KlingPollTimeoutError);
+    await vi.advanceTimersByTimeAsync(3000);
+    await rej;
+    expect(calls).toBe(1);
+    // Exactly one timer: fn's own. Under the `remaining < 0` mutation the pre-sleep check
+    // would pass at 0 and `sleep(0)` would arm a second timer before the post-sleep check threw.
+    expect(timersArmed).toHaveBeenCalledTimes(1);
+    timersArmed.mockRestore();
+  });
+});

@@ -1,10 +1,10 @@
 /**
- * KlingClient — the 2.0 entry point (spec §5).
+ * KlingClient — the entry point.
  *
- * This is the 1a₂ skeleton: configuration resolution and the HTTP core. Product
- * namespaces (`video`, `image`, `tasks`, `elements`, `voices`, `avatar`, `audio`,
- * `account`) attach in Phases 2a₁ onward. It lives beside the 1.x `api.ts` until the
- * 2a₀ removal commit switches `package.json#main` to `index.ts`.
+ * Resolves configuration (API Key from the option or `KLING_API_KEY`; defaults for timeout,
+ * retry, validation policy), builds one `HttpCore`, and exposes the product namespaces
+ * (`video`, `image`, `tasks`, `elements`, `voices`, `avatar`, `audio`, `account`) plus
+ * `save()` and `healthCheck()`. One client = one credential = one transport.
  */
 
 import { MISSING_API_KEY_MESSAGE, loadApiKey, type ApiKeySource } from './config/loaders.js';

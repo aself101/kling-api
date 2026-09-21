@@ -107,7 +107,7 @@ export class KlingAPIError extends KlingError {
 export class KlingNetworkError extends KlingError {
   readonly request: RequestDescriptor;
   readonly externalId?: string;
-  readonly taskState: Exclude<TaskState, 'n/a'> | 'n/a';
+  readonly taskState: TaskState;
 
   constructor(message: string, request: RequestDescriptor, cause: unknown) {
     super(message, { cause });
@@ -161,9 +161,9 @@ export class KlingResponseError extends KlingError {
   constructor(
     message: string,
     request: RequestDescriptor,
-    init: { httpStatus: number; bodySnippet: string; location?: string; requestId?: string }
+    init: { httpStatus: number; bodySnippet: string; location?: string; requestId?: string; cause?: unknown }
   ) {
-    super(message, { requestId: init.requestId });
+    super(message, { requestId: init.requestId, cause: init.cause });
     this.request = request;
     this.httpStatus = init.httpStatus;
     this.bodySnippet = init.bodySnippet;
@@ -304,7 +304,27 @@ export class KlingBatchError extends KlingError {
   }
 }
 
-export type DownloadFailureReason = 'too-large' | 'too-many-redirects' | 'blocked-host' | 'http';
+/** `'timeout'` = the per-hop deadline fired (ship run #4: it used to surface as `'http'`); `'invalid-redirect'` = a `Location` that does not parse. */
+/**
+ * `save()` failed after some outputs were already written. `written` lists the files on
+ * disk so the caller can clean up or keep them; `cause` is the download error. No sidecar
+ * is written on a failed save. (Ship run #4: the partial set used to be unreported —
+ * the `KlingBatchError` precedent applied to downloads.)
+ */
+export class KlingSaveError extends KlingError {
+  readonly task: Task;
+  readonly written: string[];
+  readonly failedUrl: string;
+
+  constructor(task: Task, written: string[], failedUrl: string, cause: unknown) {
+    super(`save failed on ${failedUrl} after ${written.length} file(s) were written: ${cause instanceof Error ? cause.message : String(cause)}`, { cause });
+    this.task = task;
+    this.written = written;
+    this.failedUrl = failedUrl;
+  }
+}
+
+export type DownloadFailureReason = 'too-large' | 'too-many-redirects' | 'blocked-host' | 'http' | 'timeout' | 'invalid-redirect';
 
 /** A download (`save()`, URL media) was refused by the library's guards or by the remote host. */
 export class KlingDownloadError extends KlingError {

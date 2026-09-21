@@ -2,9 +2,8 @@
  * Constants (spec §5 `config/constants.ts`): base URL, defaults, the vendor error table
  * and its derived classification sets, output retention.
  *
- * The 1.x `VALID_*` arrays, validation ranges and hand-written error table were removed
- * at 2a₀; 2.0's per-model capability tables live in `config/models.ts` (2a₁) and its
- * limits in `config/validators/*` (2a₂/3a).
+ * Per-model capability tables live in `config/models.ts`; parameter limits in
+ * `config/validators/*`.
  */
 
 // ============================================================================
@@ -33,8 +32,7 @@ export const DEFAULT_POLL_TIMEOUT = 900000;
  * derived from the vendor's *Explanation* column, not from the 1.x table this replaced,
  * whose names had drifted (`1102` is "resource pack exhausted or expired", not a
  * concurrency limit; `1202` is "requested method is invalid", not a range error; `1104`
- * does not exist). Shipped as `ERROR_CODES_V2` beside the 1.x table during Phase 1 and
- * renamed here at 2a₀ when that table was deleted (spec §3.1).
+ * does not exist).
  *
  * `1003`/`1004` (`nbf`/`exp`) are JWT failures. They are in the table because the vendor
  * lists them, but an API-Key client cannot produce them.

@@ -4,4 +4,6 @@ import { buildProgram } from './program.js';
 import { reportError, type GlobalOptions } from './shared.js';
 
 const program = buildProgram();
-program.parseAsync(process.argv).catch((err: unknown) => reportError(err, program.opts() as GlobalOptions));
+program
+  .parseAsync(process.argv)
+  .catch((err: unknown) => reportError(err, program.opts() as GlobalOptions));

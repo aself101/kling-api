@@ -69,3 +69,15 @@ describe('assertSafeUrl', () => {
     expect((await rejection('https://empty.example/', resolves()))?.reason).toBe('dns-failure');
   });
 });
+
+describe('isPublicAddress — hex-embedded v4 forms (ship run #4)', () => {
+  it.each([
+    ['::7f00:1', false], // IPv4-compatible (deprecated) hex form of ::127.0.0.1
+    ['64:ff9b::7f00:1', false], // NAT64 hex form of 127.0.0.1
+    ['::ffff:7f00:1', false],
+    ['::0808:0808', true], // IPv4-compatible hex form of 8.8.8.8 — public
+    ['::8.8.8.8', false], // dotted IPv4-compatible does not parse as hextets → refused (fail closed)
+  ])('%s → public: %s', (a, expected) => {
+    expect(isPublicAddress(a)).toBe(expected);
+  });
+});

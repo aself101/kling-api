@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [2.0.0] - 2026-09-20
 
+### Fixed (pre-release, from the ship-pipeline review of the release candidate)
+- `TaskHandle.wait()`: a caller that re-joined a handle right after the previous caller aborted or timed out was rejected with the shared poll loop's own `AbortError` and never polled (abort-then-retry on one handle could not work). The loop's self-abort is no longer a subscriber failure and a fresh loop starts when subscribers remain.
+- `KlingPollTimeoutError.task` from `wait()` now carries the last task polled (it was always `null`).
+- `save()` refuses a `task.id` that is not a single path segment before it becomes a file name (a callback body parsed without a secret is untrusted input); a failure after earlier files were written now throws `KlingSaveError { written, failedUrl, cause }`; video downloads default to a 120 s deadline (they were on the 60 s image/audio one).
+- Downloads: a caller abort during the body read is rethrown unwrapped (it surfaced as `KlingDownloadError('http')`); the hop deadline is `reason: 'timeout'`; a missing or malformed `Location` is `'invalid-redirect'`; the DNS lookup of the URL safety check now runs inside the hop deadline and honours the caller's abort.
+- `HttpCore`: a caller abort during the retry backoff rejects immediately (it waited out the sleep, up to 30 s); `KlingResponseError` carries the `JSON.parse` error as `cause`.
+- URL safety: hex-embedded IPv4 forms (`::7f00:1`, `64:ff9b::7f00:1`) are refused like their dotted spellings.
+- CLI: the paid task id is printed (stdout, `--json`-aware) even when `--wait` or the save fails; errors set `process.exitCode` instead of calling `process.exit()` on the same tick (a large `--json` error body was truncated at the 64 KiB pipe buffer); `tasks list --days 0` is a zero-width window, not "unset"; every commander option bag crosses one typed boundary (`handler<T>()`).
+- Dead 1.x `utils/{index,file-io,logger}` modules and unused constants are gone from the tarball; stale phase-anchored preambles that shipped in `dist/*.d.ts` are rewritten.
+
 A full reboot against the current Kling API (spec: `docs/specs/kling-api-2.0-migration-spec-v0_4_3.md`;
 build record: `docs/specs/kling-api-2.0-migration-checklist.md`). The vendor discontinued every model
 1.x defaulted to, moved video generation to a path-per-model API standard, and made a static API Key

@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Task } from '../../../src/codecs/task.js';
 import { extensionFor, save } from '../../../src/handlers/saver.js';
-import { KlingDownloadError, KlingNoOutputsError, KlingOutputsExpiredError } from '../../../src/http/errors.js';
+import { KlingDownloadError, KlingNoOutputsError, KlingOutputsExpiredError, KlingSaveError } from '../../../src/http/errors.js';
 import { KlingClient } from '../../../src/client.js';
 
 const publicDns = async () => [{ address: '93.184.216.34', family: 4 }];
@@ -82,11 +82,13 @@ describe('save', () => {
     expect(readdirSync(dir)).toEqual([]);
   });
 
-  it('a 404 from the CDN surfaces as KlingDownloadError(http, 404) with the URL', async () => {
+  it('a 404 from the CDN surfaces as KlingSaveError (written: []) whose cause is KlingDownloadError(http, 404) with the URL', async () => {
     const { fetchImpl } = cdn({});
-    const err = await save(task(), dir, { fetch: fetchImpl, lookup: publicDns, now: () => NOW }).catch((e) => e as KlingDownloadError);
-    expect(err).toBeInstanceOf(KlingDownloadError);
-    expect(err).toMatchObject({ reason: 'http', httpStatus: 404, url: 'https://cdn.example/v.mp4' });
+    const err = await save(task(), dir, { fetch: fetchImpl, lookup: publicDns, now: () => NOW }).catch((e) => e as KlingSaveError);
+    expect(err).toBeInstanceOf(KlingSaveError);
+    expect(err.written).toEqual([]);
+    expect(err.cause).toBeInstanceOf(KlingDownloadError);
+    expect(err.cause).toMatchObject({ reason: 'http', httpStatus: 404, url: 'https://cdn.example/v.mp4' });
     expect(existsSync(join(dir, 't-1.json'))).toBe(false); // no sidecar for a failed save
   });
 
@@ -104,5 +106,50 @@ describe('save', () => {
     const written = await client.save(task(), dir, { lookup: publicDns, now: () => NOW });
     expect(calls).toEqual(['https://cdn.example/v.mp4']);
     expect(readFileSync(written[0], 'utf8')).toBe('via-client');
+  });
+});
+
+// ── ship run #4 fixes ─────────────────────────────────────────────────────────────────
+
+import { KlingValidationError } from '../../../src/http/errors.js';
+import { defaultDownloadTimeoutMs } from '../../../src/handlers/saver.js';
+import { MEDIA_DOWNLOAD_TIMEOUT, VIDEO_DOWNLOAD_TIMEOUT } from '../../../src/utils/constants.js';
+
+describe('save — ship run #4 regressions', () => {
+  it('a task id that is not a single safe path segment is refused before any fetch (a callback body is untrusted)', async () => {
+    const { fetchImpl, calls } = cdn({ 'https://cdn.example/v.mp4': { body: 'x' } });
+    for (const id of ['../../evil', 'a/b', '..', '.', '', 'x y', 'id\n']) {
+      const err = await save(task({ id }), dir, { fetch: fetchImpl, lookup: publicDns, now: () => NOW }).catch((e) => e as KlingValidationError);
+      expect(err, JSON.stringify(id)).toBeInstanceOf(KlingValidationError);
+      expect((err as KlingValidationError).field).toBe('task.id');
+    }
+    expect(calls).toEqual([]);
+    expect(readdirSync(dir)).toEqual([]);
+    await expect(save(task({ id: '930831534075682845' }), dir, { fetch: fetchImpl, lookup: publicDns, now: () => NOW })).resolves.toHaveLength(2);
+  });
+
+  it('a download failure after some files were written → KlingSaveError { written, failedUrl, cause }; no sidecar', async () => {
+    const { fetchImpl } = cdn({ 'https://cdn.example/v.mp4': { body: 'a', type: 'video/mp4' } }); // v-wm.mp4 → 404
+    const err = await save(task(), dir, { fetch: fetchImpl, lookup: publicDns, now: () => NOW, includeWatermark: true }).catch((e) => e as KlingSaveError);
+    expect(err).toBeInstanceOf(KlingSaveError);
+    expect(err.written).toEqual([join(dir, 't-1-0.mp4')]);
+    expect(err.failedUrl).toBe('https://cdn.example/v-wm.mp4');
+    expect((err.cause as KlingDownloadError).httpStatus).toBe(404);
+    expect(existsSync(join(dir, 't-1.json'))).toBe(false);
+    expect(existsSync(err.written[0])).toBe(true);
+  });
+
+  it("the caller's own abort is rethrown unwrapped, not as KlingSaveError", async () => {
+    const ac = new AbortController();
+    ac.abort('mine');
+    const { fetchImpl } = cdn({});
+    await expect(save(task(), dir, { fetch: fetchImpl, lookup: publicDns, now: () => NOW, signal: ac.signal })).rejects.toBe('mine');
+  });
+
+  it('video downloads default to the 120 s deadline, images/audio to 60 s', () => {
+    expect(defaultDownloadTimeoutMs(true)).toBe(VIDEO_DOWNLOAD_TIMEOUT);
+    expect(defaultDownloadTimeoutMs(false)).toBe(MEDIA_DOWNLOAD_TIMEOUT);
+    expect(VIDEO_DOWNLOAD_TIMEOUT).toBe(120_000);
+    expect(MEDIA_DOWNLOAD_TIMEOUT).toBe(60_000);
   });
 });

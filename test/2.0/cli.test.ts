@@ -151,3 +151,35 @@ describe('dist/cli/index.js smoke', () => {
     expect(stderr).toMatch(/1002|Authentication|fetch failed|ENOTFOUND/);
   }, 30_000);
 });
+
+describe('finishCreate — ship run #4: the paid task id survives a failed wait/save', () => {
+  it('under --json a failing wait() still prints the summary with the id before the error propagates', async () => {
+    const { finishCreate } = await import('../../src/cli/shared.js');
+    const writes: string[] = [];
+    const orig = process.stdout.write.bind(process.stdout);
+    process.stdout.write = ((chunk: string | Uint8Array) => { writes.push(String(chunk)); return true; }) as typeof process.stdout.write;
+    try {
+      const handle = {
+        id: 'paid-1', externalId: 'ext-1', standard: 'new' as const, product: 'text-to-video' as const, request: {},
+        get: async () => { throw new Error('unused'); },
+        wait: async () => { throw new Error('poll exploded'); },
+      };
+      await expect(finishCreate({} as never, handle, { json: true }, { wait: true })).rejects.toThrow('poll exploded');
+    } finally {
+      process.stdout.write = orig;
+    }
+    const json = JSON.parse(writes.join(''));
+    expect(json).toMatchObject({ taskId: 'paid-1', externalId: 'ext-1', product: 'text-to-video', error: 'Error' });
+  });
+
+  it('tasks list --days 0 is an explicit zero-width window, not "unset"', async () => {
+    // Drive the option parser only: commander applies int('days') and the handler reads `o.days !== undefined`.
+    const program = buildProgram();
+    let captured: unknown;
+    const list = program.commands.find((c) => c.name() === 'tasks')!.commands.find((c) => c.name() === 'list')!;
+    list.exitOverride();
+    list.action((o: unknown) => { captured = o; });
+    await program.parseAsync(['node', 'kling', 'tasks', 'list', '--days', '0']);
+    expect((captured as { days: number }).days).toBe(0);
+  });
+});

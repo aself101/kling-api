@@ -28,7 +28,9 @@ describe('README', () => {
     expect(hits).toEqual([]);
     // `task_id` only as the vendor's own field name (external_task_id, task_ids, the legacy callback key).
     const rawTaskId = outside.filter((l) => /(^|[^_])task_id\b/.test(l) && !/task_ids/.test(l));
-    expect(rawTaskId).toEqual([expect.stringContaining('legacy `task_id`')]);
+    // Two sentences name the legacy callback body's key (the shape note and the not-observed-live note).
+    expect(rawTaskId).toHaveLength(2);
+    for (const l of rawTaskId) expect(l).toMatch(/legacy `task_id`|`id`\/`task_id` discriminator/);
     // kling-image-o1 appears only in the model table.
     expect(readme.split('\n').filter((l) => l.includes('kling-image-o1'))).toHaveLength(1);
   });

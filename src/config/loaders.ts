@@ -2,8 +2,9 @@
  * Credential loading (spec D2).
  *
  * The library half only: an explicit key or `process.env.KLING_API_KEY`. The `.env`
- * chain (`./.env`, `~/.kling/.env`) is a CLI concern and returns in `src/cli/` at 6a₁;
- * the 1.x `loadCredentials`/`loadConfig` that read them were removed at 2a₀.
+ * chain (`./.env`, `~/.kling/.env`) is a CLI concern and lives in `src/cli/shared.ts`
+ * (`resolveApiKey`); a library that reads the caller's home directory is a surprise for
+ * a server consumer.
  */
 
 // ============================================================================
@@ -17,10 +18,8 @@ export type ApiKeySource = 'explicit' | 'env';
  * Resolve the 2.0 credential: a static API Key (spec D2).
  *
  * The library reads exactly two sources — an explicit value (constructor option or CLI
- * flag) and `process.env.KLING_API_KEY`. The `./.env` / `~/.kling/.env` lookups that
- * 1.x `loadCredentials` performed for the AccessKey/SecretKey pair are a CLI concern and
- * live in `src/cli/` from Phase 6a₁; a library that reads the caller's home directory is
- * a surprise for a server consumer (run #1 A8).
+ * flag) and `process.env.KLING_API_KEY`. The `./.env` / `~/.kling/.env` lookups are a CLI
+ * concern (`src/cli/shared.ts`).
  *
  * Whitespace is trimmed; an empty string counts as absent.
  *

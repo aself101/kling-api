@@ -11,7 +11,9 @@
  *     `Location` (`'blocked-host'`). 1.x checked only the first URL, so a public host
  *     could redirect the client into 127.0.0.1 or the metadata endpoint.
  *
- * A non-2xx final response is `'http'` with the status. Each hop has its own deadline.
+ * A non-2xx final response is `'http'` with the status; the per-hop deadline is `'timeout'`;
+ * a missing or unparseable `Location` is `'invalid-redirect'`. The caller's own abort is
+ * rethrown unwrapped wherever it lands (DNS lookup, fetch, body read).
  * Import graph (§5): `http/errors`, `utils/security`, `config/constants`.
  */
 import { MAX_REDIRECTS, MEDIA_DOWNLOAD_TIMEOUT } from '../utils/constants.js';
@@ -51,39 +53,61 @@ export async function fetchToBuffer(url: string, options: FetchToBufferOptions):
 
   for (let hop = 0; ; hop++) {
     if (options.signal?.aborted) throw options.signal.reason;
-    await guard(current, options.lookup);
+    // The hop deadline and the caller's abort are armed BEFORE the DNS lookup inside the
+    // URL guard, so a hung resolver cannot hold the download open past `timeoutMs` and a
+    // caller cancel is honoured during the lookup too (ship run #4).
     const controller = new AbortController();
+    const timedOut = new DOMException(`download hop timed out after ${timeoutMs} ms`, 'TimeoutError');
     const onAbort = () => controller.abort(options.signal?.reason);
     options.signal?.addEventListener('abort', onAbort, { once: true });
-    const timer = setTimeout(() => controller.abort(new DOMException(`download hop timed out after ${timeoutMs} ms`, 'TimeoutError')), timeoutMs);
+    const timer = setTimeout(() => controller.abort(timedOut), timeoutMs);
+    /** Rethrow the caller's own abort unwrapped, or classify the hop timeout; anything else is the caller's to wrap. */
+    const classify = (cause: unknown): never => {
+      if (options.signal?.aborted) throw options.signal.reason;
+      if (controller.signal.aborted && controller.signal.reason === timedOut) {
+        throw new KlingDownloadError(timedOut.message, { url: current, reason: 'timeout', cause });
+      }
+      throw new KlingDownloadError(`download failed: ${describe(cause)}`, { url: current, reason: 'http', cause });
+    };
     try {
+      await Promise.race([guard(current, options.lookup), abortPromise(controller.signal)]).catch((cause: unknown) => {
+        if (cause instanceof KlingDownloadError) throw cause;
+        return classify(cause);
+      });
       let res: Response;
       try {
         res = await fetchImpl(current, { redirect: 'manual', signal: controller.signal });
       } catch (cause) {
-        if (options.signal?.aborted) throw options.signal.reason;
-        throw new KlingDownloadError(`download failed: ${describe(cause)}`, { url: current, reason: 'http', cause });
+        classify(cause);
+        throw cause; // unreachable — classify always throws; keeps TS's control flow honest
       }
 
       if (REDIRECT_STATUSES.has(res.status)) {
         const location = res.headers.get('location');
+        // AUDIT-OK(no_empty_catch): the body of a redirect is discarded; a cancel failure is not the error the caller needs.
         await res.body?.cancel().catch(() => undefined);
-        if (!location) throw new KlingDownloadError(`redirect (${res.status}) without a Location header`, { url: current, reason: 'http', httpStatus: res.status });
+        if (!location) throw new KlingDownloadError(`redirect (${res.status}) without a Location header`, { url: current, reason: 'invalid-redirect', httpStatus: res.status });
         if (hop + 1 > maxRedirects) throw new KlingDownloadError(`more than ${maxRedirects} redirects`, { url: current, reason: 'too-many-redirects', httpStatus: res.status });
-        current = new URL(location, current).toString();
+        try {
+          current = new URL(location, current).toString();
+        } catch (cause) {
+          throw new KlingDownloadError(`redirect Location ${JSON.stringify(location)} is not a valid URL`, { url: current, reason: 'invalid-redirect', httpStatus: res.status, cause });
+        }
         continue;
       }
       if (!res.ok) {
+        // AUDIT-OK(no_empty_catch): discarding an error body; the status is the error.
         await res.body?.cancel().catch(() => undefined);
         throw new KlingDownloadError(`download failed with HTTP ${res.status}`, { url: current, reason: 'http', httpStatus: res.status });
       }
 
       const declared = Number(res.headers.get('content-length'));
       if (Number.isFinite(declared) && declared > options.maxBytes) {
+        // AUDIT-OK(no_empty_catch): refusing before the read; the cap is the error.
         await res.body?.cancel().catch(() => undefined);
         throw new KlingDownloadError(`resource declares ${declared} bytes, over the ${options.maxBytes}-byte cap`, { url: current, reason: 'too-large', httpStatus: res.status });
       }
-      const buffer = await readCapped(res, options.maxBytes, current, controller);
+      const buffer = await readCapped(res, options.maxBytes, current, controller, classify);
       return { buffer, contentType: res.headers.get('content-type') ?? undefined, finalUrl: current, hops: hop };
     } finally {
       clearTimeout(timer);
@@ -101,8 +125,16 @@ async function guard(url: string, lookup: LookupFn | undefined): Promise<void> {
   }
 }
 
+/** Resolves never; rejects with the signal's reason on abort — races the guard's DNS lookup against the hop deadline. */
+function abortPromise(signal: AbortSignal): Promise<never> {
+  return new Promise((_, reject) => {
+    if (signal.aborted) reject(signal.reason);
+    else signal.addEventListener('abort', () => reject(signal.reason), { once: true });
+  });
+}
+
 /** Stream the body, abort past `maxBytes`. Works for both a ReadableStream body and a body-less 200. */
-async function readCapped(res: Response, maxBytes: number, url: string, controller: AbortController): Promise<Buffer> {
+async function readCapped(res: Response, maxBytes: number, url: string, controller: AbortController, classify: (cause: unknown) => never): Promise<Buffer> {
   if (!res.body) return Buffer.alloc(0);
   const chunks: Uint8Array[] = [];
   let total = 0;
@@ -120,7 +152,10 @@ async function readCapped(res: Response, maxBytes: number, url: string, controll
     }
   } catch (err) {
     if (err instanceof KlingDownloadError) throw err;
-    throw new KlingDownloadError(`download interrupted: ${describe(err)}`, { url, reason: 'http', cause: err });
+    // A caller abort or the hop deadline mid-body is classified like one mid-fetch (ship run #4:
+    // it used to surface as reason 'http', indistinguishable from a network failure).
+    classify(err);
+    throw err; // unreachable
   } finally {
     reader.releaseLock();
   }

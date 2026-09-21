@@ -1,6 +1,6 @@
 # kling-api
 
-Node.js client and CLI for the [Kling AI](https://kling.ai) API — video generation on the vendor's new API standard, image generation and resources (elements, voices, avatar, TTS) on the legacy `/v1/` standard, one normalized `Task` model over both, and a static API Key as the only credential.
+Node.js client and CLI for the [Kling AI](https://kling.ai) API — video generation on the vendor's new API standard, image generation and resources (elements, voices, avatar, TTS) on the legacy `/v1/` standard, one normalized `Task` model over both, webhook signature verification for callbacks, and a static API Key as the only credential.
 
 **2.0 is a full reboot.** The vendor discontinued every model 1.x defaulted to, moved video to a path-per-model API, and made the API Key the only credential that works there. Nothing from 1.x is source-compatible; the [migration table](#migration-from-1x) maps every 1.x method to its 2.0 disposition.
 
@@ -26,6 +26,7 @@ Node.js client and CLI for the [Kling AI](https://kling.ai) API — video genera
 - [Timeouts, proxies and `fetch`](#timeouts-proxies-and-fetch)
 - [Webhooks](#webhooks)
 - [CLI](#cli)
+- [healthCheck and advanced exports](#healthcheck-and-advanced-exports)
 - [Model tables](#model-tables)
 - [Migration from 1.x](#migration-from-1x)
 - [What has been verified live](#what-has-been-verified-live)
@@ -128,7 +129,7 @@ interface Task {
 
 `handle.wait()` resolves on `succeeded`, throws `KlingTaskFailedError` on `failed`, and `KlingPollTimeoutError` on the deadline. Two concurrent `wait()` calls on one handle share a single poll loop; each caller's `deadlineMs` and `signal` apply to that caller only.
 
-`outputsExpireAt` is derived, not vendor-supplied — and it is accurate: the vendor's signed output URLs carry an `Expires=` that matched the derived value within 2 seconds on every task checked. `save()` refuses an expired task unless `force: true`.
+`outputsExpireAt` is derived, not vendor-supplied, from the vendor's stated 30-day retention. On the one task where it was compared (a legacy image task, 2026-09-20), the vendor's signed URL carried an `Expires=` within 2 seconds of the derived value; new-standard video URLs have not been compared yet. `save()` refuses an expired task unless `force: true`.
 
 ## Media inputs
 
@@ -275,7 +276,7 @@ const files = await client.save(task, './output', { includeWatermark: false, req
 // ./output/<task.id>.json          { product, standard, request, outputs, files, raw }
 ```
 
-Downloads go through the client's `fetch` with a byte cap (default 500 MiB), a redirect cap (5), and a per-hop URL safety check (below). `KlingOutputsExpiredError` is thrown **before any fetch** once `outputsExpireAt` has passed (`force: true` bypasses); `KlingNoOutputsError` for a `succeeded` task with no outputs. The sidecar's `request` is the handle's redacted record — a 20 MB inline frame is a `{ kind, bytes, sha256 }` triple there, not a second copy.
+Downloads go through the client's `fetch` with a byte cap (default 500 MiB — also the per-call heap ceiling, since the body is buffered before it is written), a redirect cap (5), a per-download deadline (120 s for videos, 60 s for images/audio; `timeoutMs` overrides), and a per-hop URL safety check (below). `KlingOutputsExpiredError` is thrown **before any fetch** once `outputsExpireAt` has passed (`force: true` bypasses); `KlingNoOutputsError` for a `succeeded` task with no outputs. A download that fails after earlier files were written throws `KlingSaveError { written, failedUrl, cause }` — the files already on disk are listed, and no sidecar is written. The vendor's `task.id` is checked to be a single path segment before it becomes a file name. The sidecar's `request` is the handle's redacted record — a 20 MB inline frame is a `{ kind, bytes, sha256 }` triple there, not a second copy.
 
 ## Account and billing
 
@@ -300,9 +301,9 @@ Every error extends `KlingError` (`requestId` when a response was received):
 | `KlingResponseError` | non-JSON body or an unexpected 3xx | `httpStatus`, `bodySnippet`, `location` |
 | `KlingCodecError` | the envelope parsed but not into the expected shape | `standard`, `path` |
 | `KlingValidationError` | a parameter failed a rule | `field` |
-| `KlingTaskFailedError` / `KlingPollTimeoutError` | `wait()` | `task`, `code` / `task`, `elapsedMs` |
+| `KlingTaskFailedError` / `KlingPollTimeoutError` | `wait()` | `task`, `code` (always `null` today — neither standard puts a code on a failed record; read `task.message`) / `task` (the last state polled, `null` before the first poll), `elapsedMs` |
 | `KlingTaskNotFoundError` | a single-task lookup the vendor cannot see | `product`, `id`, `byExternalId` |
-| `KlingNoOutputsError` / `KlingOutputsExpiredError` / `KlingDownloadError` | `save()` | `task` / `task` / `url`, `reason`, `httpStatus` |
+| `KlingNoOutputsError` / `KlingOutputsExpiredError` / `KlingSaveError` | `save()` | `task` / `task` / `task`, `written`, `failedUrl`, `cause` (a `KlingDownloadError { url, reason: 'too-large' \| 'too-many-redirects' \| 'blocked-host' \| 'http' \| 'timeout' \| 'invalid-redirect', httpStatus }`) |
 | `KlingBatchError` | a `tasks.get` chunk failed | `tasks`, `missing`, `unattempted`, `cause` |
 | `KlingWebhookError` | `parseCallback` with a secret | `reason: 'missing-headers' \| 'bad-signature' \| 'stale-timestamp'` |
 
@@ -318,9 +319,16 @@ Every error extends `KlingError` (`requestId` when a response was received):
 
 `isTransient()` is the vendor's "try later" signal and says nothing about whether the task exists; `isRetryable()` is always `false` for a create.
 
-**Recovery.** Every create carries an `external_task_id` — yours, or a UUID the library generates (opt out with `externalTaskId: false`). After a `may-exist` failure, `err.externalId` is set; call `client.tasks.recover(product, externalId)`. `null` means *not visible to this account*, not *never created*. The vendor also **rejects a duplicate `external_task_id`** (`400 / 1201 "already exists"`, verified live), so re-submitting with the same id after `may-exist` cannot double-bill either way — but it cannot succeed, so recovery is the only path forward. TTS carries no external id and is unrecoverable.
+**Recovery.** Every create carries an `external_task_id` — yours, or a UUID the library generates (opt out with `externalTaskId: false`). After a `may-exist` failure, `err.externalId` is set; call `client.tasks.recover(product, externalId)`. `null` means *not visible to this account*, not *never created*. The vendor also **rejects a duplicate `external_task_id`** (`400 / 1201 "already exists"` — observed once, on a `text-to-video` create re-submitted immediately after a successful one; not yet observed on legacy creates, across products, after a failed original, or after time has passed). Where that holds, re-submitting with the same id after `may-exist` cannot double-bill — but it cannot succeed either, so recovery is the path forward. TTS carries no external id and is unrecoverable.
 
 Concurrency refusals (`1303 "parallel task over resource pack limit"`) surface immediately as `KlingAPIError` with `taskState: 'not-created'` — the library does not queue creates for you.
+
+**Two policies that will look like outages the first time the vendor changes something — stated here so they don't:**
+
+- **Status vocabulary is closed.** A task record whose `status` is not one of `submitted | processing | succeeded | failed` (the legacy `succeed` is normalized) throws `KlingCodecError` — for the whole `tasks.get` chunk or `tasks.list` page it appears in, and for every `wait()` on that task. This is deliberate: an unknown word must never read as "still processing" and be polled forever. If the vendor adds a status, `list`/`get` on affected tasks fail until a library release; `task.raw` is unaffected.
+- **Capability rules refuse by default, and the registry is the docs as of 2026-09-20.** If the vendor adds a resolution or duration to a model, `capabilityValidation: 'error'` refuses a request the API would accept until the registry is updated. `capabilityValidation: 'warn'` sends anyway with a log line; `unknownModels: 'passthrough'` (the default) already lets a brand-new model id through with shape checks only. If the vendor retires a default model — as it did to every 1.x default — the vendor's own error surfaces; pass `model` explicitly.
+
+**Polling at scale.** Each `TaskHandle` polls independently (`GET /tasks` for one id every `intervalMs`); `wait()` does not batch across handles, and the read backoff is deterministic (2 s, 4 s) without jitter. Fifty in-flight handles at the default 3 s interval are ~17 read requests per second and will retry in lockstep after a `1302`. For fan-out, poll with your own scheduler over `tasks.get(ids)` (20 ids per request) instead of fifty `wait()`s.
 
 ## Timeouts, proxies and `fetch`
 
@@ -350,14 +358,18 @@ import { parseCallback } from 'kling-api';
 
 app.post('/kling/callback', express.raw({ type: 'application/json' }), (req, res) => {
   const { task, verified } = parseCallback(req.body, { headers: req.headers, secret: process.env.KLING_WEBHOOK_SECRET });
-  // verified === true here: a bad signature, stale timestamp or missing headers would have thrown KlingWebhookError
+  // With a secret: a bad signature, stale timestamp or missing headers has thrown KlingWebhookError by now.
+  // With the env var unset: verified is null and NOTHING was checked — see the warning below.
+  if (verified !== true) return res.sendStatus(401);
   res.sendStatus(200);
 });
 ```
 
 `rawBody` must be the **exact bytes received** — a JSON body parser re-serializes and breaks the signature. The vendor signs with the Standard Webhooks scheme once a Webhook Secret exists (`webhook-id`, `webhook-timestamp`, `webhook-signature` headers; HMAC-SHA256 over `${id}.${timestamp}.${rawBody}`; ±5 min skew; rotation lists supported). Its published test vector passes the library's `verifyWebhookSignature`.
 
-**Without a `secret`, `verified` is `null` and the body is unauthenticated.** Anyone who can reach your endpoint can make `save()` fetch whatever URLs they name. Both callback body shapes (new `id`, legacy `task_id`) parse into the same `Task`.
+**Without a `secret`, `verified` is `null` and the body is unauthenticated** — and `secret: undefined` *is* "without a secret": if `process.env.KLING_WEBHOOK_SECRET` is unset in one deployment, the snippet above parses without verifying and nothing throws. Check `verified === true` explicitly, or fail startup when the variable is missing. Anyone who can reach an unverified endpoint can make `save()` fetch whatever URLs they name. Both callback body shapes (new `id`, legacy `task_id`) parse into the same `Task`.
+
+This path is verified against the vendor's published test vector and documentation only — no live callback has been observed yet (the live programme had no public receiver). Header names, the `id`/`task_id` discriminator and whether legacy-path callbacks are signed at all are documented behaviour, not observed behaviour.
 
 ## CLI
 
@@ -377,6 +389,25 @@ kling account usage [--days 30] | balance | packages
 ```
 
 Global flags: `--api-key`, `--output-dir` (default `output`), `--json` (machine output on stdout, logs on stderr), `--debug`, `-q`. Credential chain: `--api-key` → `KLING_API_KEY` → `./.env` → `~/.kling/.env`. File arguments are wrapped as `{ path }`; `https://` arguments pass through. `--wait` polls behind a spinner and saves unless `--no-download`. Errors exit 1 and print the error family's fields and cause chain.
+
+## healthCheck and advanced exports
+
+`await client.healthCheck()` → `true` when `GET /tasks?task_ids=0` returns an authenticated envelope, `false` on any throw (auth, network, timeout). It answers "can this client reach and authenticate right now", nothing finer.
+
+Beyond the client, the root export also carries the pieces the client is built from, for consumers composing their own flows:
+
+| Export | What it is |
+|---|---|
+| `HttpCore`, `DEFAULT_RETRY`, `silentLogger` | the transport (`request({ method, path, body, kind: 'read' \| 'write' })`), its defaults, a no-op logger |
+| `TasksApi`, `VideoApi`, `ImageApi`, `ElementsApi`, `VoicesApi`, `AvatarApi`, `AudioApi`, `AccountApi` | the namespaces behind `client.*` |
+| `resolveMediaSource`, `MediaBudget`, `sniffImage`, `sniffAudio` | media input resolution and the per-request inline budget |
+| `fetchToBuffer`, `assertSafeUrl`, `isPublicAddress`, `UnsafeUrlError` | the guarded download primitive and the URL safety check it uses |
+| `save`, `extensionFor`, `defaultDownloadTimeoutMs`, `poll`, `recordOf`, `redactMedia`, `createTimeoutMs` | the saver, the library poller, and the handle-record helpers |
+| `parseCallback`, `verifyWebhookSignature`, `signWebhook` | webhook parsing, verification, and the signer (for tests and for building your own vectors) |
+| `LEGACY_PRODUCT_PATHS`, `RESOURCE_PATHS`, `standardOf`, `MODELED_SETTINGS`, `MODELED_OPTIONS`, `MODELED_LEGACY_FIELDS`, `VENDOR_HTTP_STATUS`, `ERROR_CODES`, `BASE_URL` | the routing tables, the field sets the escape hatches are checked against, and the vendor tables |
+| `loadApiKey`, `MISSING_API_KEY_MESSAGE` | the library's credential lookup |
+
+Everything in this table follows semver like the rest of the surface.
 
 ## Model tables
 
@@ -433,9 +464,9 @@ Against the production API on 2026-09-20 (the spend is recorded per item in the 
 
 - `video.textToVideo` on `kling-3.0-turbo` (3 s, 720p): succeeded in 28 s, **2.4 units**, mp4 with an AAC track and no `audio` field sent — native audio is always on.
 - `video.omni` first-frame-only on `kling-3.0-omni` (3 s, 720p, silent): 83 s, **1.8 units** — the silent rate.
-- `image.generate` on `kling-v3` (n=1, 1k): 24 s, **8 image units**; the vendor's signed URL expiry matched the derived `outputsExpireAt` within 2 s.
+- `image.generate` on `kling-v3` (n=1, 1k): 24 s, **8 image units**; on this one task the vendor's signed URL expiry matched the derived `outputsExpireAt` within 2 s.
 - `elements.create` (image_refer, 0 units), delete through **either** path → `deleted`; `voices.create` from a TTS clip (0.05), `audio.tts` (0.05), `avatar.create` (4.4 units, Phase 0).
-- `tasks.recover` by external id for `image-generation` and `voice`; a duplicate `external_task_id` rejected with `1201`; `GET /tasks` capped at 20 ids; legacy not-found is `1201 "Task not found by id/external id"`.
+- `tasks.recover` by external id for `image-generation` and `voice`; one duplicate `external_task_id` (t2v) rejected with `1201`; `GET /tasks` capped at 20 ids; legacy not-found is `1201 "Task not found by id/external id"`.
 - `account.usage` reported the remaining units to the decimal the checklist had tallied.
 
 Every builder is also checked against the vendor's own Request Examples (43 fixtures regenerated from `docs/api/`), and every capability-registry value against the page it cites.
@@ -443,10 +474,11 @@ Every builder is also checked against the vendor's own Request Examples (43 fixt
 ## Known limits
 
 - **Not a queue.** Concurrency is per account, model and pack type; `1303` is returned to you, not absorbed.
-- **Callback receiver not included**; `parseCallback` is the parsing/verification half. Whether legacy-path callbacks are signed has not been observed live.
+- **Callback receiver not included**; `parseCallback` is the parsing/verification half. No live callback of either shape has been observed; the path rests on the vendor's docs and published vector.
 - **Element ids are typed `long` by the vendor** and its examples send numbers; the library sends a safe-integer id as a number and an 18-digit id as a string — acceptance of the string form has not been observed live.
 - **URL safety is time-of-check**; DNS rebinding between check and fetch is not defended (would need a pinned undici `connect`).
 - Reference-video duration/format bounds are stated on the parameters, not checked client-side.
+- **Not observed live yet:** read-after-write lag (a `wait()` that starts before the vendor's read replica sees the create would fail with `KlingTaskNotFoundError` — ~4 live tasks polled at 3 s showed no lag); the vendor's rate limit on `/tasks`; whether an 18-digit `element_id` is accepted as a string.
 
 ## License
 

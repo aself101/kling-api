@@ -289,3 +289,25 @@ describe('retry policy (V11)', () => {
     expect(err.taskState).toBe('n/a');
   });
 });
+
+describe('ship run #4 regressions', () => {
+  it('a caller abort during the retry backoff rejects immediately with the caller\'s reason (not after maxDelayMs)', async () => {
+    const ac = new AbortController();
+    let resolveSleep: (() => void) | undefined;
+    const blockingSleep = () => new Promise<void>((r) => { resolveSleep = r; });
+    const { fetchImpl } = fakeFetch([{ json: { code: 5000, message: 'internal', request_id: 'r' }, status: 500 }, OK]);
+    const c = new HttpCore({ apiKey: 'k-1234', fetch: fetchImpl, timeout: 50 }, { sleep: blockingSleep });
+    const p = c.request({ ...READ, signal: ac.signal });
+    await new Promise((r) => setTimeout(r, 5));
+    ac.abort('bail');
+    await expect(p).rejects.toBe('bail');
+    resolveSleep?.();
+  });
+
+  it('a non-envelope body keeps the JSON.parse error as cause', async () => {
+    const { core: c } = core([{ text: '<html>cdn</html>', status: 502 }], { retry: { maxAttempts: 1 } });
+    const err = await c.request(READ).catch((e) => e as KlingResponseError);
+    expect(err).toBeInstanceOf(KlingResponseError);
+    expect(err.cause).toBeInstanceOf(SyntaxError);
+  });
+});

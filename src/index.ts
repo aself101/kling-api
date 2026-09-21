@@ -1,9 +1,11 @@
 /**
- * kling-api 2.0 public surface (spec §5, §6.4).
+ * kling-api public surface — `package.json#main` / the `"."` export.
  *
- * Becomes `package.json#main` at the 2a₀ removal commit; until then the published entry
- * is still the 1.x `api.ts`. Everything a consumer may import is re-exported here — the
- * `./auth`, `./utils`, `./config`, `./types` subpaths are gone in 2.0.
+ * Everything a consumer may import is re-exported here; there are no subpath exports.
+ * The product classes (`VideoApi`, `ImageApi`, …) are reachable as `client.video` etc. and
+ * exported for typing; the lower-level pieces (`HttpCore`, `fetchToBuffer`,
+ * `resolveMediaSource`, `assertSafeUrl`, the routing tables) are exported for consumers
+ * who compose their own flows — see the README's "Advanced exports" section.
  */
 
 export { KlingClient, type ResolvedKlingConfig } from './client.js';
@@ -29,6 +31,7 @@ export {
   KlingOutputsExpiredError,
   KlingPollTimeoutError,
   KlingResponseError,
+  KlingSaveError,
   KlingTaskFailedError,
   KlingTaskNotFoundError,
   KlingTimeoutError,
@@ -105,7 +108,7 @@ export { parseCallback, verifyWebhookSignature, sign as signWebhook, type ParseC
 export { createTimeoutMs, recordOf, redactMedia, type ProductApiConfig } from './products/shared.js';
 export { MediaBudget, resolveMediaSource, sniffAudio, sniffImage, type ImageInfo, type MediaKind, type ResolvedMedia, type ResolveOptions } from './media/source.js';
 export { fetchToBuffer, type FetchToBufferOptions, type FetchedResource } from './media/download.js';
-export { save, extensionFor } from './handlers/saver.js';
+export { save, extensionFor, defaultDownloadTimeoutMs } from './handlers/saver.js';
 export { assertSafeUrl, isPublicAddress, UnsafeUrlError, type AssertSafeUrlOptions, type LookupFn, type UrlRejection } from './utils/security.js';
 export { MODELED_OPTIONS, MODELED_SETTINGS } from './config/constants.js';
 export { poll, type PollOptions } from './handlers/poller.js';

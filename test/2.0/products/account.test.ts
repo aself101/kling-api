@@ -70,3 +70,17 @@ describe('account ledgers', () => {
     expect(calls).toHaveLength(1);
   });
 });
+
+describe('account.balanceLedger — cash fields (ship run #4)', () => {
+  const CASH_PAGE = { code: 0, data: { result: { detail: [{ task_id: 't2', api_key_name: 'main', product_function: 'Image Generation', model_name: 'kling-v3', cash_type: 'balance', balance_before_deduction: 120.5, deduction_amount: 8.4, balance_after_deduction: 112.1, list_price: 8.4, currency: 'USD', deduction_time: '1789956078000' }], count: 1 }, next_cursor: 'c3', has_more: false } };
+
+  it('maps cash_type / balance_before / amount / balance_after / list_price / currency', async () => {
+    const { account } = rig(() => CASH_PAGE);
+    const page = await account.balanceLedger({ startTime: 1, endTime: 2 });
+    expect(page.entries[0]).toMatchObject({ taskId: 't2', cashType: 'balance', balanceBefore: 120.5, amount: 8.4, balanceAfter: 112.1, listPrice: 8.4, currency: 'USD', deductedAt: 1789956078000 });
+    expect(page).toMatchObject({ count: 1, nextCursor: 'c3', hasMore: false });
+    // Control: a renamed vendor field is not silently mapped.
+    const renamed = rig(() => ({ ...CASH_PAGE, data: { ...CASH_PAGE.data, result: { detail: [{ ...CASH_PAGE.data.result.detail[0], balance_after_deduction: undefined, balance_after: 112.1 }], count: 1 } } }));
+    expect((await renamed.account.balanceLedger({ startTime: 1, endTime: 2 })).entries[0]).not.toHaveProperty('balanceAfter');
+  });
+});

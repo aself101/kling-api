@@ -7,9 +7,13 @@ import { registerTasks } from './tasks.js';
 import { registerVideo } from './video.js';
 
 export function buildProgram(): Command {
-  const pkg = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as { version: string };
+  const pkg = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')) as {
+    version: string;
+  };
   const program = new Command('kling')
-    .description('Kling AI from the command line — video (new API standard), image, elements, voices, avatar, TTS, tasks, account')
+    .description(
+      'Kling AI from the command line — video (new API standard), image, elements, voices, avatar, TTS, tasks, account'
+    )
     .version(pkg.version)
     .option('--api-key <key>', 'API Key (else KLING_API_KEY, ./.env, ~/.kling/.env)')
     .option('--output-dir <dir>', 'where --wait saves outputs', 'output')

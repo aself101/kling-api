@@ -1,15 +1,11 @@
 /**
- * Utils Constants
- *
- * Shared constants for utility functions.
+ * Download and URL-safety constants (spec D12). The 1.x-only entries were removed at 6c
+ * (ship run #4: dead exports were being compiled into the tarball).
  */
 
 // ============================================================================
 // Export Constants
 // ============================================================================
-
-/** Exponential backoff base multiplier in milliseconds */
-export const BACKOFF_BASE_MS = 1000;
 
 /** Maximum video file size (500MB) */
 export const MAX_VIDEO_SIZE = 500 * 1024 * 1024;

@@ -289,6 +289,8 @@ export function createHandle(
   const subscribers = new Set<Subscriber>();
   let loop: Promise<void> | null = null;
   let loopAbort: AbortController | null = null;
+  /** The most recent task the shared loop saw — what a per-caller timeout reports as `task`. */
+  let lastSeen: Task | null = null;
 
   const get = (options?: RequestOptions) => tasks.getByProduct(product, id, options);
 
@@ -306,22 +308,36 @@ export function createHandle(
     }
   };
 
-  const runLoop = async () => {
-    loopAbort = new AbortController();
+  const runLoop = async (): Promise<void> => {
+    const controller = new AbortController();
+    loopAbort = controller;
     try {
-      const task = await poll((signal) => get({ signal }), {
-        until: isTerminal,
-        intervalMs: () => Math.min(...[...subscribers].map((s) => s.intervalMs)),
-        deadlineMs: Infinity,
-        signal: loopAbort.signal,
-      });
+      const task = await poll(
+        async (signal) => {
+          const t = await get({ signal });
+          lastSeen = t;
+          return t;
+        },
+        {
+          until: isTerminal,
+          intervalMs: () => Math.min(...[...subscribers].map((s) => s.intervalMs)),
+          deadlineMs: Infinity,
+          signal: controller.signal,
+        }
+      );
       settleAll(task);
     } catch (err) {
-      // An empty subscriber set aborted the loop on purpose; anything else is a real failure.
-      if (!(loopAbort.signal.aborted && subscribers.size === 0)) failAll(err);
+      // The loop aborts ITSELF when the last subscriber leaves. That abort is never a
+      // subscriber's failure — a caller that re-joins in the microtask between the last
+      // cleanup() and this catch must not be handed the loop's own AbortError (ship run #4,
+      // code-auditor: `try { await h.wait({ signal }) } catch {}; await h.wait()` rejected
+      // immediately and never polled). Anything else is a real failure for everyone waiting.
+      if (!controller.signal.aborted) failAll(err);
     } finally {
       loop = null;
       loopAbort = null;
+      // Subscribers who joined while this loop was dying get a fresh loop.
+      if (subscribers.size > 0) loop = runLoop();
     }
   };
 
@@ -348,7 +364,7 @@ export function createHandle(
         },
       };
       const timer = Number.isFinite(deadlineMs)
-        ? setTimeout(() => sub.fail(new KlingPollTimeoutError(null, Date.now() - started)), deadlineMs)
+        ? setTimeout(() => sub.fail(new KlingPollTimeoutError(lastSeen, Date.now() - started)), deadlineMs)
         : undefined;
       const onAbort = () => sub.fail(options.signal?.reason);
       if (options.signal?.aborted) return sub.fail(options.signal.reason);
@@ -362,7 +378,11 @@ export function createHandle(
   return handle;
 }
 
-/** The vendor puts no business code on a failed task; `message` is what it gives. `null` unless a future envelope carries one. */
+/**
+ * The vendor puts no business code on a failed task record on either standard — `message`
+ * (`task.message`) carries the reason — so this is `null` today on every live task seen.
+ * Kept for a future envelope that carries one; consumers should read `task.message`.
+ */
 function vendorCodeOf(task: Task): number | null {
   const raw = task.raw as { code?: unknown } | undefined;
   return typeof raw?.code === 'number' ? raw.code : null;
