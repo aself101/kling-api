@@ -27,18 +27,5 @@ export const MAX_REDIRECTS = 5;
 // Internal Constants (used by security module)
 // ============================================================================
 
-/** Private IP ranges for SSRF protection */
-export const PRIVATE_IP_PATTERNS = [
-  /^127\./,
-  /^10\./,
-  /^192\.168\./,
-  /^172\.(1[6-9]|2[0-9]|3[0-1])\./,
-  /^169\.254\./,
-  /^0\./,
-  /^::1$/,
-  /^localhost$/i,
-  /^metadata\.google\.internal$/i,
-];
-
-/** Cloud metadata endpoints to block */
-export const BLOCKED_HOSTS = ['169.254.169.254', 'metadata.google.internal', 'metadata.aws'];
+/** Cloud metadata endpoints refused by name (the address forms are caught by the range check). */
+export const BLOCKED_HOSTS = ['169.254.169.254', 'metadata.google.internal', 'metadata.aws', 'metadata', 'instance-data'];

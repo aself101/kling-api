@@ -1,9 +1,9 @@
 /**
  * Utils barrel — logger, security, file I/O (spec §5: `utils/*` are kept).
  *
- * The 1.x media helpers moved to `docs/reference/1x-utils-media.ts` at 2a₀ as the port
- * reference for 2c (`media/source.ts`, `media/download.ts`); they were built on the 1.x HTTP
- * client, which 2.0 does not ship. `downloads.ts` and `polling.ts` were deleted at 2a₀.
+ * The 1.x media helpers (`media.ts`, `downloads.ts`, `polling.ts`) are gone: their checks
+ * were ported into `media/source.ts` and `media/download.ts` (2c) and `handlers/poller.ts`
+ * (2a₁); the 1.x reference copy kept under `docs/reference/` through 2a₀–2b was deleted at 2c.
  */
 
 // Constants
@@ -20,7 +20,8 @@ export { logger } from './logger.js';
 export type { LoggerFunction, Logger } from './logger.js';
 
 // Security
-export { validateUrl, redactKey, sanitizeError, isProduction } from './security.js';
+export { assertSafeUrl, isPublicAddress, redactKey, sanitizeError, isProduction, UnsafeUrlError } from './security.js';
+export type { AssertSafeUrlOptions, LookupFn, UrlRejection } from './security.js';
 
 // File I/O
 export {

@@ -1,0 +1,118 @@
+/** fetchToBuffer (spec D12, run #1 A3, run #3 anxiety F3): byte cap, redirect cap, per-hop SSRF. */
+import { describe, expect, it } from 'vitest';
+import { KlingDownloadError } from '../../../src/http/errors.js';
+import { fetchToBuffer } from '../../../src/media/download.js';
+
+interface Step { status?: number; body?: Uint8Array | string; headers?: Record<string, string>; stream?: Uint8Array[]; throw?: unknown }
+const publicDns = async () => [{ address: '93.184.216.34', family: 4 }];
+
+function routed(routes: Record<string, Step | Step[]>) {
+  const calls: string[] = [];
+  const fetchImpl = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input);
+    calls.push(url);
+    expect(init?.redirect).toBe('manual');
+    const r = routes[url];
+    if (!r) throw new Error(`unrouted ${url}`);
+    const step = Array.isArray(r) ? r.shift()! : r;
+    if (step.throw) throw step.throw;
+    if (step.stream) {
+      const chunks = [...step.stream];
+      const body = new ReadableStream<Uint8Array>({
+        pull(controller) {
+          const c = chunks.shift();
+          if (c) controller.enqueue(c);
+          else controller.close();
+        },
+      });
+      return new Response(body, { status: step.status ?? 200, headers: step.headers });
+    }
+    return new Response(step.body ?? null, { status: step.status ?? 200, headers: step.headers });
+  }) as typeof fetch;
+  return { fetchImpl, calls };
+}
+
+const opts = (fetchImpl: typeof fetch, extra: Partial<Parameters<typeof fetchToBuffer>[1]> = {}) => ({ maxBytes: 1_000_000, fetch: fetchImpl, lookup: publicDns, ...extra });
+
+describe('fetchToBuffer', () => {
+  it('returns the bytes, content type and final URL', async () => {
+    const { fetchImpl } = routed({ 'https://cdn.example/a.mp4': { body: 'abc', headers: { 'content-type': 'video/mp4' } } });
+    const res = await fetchToBuffer('https://cdn.example/a.mp4', opts(fetchImpl));
+    expect(res.buffer.toString()).toBe('abc');
+    expect(res.contentType).toBe('video/mp4');
+    expect(res).toMatchObject({ finalUrl: 'https://cdn.example/a.mp4', hops: 0 });
+  });
+
+  it('follows manual redirects up to the cap; the cap+1 hop → too-many-redirects', async () => {
+    const chain: Record<string, Step> = {};
+    for (let i = 0; i < 7; i++) chain[`https://cdn.example/r${i}`] = { status: 302, headers: { location: `/r${i + 1}` } };
+    chain['https://cdn.example/r7'] = { body: 'end' };
+    const ok = routed(chain);
+    const res = await fetchToBuffer('https://cdn.example/r0', opts(ok.fetchImpl, { maxRedirects: 7 }));
+    expect(res.buffer.toString()).toBe('end');
+    expect(res.hops).toBe(7);
+    const tooMany = routed(structuredClone(chain));
+    const err = await fetchToBuffer('https://cdn.example/r0', opts(tooMany.fetchImpl, { maxRedirects: 5 })).catch((e) => e as KlingDownloadError);
+    expect(err).toBeInstanceOf(KlingDownloadError);
+    expect(err.reason).toBe('too-many-redirects');
+    expect(tooMany.calls).toHaveLength(6); // r0..r5 fetched; r6 refused before the fetch
+  });
+
+  it('per-hop SSRF: first hop public, second hop https://127.0.0.1/ → blocked-host BEFORE the second fetch (the HOST rule fires, not the protocol rule)', async () => {
+    const { fetchImpl, calls } = routed({ 'https://cdn.example/a': { status: 302, headers: { location: 'https://127.0.0.1/secret' } } });
+    const err = await fetchToBuffer('https://cdn.example/a', opts(fetchImpl)).catch((e) => e as KlingDownloadError);
+    expect(err.reason).toBe('blocked-host');
+    expect(err.url).toBe('https://127.0.0.1/secret');
+    expect(calls).toEqual(['https://cdn.example/a']);
+    // Controls: [::1], hex-encoded v4 — and http://127.0.0.1/ which is blocked too but proves only the protocol rule.
+    for (const loc of ['https://[::1]/', 'https://0x7f000001/', 'http://127.0.0.1/']) {
+      const r = routed({ 'https://cdn.example/a': { status: 302, headers: { location: loc } } });
+      expect((await fetchToBuffer('https://cdn.example/a', opts(r.fetchImpl)).catch((e) => e as KlingDownloadError)).reason, loc).toBe('blocked-host');
+    }
+  });
+
+  it('a hostname that resolves to a private address is blocked; DNS failure is blocked-host with the lookup error as cause', async () => {
+    const { fetchImpl, calls } = routed({});
+    const err = await fetchToBuffer('https://evil.example/', opts(fetchImpl, { lookup: async () => [{ address: '10.0.0.1', family: 4 }] })).catch((e) => e as KlingDownloadError);
+    expect(err.reason).toBe('blocked-host');
+    const dns = await fetchToBuffer('https://gone.example/', opts(fetchImpl, { lookup: async () => { throw new Error('ENOTFOUND'); } })).catch((e) => e as KlingDownloadError);
+    expect(dns.reason).toBe('blocked-host');
+    expect((dns.cause as Error).message).toMatch(/failing closed/);
+    expect(calls).toEqual([]);
+  });
+
+  it('byte cap: a streamed body of maxBytes + 1 → too-large; a declared Content-Length over the cap is refused before reading', async () => {
+    const chunk = new Uint8Array(400);
+    const streamed = routed({ 'https://cdn.example/big': { stream: [chunk, chunk, chunk] } });
+    const err = await fetchToBuffer('https://cdn.example/big', opts(streamed.fetchImpl, { maxBytes: 1199 })).catch((e) => e as KlingDownloadError);
+    expect(err.reason).toBe('too-large');
+    const exact = routed({ 'https://cdn.example/big': { stream: [chunk, chunk, chunk] } });
+    expect((await fetchToBuffer('https://cdn.example/big', opts(exact.fetchImpl, { maxBytes: 1200 }))).buffer.byteLength).toBe(1200);
+    const declared = routed({ 'https://cdn.example/big': { body: 'x', headers: { 'content-length': '5000000' } } });
+    expect((await fetchToBuffer('https://cdn.example/big', opts(declared.fetchImpl)).catch((e) => e as KlingDownloadError)).reason).toBe('too-large');
+  });
+
+  it('non-2xx → http with the status; a network failure → http with the cause', async () => {
+    const r404 = routed({ 'https://cdn.example/x': { status: 404 } });
+    const err = await fetchToBuffer('https://cdn.example/x', opts(r404.fetchImpl)).catch((e) => e as KlingDownloadError);
+    expect(err).toMatchObject({ reason: 'http', httpStatus: 404 });
+    const net = routed({ 'https://cdn.example/x': { throw: new TypeError('fetch failed') } });
+    const nerr = await fetchToBuffer('https://cdn.example/x', opts(net.fetchImpl)).catch((e) => e as KlingDownloadError);
+    expect(nerr.reason).toBe('http');
+    expect(nerr.cause).toBeInstanceOf(TypeError);
+  });
+
+  it("the caller's abort surfaces as their reason, unwrapped", async () => {
+    const fetchImpl = (async (_u: unknown, init?: RequestInit) => new Promise<Response>((_, reject) => init?.signal?.addEventListener('abort', () => reject(init.signal?.reason)))) as typeof fetch;
+    // Abort mid-flight …
+    const ac = new AbortController();
+    const p = fetchToBuffer('https://cdn.example/slow', opts(fetchImpl, { signal: ac.signal }));
+    await new Promise((r) => setTimeout(r, 5));
+    ac.abort('stop');
+    await expect(p).rejects.toBe('stop');
+    // … and before the first hop.
+    const pre = new AbortController();
+    pre.abort('early');
+    await expect(fetchToBuffer('https://cdn.example/slow', opts(fetchImpl, { signal: pre.signal }))).rejects.toBe('early');
+  });
+});
