@@ -45,7 +45,15 @@ export interface FetchedResource {
 
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
 
-export async function fetchToBuffer(url: string, options: FetchToBufferOptions): Promise<FetchedResource> {
+/**
+ * Fetch an https resource into memory under the three guards (byte cap, redirect cap,
+ * per-hop URL safety) with a per-hop deadline. Throws `KlingDownloadError { url, reason }`;
+ * the caller's own abort is rethrown unwrapped.
+ */
+export async function fetchToBuffer(
+  url: string,
+  options: FetchToBufferOptions
+): Promise<FetchedResource> {
   const fetchImpl = options.fetch ?? globalThis.fetch;
   const maxRedirects = options.maxRedirects ?? MAX_REDIRECTS;
   const timeoutMs = options.timeoutMs ?? MEDIA_DOWNLOAD_TIMEOUT;
@@ -57,7 +65,10 @@ export async function fetchToBuffer(url: string, options: FetchToBufferOptions):
     // URL guard, so a hung resolver cannot hold the download open past `timeoutMs` and a
     // caller cancel is honoured during the lookup too (ship run #4).
     const controller = new AbortController();
-    const timedOut = new DOMException(`download hop timed out after ${timeoutMs} ms`, 'TimeoutError');
+    const timedOut = new DOMException(
+      `download hop timed out after ${timeoutMs} ms`,
+      'TimeoutError'
+    );
     const onAbort = () => controller.abort(options.signal?.reason);
     options.signal?.addEventListener('abort', onAbort, { once: true });
     const timer = setTimeout(() => controller.abort(timedOut), timeoutMs);
@@ -67,13 +78,19 @@ export async function fetchToBuffer(url: string, options: FetchToBufferOptions):
       if (controller.signal.aborted && controller.signal.reason === timedOut) {
         throw new KlingDownloadError(timedOut.message, { url: current, reason: 'timeout', cause });
       }
-      throw new KlingDownloadError(`download failed: ${describe(cause)}`, { url: current, reason: 'http', cause });
+      throw new KlingDownloadError(`download failed: ${describe(cause)}`, {
+        url: current,
+        reason: 'http',
+        cause,
+      });
     };
     try {
-      await Promise.race([guard(current, options.lookup), abortPromise(controller.signal)]).catch((cause: unknown) => {
-        if (cause instanceof KlingDownloadError) throw cause;
-        return classify(cause);
-      });
+      await Promise.race([guard(current, options.lookup), abortPromise(controller.signal)]).catch(
+        (cause: unknown) => {
+          if (cause instanceof KlingDownloadError) throw cause;
+          return classify(cause);
+        }
+      );
       let res: Response;
       try {
         res = await fetchImpl(current, { redirect: 'manual', signal: controller.signal });
@@ -86,29 +103,54 @@ export async function fetchToBuffer(url: string, options: FetchToBufferOptions):
         const location = res.headers.get('location');
         // AUDIT-OK(no_empty_catch): the body of a redirect is discarded; a cancel failure is not the error the caller needs.
         await res.body?.cancel().catch(() => undefined);
-        if (!location) throw new KlingDownloadError(`redirect (${res.status}) without a Location header`, { url: current, reason: 'invalid-redirect', httpStatus: res.status });
-        if (hop + 1 > maxRedirects) throw new KlingDownloadError(`more than ${maxRedirects} redirects`, { url: current, reason: 'too-many-redirects', httpStatus: res.status });
+        if (!location)
+          throw new KlingDownloadError(`redirect (${res.status}) without a Location header`, {
+            url: current,
+            reason: 'invalid-redirect',
+            httpStatus: res.status,
+          });
+        if (hop + 1 > maxRedirects)
+          throw new KlingDownloadError(`more than ${maxRedirects} redirects`, {
+            url: current,
+            reason: 'too-many-redirects',
+            httpStatus: res.status,
+          });
         try {
           current = new URL(location, current).toString();
         } catch (cause) {
-          throw new KlingDownloadError(`redirect Location ${JSON.stringify(location)} is not a valid URL`, { url: current, reason: 'invalid-redirect', httpStatus: res.status, cause });
+          throw new KlingDownloadError(
+            `redirect Location ${JSON.stringify(location)} is not a valid URL`,
+            { url: current, reason: 'invalid-redirect', httpStatus: res.status, cause }
+          );
         }
         continue;
       }
       if (!res.ok) {
         // AUDIT-OK(no_empty_catch): discarding an error body; the status is the error.
         await res.body?.cancel().catch(() => undefined);
-        throw new KlingDownloadError(`download failed with HTTP ${res.status}`, { url: current, reason: 'http', httpStatus: res.status });
+        throw new KlingDownloadError(`download failed with HTTP ${res.status}`, {
+          url: current,
+          reason: 'http',
+          httpStatus: res.status,
+        });
       }
 
       const declared = Number(res.headers.get('content-length'));
       if (Number.isFinite(declared) && declared > options.maxBytes) {
         // AUDIT-OK(no_empty_catch): refusing before the read; the cap is the error.
         await res.body?.cancel().catch(() => undefined);
-        throw new KlingDownloadError(`resource declares ${declared} bytes, over the ${options.maxBytes}-byte cap`, { url: current, reason: 'too-large', httpStatus: res.status });
+        throw new KlingDownloadError(
+          `resource declares ${declared} bytes, over the ${options.maxBytes}-byte cap`,
+          { url: current, reason: 'too-large', httpStatus: res.status }
+        );
       }
       const buffer = await readCapped(res, options.maxBytes, current, controller, classify);
-      return { buffer, contentType: res.headers.get('content-type') ?? undefined, finalUrl: current, hops: hop };
+      return {
+        buffer,
+        contentType: res.headers.get('content-type') ?? undefined,
+        finalUrl: current,
+        hops: hop,
+      };
     } finally {
       clearTimeout(timer);
       options.signal?.removeEventListener('abort', onAbort);
@@ -120,7 +162,12 @@ async function guard(url: string, lookup: LookupFn | undefined): Promise<void> {
   try {
     await assertSafeUrl(url, { lookup });
   } catch (err) {
-    if (err instanceof UnsafeUrlError) throw new KlingDownloadError(`refusing to fetch ${url}: ${err.message}`, { url, reason: 'blocked-host', cause: err });
+    if (err instanceof UnsafeUrlError)
+      throw new KlingDownloadError(`refusing to fetch ${url}: ${err.message}`, {
+        url,
+        reason: 'blocked-host',
+        cause: err,
+      });
     throw err;
   }
 }
@@ -134,7 +181,13 @@ function abortPromise(signal: AbortSignal): Promise<never> {
 }
 
 /** Stream the body, abort past `maxBytes`. Works for both a ReadableStream body and a body-less 200. */
-async function readCapped(res: Response, maxBytes: number, url: string, controller: AbortController, classify: (cause: unknown) => never): Promise<Buffer> {
+async function readCapped(
+  res: Response,
+  maxBytes: number,
+  url: string,
+  controller: AbortController,
+  classify: (cause: unknown) => never
+): Promise<Buffer> {
   if (!res.body) return Buffer.alloc(0);
   const chunks: Uint8Array[] = [];
   let total = 0;
@@ -146,7 +199,10 @@ async function readCapped(res: Response, maxBytes: number, url: string, controll
       total += value.byteLength;
       if (total > maxBytes) {
         controller.abort();
-        throw new KlingDownloadError(`resource exceeds the ${maxBytes}-byte cap`, { url, reason: 'too-large' });
+        throw new KlingDownloadError(`resource exceeds the ${maxBytes}-byte cap`, {
+          url,
+          reason: 'too-large',
+        });
       }
       chunks.push(value);
     }

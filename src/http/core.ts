@@ -74,7 +74,11 @@ export interface ResolvedRetryOptions {
   maxDelayMs: number;
 }
 
-export const DEFAULT_RETRY: ResolvedRetryOptions = { maxAttempts: 3, baseDelayMs: 1_000, maxDelayMs: 30_000 };
+export const DEFAULT_RETRY: ResolvedRetryOptions = {
+  maxAttempts: 3,
+  baseDelayMs: 1_000,
+  maxDelayMs: 30_000,
+};
 
 /** A `Logger` that says nothing — the library's default. The CLI installs its own. */
 const noop = (): void => undefined;
@@ -138,6 +142,7 @@ function abortRejection(signal: AbortSignal | undefined): Promise<never> {
   });
 }
 
+/** The transport behind every namespace: `request({ method, path, body, kind })` with the per-attempt deadline, the read-only retry policy and vendor-envelope error mapping (spec D10, D11). */
 export class HttpCore {
   readonly baseUrl: string;
   readonly timeout: number;
@@ -150,12 +155,17 @@ export class HttpCore {
   readonly #sleep: (ms: number) => Promise<void>;
 
   constructor(
-    config: Pick<KlingConfig, 'baseUrl' | 'timeout' | 'retry' | 'fetch' | 'logger'> & { apiKey: string },
+    config: Pick<KlingConfig, 'baseUrl' | 'timeout' | 'retry' | 'fetch' | 'logger'> & {
+      apiKey: string;
+    },
     internals: HttpCoreInternals = {}
   ) {
     const baseUrl = (config.baseUrl ?? BASE_URL).replace(/\/+$/, '');
     if (!/^https:\/\//i.test(baseUrl)) {
-      throw new KlingValidationError('baseUrl', `baseUrl must use https:// (got ${JSON.stringify(baseUrl)})`);
+      throw new KlingValidationError(
+        'baseUrl',
+        `baseUrl must use https:// (got ${JSON.stringify(baseUrl)})`
+      );
     }
     if (!config.apiKey) {
       throw new KlingValidationError('apiKey', 'apiKey is required');
@@ -168,7 +178,10 @@ export class HttpCore {
     this.logger = config.logger ?? silentLogger;
     this.#sleep = internals.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
     if (typeof this.#fetchImpl !== 'function') {
-      throw new KlingValidationError('fetch', 'No fetch implementation: pass config.fetch on runtimes without a global fetch');
+      throw new KlingValidationError(
+        'fetch',
+        'No fetch implementation: pass config.fetch on runtimes without a global fetch'
+      );
     }
   }
 
@@ -197,7 +210,8 @@ export class HttpCore {
       path: req.path,
       ...(req.externalId ? { externalId: req.externalId } : {}),
     };
-    const attempts = req.kind === 'read' ? this.retry.maxAttempts : Math.max(1, this.retry.maxAttempts);
+    const attempts =
+      req.kind === 'read' ? this.retry.maxAttempts : Math.max(1, this.retry.maxAttempts);
 
     for (let attempt = 1; ; attempt++) {
       try {
@@ -251,7 +265,9 @@ export class HttpCore {
     }
 
     const url = this.buildUrl(req.path, req.query);
-    this.logger.debug(`kling: ${req.method} ${req.path} attempt ${attempt}/${attempts} (key ${this.describeCredential()})`);
+    this.logger.debug(
+      `kling: ${req.method} ${req.path} attempt ${attempt}/${attempts} (key ${this.describeCredential()})`
+    );
 
     let response: Response;
     let text: string;
@@ -263,7 +279,8 @@ export class HttpCore {
           'Content-Type': 'application/json',
           Accept: 'application/json',
         },
-        body: req.method === 'POST' && req.body !== undefined ? JSON.stringify(req.body) : undefined,
+        body:
+          req.method === 'POST' && req.body !== undefined ? JSON.stringify(req.body) : undefined,
         redirect: 'manual',
         signal: controller.signal,
       });
@@ -283,7 +300,11 @@ export class HttpCore {
           { deadlineMs, attempt, attempts }
         );
       }
-      throw new KlingNetworkError(`${req.method} ${req.path}: ${(err as Error).message}`, descriptor, err);
+      throw new KlingNetworkError(
+        `${req.method} ${req.path}: ${(err as Error).message}`,
+        descriptor,
+        err
+      );
     }
     clearTimeout(timer);
     req.signal?.removeEventListener('abort', onCallerAbort);
@@ -317,7 +338,12 @@ export class HttpCore {
       throw new KlingResponseError(
         `${req.method} ${req.path} returned HTTP ${response.status} with a non-envelope body`,
         descriptor,
-        { httpStatus: response.status, bodySnippet: text.slice(0, BODY_SNIPPET_BYTES), requestId, cause }
+        {
+          httpStatus: response.status,
+          bodySnippet: text.slice(0, BODY_SNIPPET_BYTES),
+          requestId,
+          cause,
+        }
       );
     }
 
@@ -330,7 +356,12 @@ export class HttpCore {
       });
     }
 
-    return { status: response.status, envelope, requestId: envelope.request_id ?? requestId, attempt };
+    return {
+      status: response.status,
+      envelope,
+      requestId: envelope.request_id ?? requestId,
+      attempt,
+    };
   }
 
   private buildUrl(path: string, query?: HttpRequest['query']): string {

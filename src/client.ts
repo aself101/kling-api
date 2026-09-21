@@ -8,7 +8,13 @@
  */
 
 import { MISSING_API_KEY_MESSAGE, loadApiKey, type ApiKeySource } from './config/loaders.js';
-import { HttpCore, type HttpCoreInternals, type KlingConfig, type Logger, silentLogger } from './http/core.js';
+import {
+  HttpCore,
+  type HttpCoreInternals,
+  type KlingConfig,
+  type Logger,
+  silentLogger,
+} from './http/core.js';
 import { KlingValidationError } from './http/errors.js';
 import { TasksApi } from './products/tasks.js';
 import { VideoApi } from './products/video.js';
@@ -28,6 +34,7 @@ export interface ResolvedKlingConfig {
   apiKeySource: ApiKeySource;
 }
 
+/** The entry point: one credential, one transport, every product namespace. `new KlingClient({ apiKey })` or `new KlingClient()` with `KLING_API_KEY` set. */
 export class KlingClient {
   /**
    * The transport. Internal: product namespaces call it; consumers should not.
@@ -96,7 +103,11 @@ export class KlingClient {
    * so a proxied client downloads through its proxy. Returns the paths written.
    */
   save(task: Task, dir: string, options: SaveOptions = {}): Promise<string[]> {
-    return saveTask(task, dir, { fetch: this.http.fetchImpl, timeoutMs: this.config.timeout, ...options });
+    return saveTask(task, dir, {
+      fetch: this.http.fetchImpl,
+      timeoutMs: this.config.timeout,
+      ...options,
+    });
   }
 
   /**

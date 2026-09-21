@@ -405,6 +405,7 @@ Beyond the client, the root export also carries the pieces the client is built f
 | `save`, `extensionFor`, `defaultDownloadTimeoutMs`, `poll`, `recordOf`, `redactMedia`, `createTimeoutMs` | the saver, the library poller, and the handle-record helpers |
 | `parseCallback`, `verifyWebhookSignature`, `signWebhook` | webhook parsing, verification, and the signer (for tests and for building your own vectors) |
 | `LEGACY_PRODUCT_PATHS`, `RESOURCE_PATHS`, `standardOf`, `MODELED_SETTINGS`, `MODELED_OPTIONS`, `MODELED_LEGACY_FIELDS`, `VENDOR_HTTP_STATUS`, `ERROR_CODES`, `BASE_URL` | the routing tables, the field sets the escape hatches are checked against, and the vendor tables |
+| `VIDEO_MODELS`, `IMAGE_MODELS`, `DEFAULT_VIDEO_MODEL`, `DEFAULT_OMNI_VIDEO_MODEL`, `DEFAULT_MOTION_CONTROL_MODEL`, `DEFAULT_IMAGE_MODEL`, `DEFAULT_OMNI_IMAGE_MODEL`, `MULTI_IMAGE_MODEL` | the capability registries and the default-model constants each namespace uses (see [Default models](#default-models-and-the-price-table)) |
 | `loadApiKey`, `MISSING_API_KEY_MESSAGE` | the library's credential lookup |
 
 Everything in this table follows semver like the rest of the surface.

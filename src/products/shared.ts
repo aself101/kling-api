@@ -39,7 +39,6 @@ export function createTimeoutMs(configuredMs: number, bodyBytes: number): number
   return Math.max(configuredMs, 30_000 + Math.round(bodyBytes / 250));
 }
 
-
 /**
  * What the handle's `request` (and the saver's sidecar, D4) records for a media input:
  * a URL is kept as-is — it is what the vendor was told and is not secret; inline data is
@@ -49,7 +48,17 @@ export function createTimeoutMs(configuredMs: number, bodyBytes: number): number
 export function redactMedia(source: MediaSource, resolved: ResolvedMedia): Record<string, unknown> {
   if ('url' in resolved) return { kind: 'url', url: resolved.url };
   const bytes = Buffer.from(resolved.base64, 'base64');
-  const origin = typeof source === 'string' ? 'base64' : source instanceof Uint8Array ? 'buffer' : 'path' in source ? 'path' : 'base64';
-  return { kind: origin, bytes: bytes.byteLength, sha256: createHash('sha256').update(bytes).digest('hex') };
+  const origin =
+    typeof source === 'string'
+      ? 'base64'
+      : source instanceof Uint8Array
+        ? 'buffer'
+        : 'path' in source
+          ? 'path'
+          : 'base64';
+  return {
+    kind: origin,
+    bytes: bytes.byteLength,
+    sha256: createHash('sha256').update(bytes).digest('hex'),
+  };
 }
-

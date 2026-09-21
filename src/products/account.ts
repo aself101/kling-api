@@ -2,7 +2,15 @@
  * Account and billing reads (spec Phase 5; App. C §6). All three are `kind: 'read'` (retried
  * on the read policy) and live outside both task standards.
  */
-import { parseBalanceLedger, parsePackageLedger, parseUsage, type CashDeductionEntry, type LedgerPage, type ResourcePackage, type UnitDeductionEntry } from '../codecs/account.js';
+import {
+  parseBalanceLedger,
+  parsePackageLedger,
+  parseUsage,
+  type CashDeductionEntry,
+  type LedgerPage,
+  type ResourcePackage,
+  type UnitDeductionEntry,
+} from '../codecs/account.js';
 import type { RequestOptions } from '../codecs/task.js';
 import type { HttpCore } from '../http/core.js';
 import { KlingValidationError } from '../http/errors.js';
@@ -34,6 +42,7 @@ export interface PackageLedgerOptions extends LedgerOptions {
 
 const LEDGER_MAX_LIMIT = 500;
 
+/** `client.account` — resource packages (`usage`) and per-task cash / unit deduction ledgers (App. C §6). */
 export class AccountApi {
   readonly #core: HttpCore;
   readonly #config: ProductApiConfig;
@@ -51,14 +60,25 @@ export class AccountApi {
    * `GET /account/costs` — the packages under the account and what is left on each.
    * Free, QPS ≤ 1, remaining quantities lag by up to 12 h (the vendor's caveat).
    */
-  async usage(startTime: number, endTime: number, options: UsageOptions = {}): Promise<ResourcePackage[]> {
+  async usage(
+    startTime: number,
+    endTime: number,
+    options: UsageOptions = {}
+  ): Promise<ResourcePackage[]> {
     if (!Number.isFinite(startTime) || !Number.isFinite(endTime) || startTime >= endTime) {
-      throw new KlingValidationError('startTime', 'startTime and endTime are required Unix ms timestamps with startTime < endTime');
+      throw new KlingValidationError(
+        'startTime',
+        'startTime and endTime are required Unix ms timestamps with startTime < endTime'
+      );
     }
     const res = await this.#core.request({
       method: 'GET',
       path: '/account/costs',
-      query: { start_time: startTime, end_time: endTime, resource_pack_name: options.resourcePackName },
+      query: {
+        start_time: startTime,
+        end_time: endTime,
+        resource_pack_name: options.resourcePackName,
+      },
       kind: 'read',
       signal: options.signal,
     });
@@ -68,14 +88,23 @@ export class AccountApi {
   /** `POST /account/billing/balance` — cash deductions per task, cursor-paged. */
   async balanceLedger(options: LedgerOptions = {}): Promise<LedgerPage<CashDeductionEntry>> {
     const body = ledgerBody(options, [['api_key_name', options.apiKeyName]]);
-    const res = await this.#core.request({ method: 'POST', path: '/account/billing/balance', body, kind: 'read', signal: options.signal });
+    const res = await this.#core.request({
+      method: 'POST',
+      path: '/account/billing/balance',
+      body,
+      kind: 'read',
+      signal: options.signal,
+    });
     return parseBalanceLedger(res.envelope, this.#ctx());
   }
 
   /** `POST /account/billing/package` — unit (resource-pack) deductions per task, cursor-paged. */
   async packageLedger(options: PackageLedgerOptions = {}): Promise<LedgerPage<UnitDeductionEntry>> {
     if (options.packageName !== undefined && options.packageId !== undefined) {
-      throw new KlingValidationError('packageName', 'packageName and packageId are mutually exclusive filters (the vendor: "cannot be set as filtering conditions at the same time")');
+      throw new KlingValidationError(
+        'packageName',
+        'packageName and packageId are mutually exclusive filters (the vendor: "cannot be set as filtering conditions at the same time")'
+      );
     }
     const body = ledgerBody(options, [
       ['api_key_name', options.apiKeyName],
@@ -83,17 +112,38 @@ export class AccountApi {
       ['package_name', options.packageName],
       ['package_id', options.packageId],
     ]);
-    const res = await this.#core.request({ method: 'POST', path: '/account/billing/package', body, kind: 'read', signal: options.signal });
+    const res = await this.#core.request({
+      method: 'POST',
+      path: '/account/billing/package',
+      body,
+      kind: 'read',
+      signal: options.signal,
+    });
     return parsePackageLedger(res.envelope, this.#ctx());
   }
 }
 
-function ledgerBody(options: LedgerOptions, filterPairs: [string, string | string[] | undefined][]): Record<string, unknown> {
-  if (options.limit !== undefined && (!Number.isInteger(options.limit) || options.limit < 1 || options.limit > LEDGER_MAX_LIMIT)) {
-    throw new KlingValidationError('limit', `limit must be an integer in 1–${LEDGER_MAX_LIMIT}, got ${options.limit}`);
+function ledgerBody(
+  options: LedgerOptions,
+  filterPairs: [string, string | string[] | undefined][]
+): Record<string, unknown> {
+  if (
+    options.limit !== undefined &&
+    (!Number.isInteger(options.limit) || options.limit < 1 || options.limit > LEDGER_MAX_LIMIT)
+  ) {
+    throw new KlingValidationError(
+      'limit',
+      `limit must be an integer in 1–${LEDGER_MAX_LIMIT}, got ${options.limit}`
+    );
   }
-  if (options.cursor === undefined && (options.startTime === undefined || options.endTime === undefined)) {
-    throw new KlingValidationError('startTime', 'startTime and endTime are required when cursor is not set');
+  if (
+    options.cursor === undefined &&
+    (options.startTime === undefined || options.endTime === undefined)
+  ) {
+    throw new KlingValidationError(
+      'startTime',
+      'startTime and endTime are required when cursor is not set'
+    );
   }
   const body: Record<string, unknown> = {};
   if (options.cursor !== undefined) {
@@ -103,7 +153,9 @@ function ledgerBody(options: LedgerOptions, filterPairs: [string, string | strin
   body.start_time = options.startTime;
   body.end_time = options.endTime;
   if (options.limit !== undefined) body.limit = options.limit;
-  const filters = filterPairs.filter(([, v]) => v !== undefined).map(([key, v]) => ({ key, values: [v!].flat() }));
+  const filters = filterPairs
+    .filter(([, v]) => v !== undefined)
+    .map(([key, v]) => ({ key, values: [v!].flat() }));
   if (filters.length > 0) body.filters = filters;
   return body;
 }

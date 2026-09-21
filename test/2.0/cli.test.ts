@@ -172,14 +172,37 @@ describe('finishCreate — ship run #4: the paid task id survives a failed wait/
     expect(json).toMatchObject({ taskId: 'paid-1', externalId: 'ext-1', product: 'text-to-video', error: 'Error' });
   });
 
-  it('tasks list --days 0 is an explicit zero-width window, not "unset"', async () => {
-    // Drive the option parser only: commander applies int('days') and the handler reads `o.days !== undefined`.
-    const program = buildProgram();
-    let captured: unknown;
-    const list = program.commands.find((c) => c.name() === 'tasks')!.commands.find((c) => c.name() === 'list')!;
-    list.exitOverride();
-    list.action((o: unknown) => { captured = o; });
-    await program.parseAsync(['node', 'kling', 'tasks', 'list', '--days', '0']);
-    expect((captured as { days: number }).days).toBe(0);
+  it('tasks list --days 0 reaches the real handler as a zero-width window (startTime === endTime), while omitting --days sends no window', async () => {
+    // Route through the REAL action: a fake fetch records the POST /tasks body the handler built.
+    const bodies: Record<string, unknown>[] = [];
+    const origFetch = globalThis.fetch;
+    globalThis.fetch = (async (_u: string | URL | Request, init?: RequestInit) => {
+      bodies.push(init?.body ? JSON.parse(String(init.body)) : {});
+      return new Response(JSON.stringify({ code: 0, message: 'SUCCEED', request_id: 'r', data: { result: [], count: 0, has_more: false } }), { status: 200 });
+    }) as typeof fetch;
+    try {
+      await buildProgram().parseAsync(['node', 'kling', '--api-key', 'k', '-q', 'tasks', 'list', '--days', '0']);
+      await buildProgram().parseAsync(['node', 'kling', '--api-key', 'k', '-q', 'tasks', 'list']);
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+    expect(bodies).toHaveLength(2);
+    const [withDays, without] = bodies as { start_time?: number; end_time?: number }[];
+    expect(withDays.start_time).toBeDefined();
+    expect(withDays.start_time).toBe(withDays.end_time); // 0 days → zero-width window, not "unset"
+    expect(without).not.toHaveProperty('start_time');
+  });
+
+  it('tasks list rejects an unknown --status / --product-type before any network call', async () => {
+    let fetched = 0;
+    const origFetch = globalThis.fetch;
+    globalThis.fetch = (async () => { fetched++; return new Response('{}'); }) as typeof fetch;
+    try {
+      await expect(buildProgram().parseAsync(['node', 'kling', '--api-key', 'k', '-q', 'tasks', 'list', '--status', 'bogus'])).rejects.toThrow(/--status must be one of submitted, processing, succeeded, failed, got "bogus"/);
+      await expect(buildProgram().parseAsync(['node', 'kling', '--api-key', 'k', '-q', 'tasks', 'list', '--product-type', 'audio'])).rejects.toThrow(/--product-type must be one of video, image, try_on/);
+    } finally {
+      globalThis.fetch = origFetch;
+    }
+    expect(fetched).toBe(0);
   });
 });

@@ -20,10 +20,18 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { extname, join } from 'node:path';
 import type { SaveOptions, Task, TaskOutput } from '../codecs/task.js';
-import { KlingNoOutputsError, KlingOutputsExpiredError, KlingSaveError, KlingValidationError } from '../http/errors.js';
+import {
+  KlingNoOutputsError,
+  KlingOutputsExpiredError,
+  KlingSaveError,
+  KlingValidationError,
+} from '../http/errors.js';
 import { fetchToBuffer } from '../media/download.js';
-import { MAX_VIDEO_SIZE, MEDIA_DOWNLOAD_TIMEOUT, VIDEO_DOWNLOAD_TIMEOUT } from '../utils/constants.js';
-
+import {
+  MAX_VIDEO_SIZE,
+  MEDIA_DOWNLOAD_TIMEOUT,
+  VIDEO_DOWNLOAD_TIMEOUT,
+} from '../utils/constants.js';
 
 interface Download {
   url: string;
@@ -40,13 +48,23 @@ interface Download {
  */
 const SAFE_ID = /^[A-Za-z0-9._-]{1,200}$/;
 
+/**
+ * Download every output of a `succeeded` task into `dir` and write the `<id>.json` sidecar;
+ * returns the paths written. Throws `KlingNoOutputsError`, `KlingOutputsExpiredError` (unless
+ * `force`), `KlingValidationError('task.id')`, or `KlingSaveError { written }` when a download
+ * fails part-way. `client.save()` is this with the client's fetch and timeout.
+ */
 export async function save(task: Task, dir: string, options: SaveOptions = {}): Promise<string[]> {
   const now = options.now ?? Date.now;
   if (task.status !== 'succeeded') throw new KlingNoOutputsError(task);
   if (task.outputs.length === 0) throw new KlingNoOutputsError(task);
-  if (!options.force && task.outputsExpireAt !== undefined && task.outputsExpireAt < now()) throw new KlingOutputsExpiredError(task);
+  if (!options.force && task.outputsExpireAt !== undefined && task.outputsExpireAt < now())
+    throw new KlingOutputsExpiredError(task);
   if (!SAFE_ID.test(task.id) || task.id === '.' || task.id === '..') {
-    throw new KlingValidationError('task.id', `task id ${JSON.stringify(task.id)} is not a single safe path segment; refusing to use it as a file name`);
+    throw new KlingValidationError(
+      'task.id',
+      `task id ${JSON.stringify(task.id)} is not a single safe path segment; refusing to use it as a file name`
+    );
   }
 
   const downloads = task.outputs.flatMap((o) => downloadsFor(o, options.includeWatermark === true));
@@ -67,14 +85,28 @@ export async function save(task: Task, dir: string, options: SaveOptions = {}): 
       if (options.signal?.aborted && cause === options.signal.reason) throw cause;
       throw new KlingSaveError(task, written, d.url, cause);
     }
-    const file = join(dir, `${task.id}-${index}${d.label}.${extensionFor(res.contentType, res.finalUrl)}`);
+    const file = join(
+      dir,
+      `${task.id}-${index}${d.label}.${extensionFor(res.contentType, res.finalUrl)}`
+    );
     writeFileSync(file, res.buffer);
     written.push(file);
   }
   const sidecar = join(dir, `${task.id}.json`);
   writeFileSync(
     sidecar,
-    JSON.stringify({ product: task.product, standard: task.standard, request: options.request, outputs: task.outputs, files: written, raw: task.raw }, null, 2)
+    JSON.stringify(
+      {
+        product: task.product,
+        standard: task.standard,
+        request: options.request,
+        outputs: task.outputs,
+        files: written,
+        raw: task.raw,
+      },
+      null,
+      2
+    )
   );
   written.push(sidecar);
   return written;
@@ -93,7 +125,8 @@ function downloadsFor(o: TaskOutput, includeWatermark: boolean): Download[] {
     case 'image': {
       const video = o.type === 'video';
       out.push({ url: o.url, label: '', video });
-      if (includeWatermark && o.watermarkUrl) out.push({ url: o.watermarkUrl, label: '-watermark', video });
+      if (includeWatermark && o.watermarkUrl)
+        out.push({ url: o.watermarkUrl, label: '-watermark', video });
       break;
     }
     case 'audio':

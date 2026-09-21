@@ -24,7 +24,11 @@ import type {
   SubjectCompletionParams,
 } from '../codecs/params.js';
 import type { Product, TaskHandle } from '../codecs/task.js';
-import { DEFAULT_IMAGE_MODEL, DEFAULT_OMNI_IMAGE_MODEL, MULTI_IMAGE_MODEL } from '../config/models.js';
+import {
+  DEFAULT_IMAGE_MODEL,
+  DEFAULT_OMNI_IMAGE_MODEL,
+  MULTI_IMAGE_MODEL,
+} from '../config/models.js';
 import type { ValidationPolicy } from '../config/validators/helpers.js';
 import {
   resolveImageCaps,
@@ -39,6 +43,7 @@ import { MediaBudget, resolveMediaSource, type ResolvedMedia } from '../media/so
 import { LEGACY_PRODUCT_PATHS, createHandle, resolveExternalId } from './tasks.js';
 import { createTimeoutMs, recordOf, redactMedia, type ProductApiConfig } from './shared.js';
 
+/** `client.image` — generation, omni image, multi-image, outpainting and subject completion on the legacy `/v1/` standard (spec D7). */
 export class ImageApi {
   readonly #core: HttpCore;
   readonly #config: ProductApiConfig;
@@ -62,10 +67,18 @@ export class ImageApi {
     const policy = this.#policy();
     validateImageGenerate({ ...params, model }, resolveImageCaps(model, policy), policy);
     const budget = new MediaBudget();
-    const image = params.image === undefined ? undefined : this.#image(params.image, 'image', budget);
+    const image =
+      params.image === undefined ? undefined : this.#image(params.image, 'image', budget);
     const externalId = resolveExternalId(params.externalTaskId);
     const body = buildImageGeneration(params, model, image && field(image), externalId);
-    return this.#create('image-generation', body, externalId, params.signal, recordOf({ ...params, model, image: image && redactMedia(params.image!, image) }), policy);
+    return this.#create(
+      'image-generation',
+      body,
+      externalId,
+      params.signal,
+      recordOf({ ...params, model, image: image && redactMedia(params.image!, image) }),
+      policy
+    );
   }
 
   /** `POST /v1/images/omni-image` (D7). Default `kling-v3-omni` (§10.2). */
@@ -77,7 +90,18 @@ export class ImageApi {
     const images = params.images?.map((src, i) => this.#image(src, `images[${i}]`, budget));
     const externalId = resolveExternalId(params.externalTaskId);
     const body = buildOmniImage(params, model, images?.map(field), externalId);
-    return this.#create('omni-image', body, externalId, params.signal, recordOf({ ...params, model, images: images?.map((r, i) => redactMedia(params.images![i], r)) }), policy);
+    return this.#create(
+      'omni-image',
+      body,
+      externalId,
+      params.signal,
+      recordOf({
+        ...params,
+        model,
+        images: images?.map((r, i) => redactMedia(params.images![i], r)),
+      }),
+      policy
+    );
   }
 
   /** `POST /v1/images/multi-image2image` (D7). The endpoint documents one model, `kling-v2-1`; there is no model parameter. */
@@ -85,11 +109,28 @@ export class ImageApi {
     const policy = this.#policy();
     validateMultiImageToImage(params, policy);
     const budget = new MediaBudget();
-    const subjectImages = params.subjectImages.map((src, i) => this.#image(src, `subjectImages[${i}]`, budget));
-    const sceneImage = params.sceneImage === undefined ? undefined : this.#image(params.sceneImage, 'sceneImage', budget);
-    const styleImage = params.styleImage === undefined ? undefined : this.#image(params.styleImage, 'styleImage', budget);
+    const subjectImages = params.subjectImages.map((src, i) =>
+      this.#image(src, `subjectImages[${i}]`, budget)
+    );
+    const sceneImage =
+      params.sceneImage === undefined
+        ? undefined
+        : this.#image(params.sceneImage, 'sceneImage', budget);
+    const styleImage =
+      params.styleImage === undefined
+        ? undefined
+        : this.#image(params.styleImage, 'styleImage', budget);
     const externalId = resolveExternalId(params.externalTaskId);
-    const body = buildMultiImageToImage(params, MULTI_IMAGE_MODEL, { subjectImages: subjectImages.map(field), sceneImage: sceneImage && field(sceneImage), styleImage: styleImage && field(styleImage) }, externalId);
+    const body = buildMultiImageToImage(
+      params,
+      MULTI_IMAGE_MODEL,
+      {
+        subjectImages: subjectImages.map(field),
+        sceneImage: sceneImage && field(sceneImage),
+        styleImage: styleImage && field(styleImage),
+      },
+      externalId
+    );
     const record = recordOf({
       ...params,
       model: MULTI_IMAGE_MODEL,
@@ -107,7 +148,14 @@ export class ImageApi {
     const image = this.#image(params.image, 'image', new MediaBudget());
     const externalId = resolveExternalId(params.externalTaskId);
     const body = buildOutpaint(params, field(image), externalId);
-    return this.#create('outpainting', body, externalId, params.signal, recordOf({ ...params, image: redactMedia(params.image, image) }), policy);
+    return this.#create(
+      'outpainting',
+      body,
+      externalId,
+      params.signal,
+      recordOf({ ...params, image: redactMedia(params.image, image) }),
+      policy
+    );
   }
 
   /** `POST /v1/general/ai-multi-shot` (D7) — three views of a subject from one frontal image; feeds element creation. */
@@ -117,14 +165,28 @@ export class ImageApi {
     const frontal = this.#image(params.frontalImage, 'frontalImage', new MediaBudget());
     const externalId = resolveExternalId(params.externalTaskId);
     const body = buildSubjectCompletion(params, field(frontal), externalId);
-    return this.#create('subject-completion', body, externalId, params.signal, recordOf({ ...params, frontalImage: redactMedia(params.frontalImage, frontal) }), policy);
+    return this.#create(
+      'subject-completion',
+      body,
+      externalId,
+      params.signal,
+      recordOf({ ...params, frontalImage: redactMedia(params.frontalImage, frontal) }),
+      policy
+    );
   }
 
   #image(src: MediaSource, fieldName: string, budget: MediaBudget): ResolvedMedia {
     return resolveMediaSource(src, { kind: 'image', standard: 'legacy', field: fieldName, budget });
   }
 
-  async #create(product: Product, body: LegacyBody, externalId: string | undefined, signal: AbortSignal | undefined, record: Record<string, unknown>, policy: ValidationPolicy): Promise<TaskHandle> {
+  async #create(
+    product: Product,
+    body: LegacyBody,
+    externalId: string | undefined,
+    signal: AbortSignal | undefined,
+    record: Record<string, unknown>,
+    policy: ValidationPolicy
+  ): Promise<TaskHandle> {
     const path = LEGACY_PRODUCT_PATHS[product as keyof typeof LEGACY_PRODUCT_PATHS];
     const res = await this.#core.request({
       method: 'POST',

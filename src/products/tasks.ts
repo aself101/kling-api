@@ -52,8 +52,14 @@ export const LEGACY_PRODUCT_PATHS: Readonly<Record<LegacyProduct, string>> = {
   voice: '/v1/general/custom-voices',
 };
 
-const NEW_STANDARD_PRODUCTS: ReadonlySet<string> = new Set<NewStandardProduct>(['text-to-video', 'image-to-video', 'omni-video', 'motion-control']);
+const NEW_STANDARD_PRODUCTS: ReadonlySet<string> = new Set<NewStandardProduct>([
+  'text-to-video',
+  'image-to-video',
+  'omni-video',
+  'motion-control',
+]);
 
+/** Which API standard a product lives on; throws `KlingValidationError('product')` for an unknown value — the runtime guard behind the `Product` type at the CLI boundary. */
 export function standardOf(product: Product): Standard {
   if (NEW_STANDARD_PRODUCTS.has(product)) return 'new';
   if (product in LEGACY_PRODUCT_PATHS) return 'legacy';
@@ -107,6 +113,7 @@ export interface ListOptions extends RequestOptions {
 
 export type ProductType = 'video' | 'image' | 'try_on';
 
+/** `client.tasks` — product-neutral task queries: unified `get`/`list`, per-product `getByProduct`/`listByProduct`, `recover`, `handle` (spec D5). */
 export class TasksApi {
   readonly #core: HttpCore;
   readonly #logger: Logger;
@@ -127,7 +134,10 @@ export class TasksApi {
    * what earlier chunks returned, which attempted ids are missing, and which ids were
    * never sent (run #3 excavator A43).
    */
-  async get(ids: string | string[], options: GetOptions = {}): Promise<{ tasks: Task[]; missing: string[] }> {
+  async get(
+    ids: string | string[],
+    options: GetOptions = {}
+  ): Promise<{ tasks: Task[]; missing: string[] }> {
     const list = Array.isArray(ids) ? ids : [ids];
     if (list.length === 0) return { tasks: [], missing: [] };
     const key = options.byExternalId ? 'external_task_ids' : 'task_ids';
@@ -156,12 +166,22 @@ export class TasksApi {
 
   /** New-standard cursor query (`POST /tasks` — a read despite the verb). */
   async list(options: ListOptions = {}): Promise<newStd.CursorPage> {
-    if (options.limit !== undefined && (!Number.isInteger(options.limit) || options.limit < 1 || options.limit > TASKS_LIST_MAX_LIMIT)) {
-      throw new KlingValidationError('limit', `limit must be an integer in 1–${TASKS_LIST_MAX_LIMIT}, got ${options.limit}`);
+    if (
+      options.limit !== undefined &&
+      (!Number.isInteger(options.limit) ||
+        options.limit < 1 ||
+        options.limit > TASKS_LIST_MAX_LIMIT)
+    ) {
+      throw new KlingValidationError(
+        'limit',
+        `limit must be an integer in 1–${TASKS_LIST_MAX_LIMIT}, got ${options.limit}`
+      );
     }
     const filters: { key: 'status' | 'product_type'; values: string[] }[] = [];
-    if (options.status !== undefined) filters.push({ key: 'status', values: [options.status].flat() });
-    if (options.productType !== undefined) filters.push({ key: 'product_type', values: [options.productType].flat() });
+    if (options.status !== undefined)
+      filters.push({ key: 'status', values: [options.status].flat() });
+    if (options.productType !== undefined)
+      filters.push({ key: 'product_type', values: [options.productType].flat() });
     const body: Record<string, unknown> = {};
     // Numeric ms per the vendor table (`long`); §11 Q2 records whether the live API wants strings.
     if (options.startTime !== undefined) body.start_time = options.startTime;
@@ -169,7 +189,13 @@ export class TasksApi {
     if (options.cursor !== undefined) body.cursor = options.cursor;
     if (options.limit !== undefined) body.limit = options.limit;
     if (filters.length > 0) body.filters = filters;
-    const res = await this.#core.request({ method: 'POST', path: '/tasks', body, kind: 'read', signal: options.signal });
+    const res = await this.#core.request({
+      method: 'POST',
+      path: '/tasks',
+      body,
+      kind: 'read',
+      signal: options.signal,
+    });
     return newStd.parseCursor(res.envelope, this.#ctx());
   }
 
@@ -189,13 +215,34 @@ export class TasksApi {
 
   /** Legacy per-product list (`GET /v1/<product>?pageNum&pageSize`). */
   async listByProduct(product: LegacyProduct, options: PageOptions = {}): Promise<Task[]> {
-    if (standardOf(product) !== 'legacy') throw new KlingValidationError('product', `${product} is a new-standard product; use tasks.list()`);
+    if (standardOf(product) !== 'legacy')
+      throw new KlingValidationError(
+        'product',
+        `${product} is a new-standard product; use tasks.list()`
+      );
     const { pageNum, pageSize } = options;
-    if (pageNum !== undefined && (!Number.isInteger(pageNum) || pageNum < 1 || pageNum > 1000)) throw new KlingValidationError('pageNum', `pageNum must be an integer in 1–1000, got ${pageNum}`);
+    if (pageNum !== undefined && (!Number.isInteger(pageNum) || pageNum < 1 || pageNum > 1000))
+      throw new KlingValidationError(
+        'pageNum',
+        `pageNum must be an integer in 1–1000, got ${pageNum}`
+      );
     // pageSize 1–500 everywhere except the voice endpoints, which document 1–1000 (App. C §7.10).
     const maxPageSize = product === 'voice' ? 1000 : 500;
-    if (pageSize !== undefined && (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > maxPageSize)) throw new KlingValidationError('pageSize', `pageSize must be an integer in 1–${maxPageSize}, got ${pageSize}`);
-    const res = await this.#core.request({ method: 'GET', path: LEGACY_PRODUCT_PATHS[product], query: { pageNum, pageSize }, kind: 'read', signal: options.signal });
+    if (
+      pageSize !== undefined &&
+      (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > maxPageSize)
+    )
+      throw new KlingValidationError(
+        'pageSize',
+        `pageSize must be an integer in 1–${maxPageSize}, got ${pageSize}`
+      );
+    const res = await this.#core.request({
+      method: 'GET',
+      path: LEGACY_PRODUCT_PATHS[product],
+      query: { pageNum, pageSize },
+      kind: 'read',
+      signal: options.signal,
+    });
     return legacy.parseList(res.envelope, this.#ctx(product));
   }
 
@@ -204,7 +251,11 @@ export class TasksApi {
    * `null` means *not visible to this account* — not *never created*. TTS carries no
    * external id and is not a `Product`; it cannot reach here.
    */
-  async recover(product: Product, externalId: string, options: RequestOptions = {}): Promise<Task | null> {
+  async recover(
+    product: Product,
+    externalId: string,
+    options: RequestOptions = {}
+  ): Promise<Task | null> {
     if (standardOf(product) === 'new') {
       const [task] = await this.#fetchNew([externalId], 'external_task_ids', options.signal);
       return task ? { ...task, product } : null;
@@ -218,13 +269,28 @@ export class TasksApi {
   }
 
   /** A handle for a task this process did not create (or created before a restart). */
-  handle(product: Product, id: string, request: Record<string, unknown> = {}, externalId?: string): TaskHandle {
+  handle(
+    product: Product,
+    id: string,
+    request: Record<string, unknown> = {},
+    externalId?: string
+  ): TaskHandle {
     return createHandle(this.#core, this.#logger, product, id, request, externalId);
   }
 
   /** One `GET /tasks` request for up to `TASKS_CHUNK_SIZE` ids; the codec's warnings go to the logger. */
-  async #fetchNew(ids: string[], key: 'task_ids' | 'external_task_ids', signal: AbortSignal | undefined): Promise<Task[]> {
-    const res = await this.#core.request({ method: 'GET', path: '/tasks', query: { [key]: ids.join(',') }, kind: 'read', signal });
+  async #fetchNew(
+    ids: string[],
+    key: 'task_ids' | 'external_task_ids',
+    signal: AbortSignal | undefined
+  ): Promise<Task[]> {
+    const res = await this.#core.request({
+      method: 'GET',
+      path: '/tasks',
+      query: { [key]: ids.join(',') },
+      kind: 'read',
+      signal,
+    });
     return newStd.parseTasks(res.envelope, this.#ctx());
   }
 
@@ -238,13 +304,26 @@ export class TasksApi {
    * discriminates — fragile, and the only signal there is; `1203` is mapped too in case
    * the vendor ever aligns with its own table.
    */
-  async #legacyGet(product: LegacyProduct, id: string, byExternalId: boolean, options: RequestOptions): Promise<Task> {
+  async #legacyGet(
+    product: LegacyProduct,
+    id: string,
+    byExternalId: boolean,
+    options: RequestOptions
+  ): Promise<Task> {
     try {
-      const res = await this.#core.request({ method: 'GET', path: `${LEGACY_PRODUCT_PATHS[product]}/${encodeURIComponent(id)}`, kind: 'read', signal: options.signal });
+      const res = await this.#core.request({
+        method: 'GET',
+        path: `${LEGACY_PRODUCT_PATHS[product]}/${encodeURIComponent(id)}`,
+        kind: 'read',
+        signal: options.signal,
+      });
       return legacy.parseTask(res.envelope, this.#ctx(product));
     } catch (err) {
       if (isLegacyNotFound(err)) {
-        throw new KlingTaskNotFoundError(product, id, byExternalId, { requestId: err.requestId, cause: err });
+        throw new KlingTaskNotFoundError(product, id, byExternalId, {
+          requestId: err.requestId,
+          cause: err,
+        });
       }
       throw err;
     }
@@ -364,7 +443,10 @@ export function createHandle(
         },
       };
       const timer = Number.isFinite(deadlineMs)
-        ? setTimeout(() => sub.fail(new KlingPollTimeoutError(lastSeen, Date.now() - started)), deadlineMs)
+        ? setTimeout(
+            () => sub.fail(new KlingPollTimeoutError(lastSeen, Date.now() - started)),
+            deadlineMs
+          )
         : undefined;
       const onAbort = () => sub.fail(options.signal?.reason);
       if (options.signal?.aborted) return sub.fail(options.signal.reason);

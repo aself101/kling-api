@@ -112,9 +112,14 @@ describe('poll — deadline boundary (ship run #4)', () => {
       return task('processing');
     });
     const p = poll(fn, { until: terminal, intervalMs: 3000, deadlineMs: 3000 });
-    const rej = expect(p).rejects.toBeInstanceOf(KlingPollTimeoutError);
+    let settled = false;
+    p.catch(() => undefined).finally(() => { settled = true; });
     await vi.advanceTimersByTimeAsync(3000);
-    await rej;
+    // The rejection must already be in flight from the pre-sleep check — under the `< 0` mutation it
+    // would need another tick (sleep(0)) and this assertion fails cleanly instead of hanging.
+    await Promise.resolve();
+    expect(settled).toBe(true);
+    await expect(p).rejects.toBeInstanceOf(KlingPollTimeoutError);
     expect(calls).toBe(1);
     // Exactly one timer: fn's own. Under the `remaining < 0` mutation the pre-sleep check
     // would pass at 0 and `sleep(0)` would arm a second timer before the post-sleep check threw.

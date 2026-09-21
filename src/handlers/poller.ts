@@ -29,11 +29,20 @@ export interface PollOptions<T> {
   signal?: AbortSignal;
 }
 
-export async function poll<T extends Task>(fn: (signal?: AbortSignal) => Promise<T>, options: PollOptions<T>): Promise<T> {
+/**
+ * Call `fn` every `intervalMs` until `until(value)` holds; the library's poller behind
+ * `TaskHandle.wait()`. Rejects with the caller's abort reason, `KlingPollTimeoutError(last,
+ * elapsed)` at the deadline, or whatever `fn` threw.
+ */
+export async function poll<T extends Task>(
+  fn: (signal?: AbortSignal) => Promise<T>,
+  options: PollOptions<T>
+): Promise<T> {
   const { until, signal } = options;
   const deadlineMs = options.deadlineMs ?? DEFAULT_POLL_TIMEOUT;
   const configured = options.intervalMs;
-  const interval: () => number = typeof configured === 'function' ? configured : () => configured ?? DEFAULT_POLL_INTERVAL;
+  const interval: () => number =
+    typeof configured === 'function' ? configured : () => configured ?? DEFAULT_POLL_INTERVAL;
   const started = Date.now();
   let last: T | null = null;
 
@@ -46,7 +55,8 @@ export async function poll<T extends Task>(fn: (signal?: AbortSignal) => Promise
     const remaining = deadlineMs - elapsed;
     if (remaining <= 0) throw new KlingPollTimeoutError(last, elapsed);
     await sleep(Math.min(Math.max(1, interval()), remaining), signal);
-    if (Date.now() - started >= deadlineMs) throw new KlingPollTimeoutError(last, Date.now() - started);
+    if (Date.now() - started >= deadlineMs)
+      throw new KlingPollTimeoutError(last, Date.now() - started);
   }
 }
 
