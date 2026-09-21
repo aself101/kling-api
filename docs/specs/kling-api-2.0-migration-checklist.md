@@ -114,32 +114,40 @@ Conventions: `[ ]` open · `[x]` done · `[-]` deliberately skipped (write why i
 
 ---
 
-## Phase 1b — Task model + codec parsers — budget ~360 src + ~200 test (split legacy parsers into 1b₂ if fixtures exceed 14 files)
+## Phase 1b — Task model + codec parsers — budget ~360 src + ~200 test (split legacy parsers into 1b₂ if fixtures exceed 14 files) — **actual: src 606 (shared 126, new-standard 227, legacy 235, constants +18); test 509 + extractor 164; 15 fixture files (outside the budget). 68 % over on src → split per D20: 1b₁ `489cbe7` (shared + new-standard + fixture pipeline), 1b₂ `a000f4b` (legacy + controls). 61 tests. `codecs/task.ts` rows below were delivered in 1a₁ (`a14f839`) and are ticked here for completeness.**
 
 `feat(codecs)!: normalized Task and parsers for both vendor standards`
 
+**Deviations and judgment calls, recorded:**
+- **`src/codecs/shared.ts` added** — not in the §5 file table. The six field readers (envelope guard, status vocabulary, timestamp normalisation, seconds parsing, resource status, expiry) appeared in both parsers the moment the second was written; a sibling in `src/codecs/` is in the same import zone, so the graph is unchanged and `task.ts` stays types-only.
+- **Fixtures are not byte-verbatim** — the vendor's Response Examples are not valid JSON (`//` comments, bare `boolean`/`int`, a missing and a trailing comma in the voice-list example) and use `"status": "string"` where a real response carries an enum. `test/2.0/fixtures/extract.mjs` regenerates every fixture from `docs/api` with exactly those repairs plus ONE legal value per enum placeholder, and `INDEX.md` lists page, section, fence line and every substitution per fixture. `fixtures.test.ts` asserts the tree is reproducible byte-for-byte from the script (control: a corrupted copy is restored), so the fixtures cannot drift from the docs by hand-editing.
+- **Both codecs accept both terminal spellings** (`succeed`, `succeeded`); the standards are discriminated by the id field (`data.id` vs `data.task_id`), which is what the cross-codec controls prove. The vendor has changed this spelling once already.
+- **Outputs never throw** — a malformed or unknown-type output entry is dropped with a `warn` and left in `raw`; only the envelope and the top-level status throw (Q12 reasoning applied to outputs). Codecs cannot import `Logger` (§5), so the parsers take `ParseContext { product?, warn? }` and the product modules pass `logger.warn`.
+- **Legacy voices have no status field** → `status: 'succeeded'` (a listed voice exists). **Legacy elements** carry `reference_type`, not `element_type` → `elementType` unset, record in `raw`. **TTS `audios[].url`** is read as the mp3 rendition (the vendor's sample URL is `…/output.mp3`) `[VERIFY at V10/Phase 7]`. **Omni-image `series_images[]`** carry `groupId: 'series'` (`SERIES_GROUP_ID`); primaries carry none. **Legacy emission order is fixed by type** (videos, images, series, audios, elements, voices), not the vendor's key order.
+- Legacy deductions → `billing`: `final_unit_deduction` → one `unit` entry, `final_balance_deduction.{quota,list_price}` → one `cash` entry (no currency / package type — the legacy shape has neither).
+
 ### `codecs/task.ts` (types only — D4, D5)
-- [ ] `TaskStatus`, `Standard`, `Product`, `LegacyProduct`, `Task` (with `standard`, `product?`, `outputsExpireAt?`, `raw`), `TaskOutput` union, `BillingEntry`, `TaskHandle` interface (with `request` and non-optional `externalId`), `RequestOptions{signal?}`, `WaitOptions{intervalMs?, deadlineMs?, signal?}`, `SaveOptions`, `PageOptions` — exactly §6/D4/D5
-- [ ] File imports nothing from `src/` (import-graph rule §5)
+- [x] `TaskStatus`, `Standard`, `Product`, `LegacyProduct`, `Task` (with `standard`, `product?`, `outputsExpireAt?`, `raw`), `TaskOutput` union, `BillingEntry`, `TaskHandle` interface (with `request` and non-optional `externalId`), `RequestOptions{signal?}`, `WaitOptions{intervalMs?, deadlineMs?, signal?}`, `SaveOptions`, `PageOptions` — exactly §6/D4/D5
+- [x] File imports nothing from `src/` (import-graph rule §5)
 
 ### `codecs/new-standard.ts` parsers
-- [ ] `parseCreate(json) → Task` from `data.{id,status,create_time,update_time,external_id}`; `standard: 'new'`; `product` from the caller
-- [ ] `parseTasks(json) → Task[]` from `GET /tasks` `data[]` incl. `outputs[]` (video `duration` string → `durationSeconds` number; image `group_id`; audio `mp3_url`…; element `references[]`; voice) and `billing[]` → `BillingEntry[]`
-- [ ] `parseCursor(json) → { tasks, count, nextCursor, hasMore }` from `data.result[]`
-- [ ] `outputsExpireAt = updatedAt + 30 * 86_400_000` when `status === 'succeeded'`
-- [ ] Unknown `status` string → `KlingCodecError` **(V2)**; `create_time` / `update_time` `< 1e11` → treated as seconds, ×1000, logger warning (§11 Q12) — never a throw on units; **absent/`0` timestamps stay absent** (no `0 × 1000`, no `outputsExpireAt` from epoch — run #3 architect edge case)
+- [x] `parseCreate(json, ctx?) → Task` from `data.{id,status,create_time,update_time,external_id}`; `standard: 'new'`; `product` from `ctx.product`; plus `parseTaskRecord(record, ctx?, path?)` for the bare callback body (4a)
+- [x] `parseTasks(json) → Task[]` from `GET /tasks` `data[]` incl. `outputs[]` (video `duration` string → `durationSeconds` number; image `group_id`; audio `mp3_url`…; element `references[]`; voice) and `billing[]` → `BillingEntry[]`
+- [x] `parseCursor(json) → { tasks, count, nextCursor, hasMore }` from `data.result[]`
+- [x] `outputsExpireAt = updatedAt + 30 * 86_400_000` when `status === 'succeeded'`
+- [x] Unknown `status` string → `KlingCodecError` **(V2)**; `create_time` / `update_time` `< 1e11` → treated as seconds, ×1000, logger warning (§11 Q12) — never a throw on units; **absent/`0` timestamps stay absent** (no `0 × 1000`, no `outputsExpireAt` from epoch — run #3 architect edge case)
 
 ### `codecs/legacy.ts` parsers
-- [ ] `parseCreate(json)` from `data.{task_id,task_status,task_info.external_task_id,created_at,updated_at}`; `standard: 'legacy'`
-- [ ] `parseTask(json)` adds `task_status_msg → message`, `task_result.{videos,images,audios,elements,voices}[] → outputs[]`, `final_unit_deduction`/`final_balance_deduction → billing?`
-- [ ] `parseList(json) → Task[]` from `data[]`
-- [ ] `succeed → succeeded`; `url_mp3/url_wav/duration_mp3/duration_wav` → camelCase; omni-image `series_images[]` → `image` outputs with `groupId`; ai-multi-shot `images[]{index,url_1,url_2,url_3}` → three `image` outputs with `groupId = String(index)`
-- [ ] Same status guard and timestamp normalisation as new-standard
+- [x] `parseCreate(json)` from `data.{task_id,task_status,task_info.external_task_id,created_at,updated_at}`; `standard: 'legacy'`
+- [x] `parseTask(json, ctx?)` (and `parseTaskRecord`) adds `task_status_msg → message`, `task_result.{videos,images,audios,elements,voices}[] → outputs[]`, `final_unit_deduction`/`final_balance_deduction → billing?`
+- [x] `parseList(json) → Task[]` from `data[]`
+- [x] `succeed → succeeded`; `url_mp3/url_wav/duration_mp3/duration_wav` → camelCase; omni-image `series_images[]` → `image` outputs with `groupId`; ai-multi-shot `images[]{index,url_1,url_2,url_3}` → three `image` outputs with `groupId = String(index)`
+- [x] Same status guard and timestamp normalisation as new-standard
 
 ### Fixtures and tests **(V1 parse half)**
-- [ ] `test/2.0/fixtures/<doc-file>/<section>.json` (outside the LOC budget; list the files in the commit message) copied verbatim from every *Response Example* the parsers consume (header comment: source path + line); 3.0-turbo t2v create, `GET /tasks`, `POST /tasks`; legacy image generate create/query/list; avatar query; element/voice list; callback bodies (both shapes)
-- [ ] Table test: each fixture → expected `Task` (snapshot the normalized object)
-- [ ] **Control:** every legacy fixture into `newStandard.parseTask*` → `KlingCodecError`; every new fixture into `legacy.parse*` → `KlingCodecError`
+- [x] `test/2.0/fixtures/{new,legacy}/*.json` — 15 files, regenerated by `extract.mjs`, provenance in `INDEX.md` (see deviations above — JSON cannot carry a header comment, and the examples are not valid JSON as published): 3.0-turbo t2v create, `GET /tasks`, `POST /tasks`; legacy image generate create/query/list; omni-image query (`series_images`); subject-completion query (`url_1..3`); avatar query; TTS create; text-to-audio query; element list; voice list; callback bodies (both shapes)
+- [x] Table test: each fixture → explicit expected `Task` / outputs (`toEqual`, not a snapshot — a first-run snapshot proves nothing; the explicit objects are the assertion that can fail)
+- [x] **Control:** every legacy fixture into all three `newStandard.parse*` → `KlingCodecError`; every new fixture into all three `legacy.parse*` → `KlingCodecError`; both callback bodies rejected by the other record parser; positive control that each fixture parses under its own codec (`controls.test.ts`)
 
 ---
 
