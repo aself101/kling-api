@@ -387,19 +387,25 @@ Gate: **both Phase 0 write probes ticked.** This is the commit where the JWT pat
 
 ---
 
-## Phase 5 — Platform — budget ~170 src (account ~70, webhooks ~100) + ~180 test
+## Phase 5 — Platform — budget ~170 src (account ~70, webhooks ~100) + ~180 test — **actual: ≈400 src (account codec 150 + api 110, webhooks 140) + ≈200 test; split per D20: 5ᵃ `816505e` (account), 5ᵇ `21e2219` (webhooks). 405 tests. Spend: 0 (all reads).**
 
 `feat(platform): account ledgers, webhook signature verification, callback parsing`
 
-- [ ] `account.usage(startTime, endTime, resourcePackName?)` → `GET /account/costs` (`kind: 'read'`); parse the double envelope (`data.code`, `data.msg`, `data.resource_pack_subscribe_infos[]`)
-- [ ] `account.balanceLedger({ startTime?, endTime?, cursor?, limit?, apiKeyName? })` → `POST /account/billing/balance` (`kind: 'read'`)
-- [ ] `account.packageLedger({ …, productType?, packageName? | packageId? })` → `POST /account/billing/package`; `packageName`/`packageId` mutually exclusive (test)
-- [ ] `verifyWebhookSignature({ id, timestamp, signature, rawBody, secret, toleranceSeconds = 300, now = () => Date.now() })` — HMAC-SHA256 over `${id}.${timestamp}.${rawBody}`, key = base64-decode(secret without `whsec_`), constant-time compare, accepts multiple space-separated `v1,` signatures; `now` injectable (run #3 anxiety F2)
-- [ ] **(V13)** vendor vector passes: secret `whsec_dGVzdHNlY3JldHRlc3RzZWNyZXR0ZXN0c2VjcmV0MTI=`, id `9876543210`, ts `1781080794`, body `{"id":"1234567890","status":"succeeded","message":"","create_time":1781080778802,"update_time":1781080794151}` → `v1,UsKlJP00XoQyOn410NM9xv34sP+Gl0jnOO9Lcpr7NJ4=` **with `now` pinned to `1781080794 × 1000`**; **controls:** one body byte flipped → `KlingWebhookError('bad-signature')`; `now` moved +301 s → `'stale-timestamp'`; `now` moved +299 s → passes
-- [ ] `src/webhooks.ts`: `parseCallback(rawBody: string | Uint8Array, { headers?, secret? }) → { task, verified: true | null }` — `id` present → new codec, `task_id` present → legacy codec, **both present → `KlingCodecError`**; with `secret`: missing headers → `KlingWebhookError('missing-headers')`, bad signature → `'bad-signature'`, skew > tolerance → `'stale-timestamp'` — the task is never returned on a failed check; without `secret` → `verified: null`
-- [ ] README section (written in 6c, drafted here as a docstring): raw-body precondition with an `express.raw({ type: 'application/json' })` example; bold warning that `verified: null` bodies are unauthenticated
-- [ ] Fixtures: both callback body shapes from `kling-get-started-callbacks.md`
-- [ ] **§11 Q1 (if a receiver is available; not release-blocking):** trigger one 3.0-omni task with `callbackUrl`; record body shape and whether signature headers arrived: `________`
+**Deviations and live findings, recorded:**
+- **`codecs/account.ts` added** (not in the §5 table) — the account envelopes are neither task standard; every vendor-spelled field is read there (D3), and `products/account.ts` only builds requests.
+- **Ledger bodies:** with a `cursor` the body carries ONLY the cursor (the vendor: it "overrides all other parameters"); without one the ms window is required (`Required when cursor is empty` — the table says No; the note wins).
+- **Skew is checked after the signature**, not before (the checklist's order) — a forged timestamp then cannot be used to probe the receiver's clock.
+- **Live:** `account.usage` reports Video 91.2 / 100 remaining (expires 2026-10-20) and Image 984 / 1000 (2026-10-21) — exactly the checklist's running tally (8.8 + 16 spent). `packageLedger` lists today's tasks with `productType` and `unitsAfter`; `balanceLedger` is empty (no cash spend).
+
+- [x] `account.usage(startTime, endTime, resourcePackName?)` → `GET /account/costs` (`kind: 'read'`); parse the double envelope (`data.code`, `data.msg`, `data.resource_pack_subscribe_infos[]`)
+- [x] `account.balanceLedger({ startTime?, endTime?, cursor?, limit?, apiKeyName? })` → `POST /account/billing/balance` (`kind: 'read'`)
+- [x] `account.packageLedger({ …, productType?, packageName? | packageId? })` → `POST /account/billing/package`; `packageName`/`packageId` mutually exclusive (test)
+- [x] `verifyWebhookSignature({ id, timestamp, signature, rawBody, secret, toleranceSeconds = 300, now = () => Date.now() })` — HMAC-SHA256 over `${id}.${timestamp}.${rawBody}`, key = base64-decode(secret without `whsec_`), constant-time compare, accepts multiple space-separated `v1,` signatures; `now` injectable (run #3 anxiety F2)
+- [x] **(V13)** vendor vector passes: secret `whsec_dGVzdHNlY3JldHRlc3RzZWNyZXR0ZXN0c2VjcmV0MTI=`, id `9876543210`, ts `1781080794`, body `{"id":"1234567890","status":"succeeded","message":"","create_time":1781080778802,"update_time":1781080794151}` → `v1,UsKlJP00XoQyOn410NM9xv34sP+Gl0jnOO9Lcpr7NJ4=` **with `now` pinned to `1781080794 × 1000`**; **controls:** one body byte flipped → `KlingWebhookError('bad-signature')`; `now` moved +301 s → `'stale-timestamp'`; `now` moved +299 s → passes
+- [x] `src/webhooks.ts`: `parseCallback(rawBody: string | Uint8Array, { headers?, secret? }) → { task, verified: true | null }` — `id` present → new codec, `task_id` present → legacy codec, **both present → `KlingCodecError`**; with `secret`: missing headers → `KlingWebhookError('missing-headers')`, bad signature → `'bad-signature'`, skew > tolerance → `'stale-timestamp'` — the task is never returned on a failed check; without `secret` → `verified: null`
+- [x] README section (written in 6c, drafted here as the `src/webhooks.ts` module docstring): raw-body precondition with `express.raw({ type: 'application/json' })`; bold warning that `verified: null` bodies are unauthenticated
+- [x] Fixtures: both callback body shapes from `kling-get-started-callbacks.md`
+- [ ] **§11 Q1 (if a receiver is available; not release-blocking):** trigger one 3.0-omni task with `callbackUrl`; record body shape and whether signature headers arrived: `________` — **no public receiver available in this session; stays open for Phase 7 (a `webhook.site`-style sink or a tunnel would do)**
 
 ---
 
