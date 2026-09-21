@@ -30,6 +30,7 @@ export {
   KlingPollTimeoutError,
   KlingResponseError,
   KlingTaskFailedError,
+  KlingTaskNotFoundError,
   KlingTimeoutError,
   KlingValidationError,
   KlingWebhookError,
@@ -60,4 +61,22 @@ export type {
   WaitOptions,
 } from './codecs/task.js';
 export { BASE_URL, ERROR_CODES, VENDOR_HTTP_STATUS, type VendorErrorCode } from './config/constants.js';
+export {
+  IMAGE_MODELS,
+  VIDEO_MODELS,
+  type AspectRatio,
+  type AudioMode,
+  type ContentType,
+  type ImageModel,
+  type ImageModelCaps,
+  type ImageResolution,
+  type KnownImageModel,
+  type KnownVideoModel,
+  type Resolution,
+  type VideoModel,
+  type VideoModelCaps,
+} from './config/models.js';
+export { TasksApi, LEGACY_PRODUCT_PATHS, standardOf, type GetOptions, type ListOptions, type ProductType } from './products/tasks.js';
+export type { CursorPage } from './codecs/new-standard.js';
+export { poll, type PollOptions } from './handlers/poller.js';
 export { MISSING_API_KEY_MESSAGE, loadApiKey, type ApiKeySource } from './config/loaders.js';

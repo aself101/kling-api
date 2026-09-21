@@ -10,6 +10,7 @@
 import { MISSING_API_KEY_MESSAGE, loadApiKey, type ApiKeySource } from './config/loaders.js';
 import { HttpCore, type HttpCoreInternals, type KlingConfig, type Logger, silentLogger } from './http/core.js';
 import { KlingValidationError } from './http/errors.js';
+import { TasksApi } from './products/tasks.js';
 
 export interface ResolvedKlingConfig {
   baseUrl: string;
@@ -29,6 +30,8 @@ export class KlingClient {
    */
   readonly http: HttpCore;
   readonly config: ResolvedKlingConfig;
+  /** Product-neutral task queries and handles (spec D5): `get`, `list`, `getByProduct`, `listByProduct`, `recover`, `handle`. */
+  readonly tasks: TasksApi;
 
   constructor(config: KlingConfig = {}, internals: HttpCoreInternals = {}) {
     const key = loadApiKey(config.apiKey);
@@ -53,5 +56,22 @@ export class KlingClient {
       logger: config.logger ?? silentLogger,
       apiKeySource: key.source,
     };
+    this.tasks = new TasksApi(this.http, this.config.logger);
+  }
+
+  /**
+   * Cheapest authenticated round trip: `GET /tasks?task_ids=0` (free, new standard).
+   * `true` when it returns a vendor envelope with `code 0`; `false` on ANY throw — an
+   * auth failure, a network failure, a timeout. It answers "can this client reach and
+   * authenticate against the API right now", nothing finer; inspect the error from
+   * `tasks.get` when you need the reason.
+   */
+  async healthCheck(options: { signal?: AbortSignal } = {}): Promise<boolean> {
+    try {
+      await this.tasks.get(['0'], options);
+      return true;
+    } catch {
+      return false;
+    }
   }
 }

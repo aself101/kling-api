@@ -50,6 +50,32 @@ describe('KlingClient skeleton (1a₂)', () => {
   });
 });
 
+describe('KlingClient.tasks and healthCheck (2a₁)', () => {
+  const okFetch = (async (input: string | URL | Request) => {
+    const url = new URL(String(input));
+    return new Response(JSON.stringify({ code: 0, message: 'SUCCEED', request_id: 'r', data: url.searchParams.get('task_ids') === '0' ? [] : [{ id: 'x', status: 'succeeded' }] }), { status: 200 });
+  }) as typeof fetch;
+
+  it('exposes a TasksApi bound to the client transport', async () => {
+    const c = new KlingClient({ apiKey: 'k', fetch: okFetch });
+    expect(c.tasks).toBeInstanceOf(pkg.TasksApi);
+    const res = await c.tasks.get('x');
+    expect(res.tasks[0]?.id).toBe('x');
+  });
+
+  it('healthCheck → true on an authenticated 200 (GET /tasks?task_ids=0 answers [] and that is fine)', async () => {
+    const c = new KlingClient({ apiKey: 'k', fetch: okFetch, retry: { maxAttempts: 1 } });
+    expect(await c.healthCheck()).toBe(true);
+  });
+
+  it('healthCheck → false on a 401 and on a network failure (any throw)', async () => {
+    const unauthorized = (async () => new Response(JSON.stringify({ code: 1002, message: 'Authentication error' }), { status: 401 })) as typeof fetch;
+    expect(await new KlingClient({ apiKey: 'k', fetch: unauthorized, retry: { maxAttempts: 1 } }).healthCheck()).toBe(false);
+    const offline = (async () => { throw new TypeError('fetch failed'); }) as typeof fetch;
+    expect(await new KlingClient({ apiKey: 'k', fetch: offline, retry: { maxAttempts: 1 } }, { sleep: async () => undefined }).healthCheck()).toBe(false);
+  });
+});
+
 describe('public barrel (src/index.ts)', () => {
   it('exports the values spec §6.4 lists for this phase — and nothing JWT-shaped', () => {
     for (const name of [
@@ -57,6 +83,7 @@ describe('public barrel (src/index.ts)', () => {
       'KlingResponseError', 'KlingCodecError', 'KlingValidationError', 'KlingTaskFailedError', 'KlingPollTimeoutError',
       'KlingNoOutputsError', 'KlingOutputsExpiredError', 'KlingBatchError', 'KlingDownloadError', 'KlingWebhookError',
       'ERROR_CODES', 'BASE_URL', 'loadApiKey',
+      'KlingTaskNotFoundError', 'TasksApi', 'LEGACY_PRODUCT_PATHS', 'standardOf', 'VIDEO_MODELS', 'IMAGE_MODELS', 'poll',
     ]) {
       expect(pkg, name).toHaveProperty(name);
     }
