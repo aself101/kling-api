@@ -1,0 +1,35 @@
+{
+  "task_id": "string",
+  "task_status": "succeed",
+  "task_status_msg": "string",
+  "created_at": 1722769557708,
+  "updated_at": 1722769557708,
+  "final_unit_deduction": "string",
+  "final_balance_deduction": {
+    "quota": "string",
+    "list_price": "string"
+  },
+  "task_info": {
+    "parent_video": {
+      "id": "string",
+      "url": "string",
+      "duration": "5"
+    },
+    "external_task_id": "string"
+  },
+  "task_result": {
+    "images": [
+      {
+        "index": 0,
+        "url": "string"
+      }
+    ],
+    "videos": [
+      {
+        "id": "string",
+        "url": "string",
+        "duration": "5"
+      }
+    ]
+  }
+}

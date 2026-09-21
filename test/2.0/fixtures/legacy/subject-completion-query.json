@@ -1,0 +1,30 @@
+{
+  "code": 0,
+  "message": "string",
+  "request_id": "string",
+  "data": {
+    "task_id": "string",
+    "task_status": "succeed",
+    "task_status_msg": "string",
+    "task_info": {
+      "external_task_id": "string"
+    },
+    "task_result": {
+      "images": [
+        {
+          "index": 0,
+          "url_1": "string",
+          "url_2": "string",
+          "url_3": "string"
+        }
+      ]
+    },
+    "final_unit_deduction": "string",
+    "final_balance_deduction": {
+      "quota": "string",
+      "list_price": "string"
+    },
+    "created_at": 1722769557708,
+    "updated_at": 1722769557708
+  }
+}

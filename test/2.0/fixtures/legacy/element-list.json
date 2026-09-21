@@ -1,0 +1,38 @@
+{
+  "code": 0,
+  "message": "string",
+  "request_id": "string",
+  "data": [
+    {
+      "task_id": "string",
+      "task_status": "succeed",
+      "task_status_msg": "string",
+      "task_info": {
+        "external_task_id": "string"
+      },
+      "task_result": {
+        "elements": [
+          {
+            "element_id": 0,
+            "element_name": "string",
+            "element_description": "string",
+            "reference_type": "video_refer",
+            "element_image_list": {},
+            "element_video_list": {},
+            "element_voice_info": {},
+            "tag_list": [],
+            "owned_by": "kling",
+            "status": "succeed"
+          }
+        ]
+      },
+      "final_unit_deduction": "string",
+      "final_balance_deduction": {
+        "quota": "string",
+        "list_price": "string"
+      },
+      "created_at": 1722769557708,
+      "updated_at": 1722769557708
+    }
+  ]
+}

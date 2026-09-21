@@ -1,0 +1,97 @@
+{
+  "code": 0,
+  "message": "string",
+  "request_id": "string",
+  "data": {
+    "result": [
+      {
+        "id": "string",
+        "status": "succeeded",
+        "message": "string",
+        "create_time": 1781080778802,
+        "update_time": 1781080794151,
+        "external_id": "string",
+        "outputs": [
+          {
+            "type": "video",
+            "id": "string",
+            "url": "string",
+            "watermark_url": "string",
+            "duration": "5"
+          },
+          {
+            "type": "image",
+            "url": "string",
+            "watermark_url": "string",
+            "group_id": "string"
+          },
+          {
+            "type": "audio",
+            "id": "string",
+            "mp3_url": "string",
+            "wav_url": "string",
+            "mp3_duration": "5",
+            "wav_duration": "5"
+          },
+          {
+            "type": "voice",
+            "id": "string",
+            "name": "string",
+            "url": "string",
+            "owned_by": "string",
+            "status": "succeeded"
+          },
+          {
+            "type": "element",
+            "id": "string",
+            "name": "string",
+            "description": "string",
+            "element_type": "multi_image_elements",
+            "references": [
+              {
+                "type": "image",
+                "role": "string",
+                "url": "string"
+              },
+              {
+                "type": "video",
+                "role": "refer",
+                "url": "string"
+              },
+              {
+                "type": "voice",
+                "role": "refer",
+                "url": "string",
+                "id": "string",
+                "name": "string",
+                "owned_by": "string"
+              }
+            ],
+            "owned_by": "string",
+            "status": "deleted",
+            "tags": [
+              {
+                "id": 1,
+                "name": "string",
+                "description": "string"
+              }
+            ]
+          }
+        ],
+        "billing": [
+          {
+            "charge_type": "cash",
+            "cash_type": "balance",
+            "amount": "string",
+            "currency": "string",
+            "package_type": "string",
+            "list_price": "string"
+          }
+        ]
+      }
+    ],
+    "count": 1,
+    "next_cursor": "string",
+    "has_more": true
+  }
+}

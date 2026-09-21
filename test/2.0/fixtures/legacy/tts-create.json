@@ -1,0 +1,26 @@
+{
+  "code": 0,
+  "message": "string",
+  "request_id": "string",
+  "data": {
+    "task_id": "string",
+    "task_status": "succeed",
+    "task_status_msg": "string",
+    "task_result": {
+      "audios": [
+        {
+          "id": "string",
+          "url": "string",
+          "duration": "5"
+        }
+      ]
+    },
+    "final_unit_deduction": "string",
+    "final_balance_deduction": {
+      "quota": "string",
+      "list_price": "string"
+    },
+    "created_at": 1722769557708,
+    "updated_at": 1722769557708
+  }
+}

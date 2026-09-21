@@ -13,6 +13,7 @@ static API Key the only credential for it; 1.x cannot generate video against the
 
 ### Added
 - *(2.0.0, pending)* Kling 3.0 / 3.0 Turbo / 3.0 Omni / O1 / 2.6 / 2.5 Turbo video via the new API standard; motion control; elements and voices; TTS; normalized `Task`/`TaskHandle`; webhook signature verification.
+- *(2.0.0, pending)* Codec parse policy: an unknown top-level task status or a wrong-standard envelope throws `KlingCodecError` (never reads as `processing`); a malformed *output* entry is dropped with a logger warning, never a throw; timestamps below 1e11 are read as seconds and scaled with a warning; `Task.outputsExpireAt = updatedAt + 30 d` is derived on `succeeded` tasks from the vendor's stated retention.
 
 ### Changed
 - *(2.0.0, pending)* `TaskStatus` value `succeed` → `succeeded` (same type, different value — a semantics-without-signature change); every default model; a bare-string media argument is a URL or Base64, never a filesystem path.

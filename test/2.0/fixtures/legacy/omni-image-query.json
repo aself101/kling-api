@@ -1,0 +1,40 @@
+{
+  "code": 0,
+  "message": "string",
+  "request_id": "string",
+  "data": {
+    "task_id": "string",
+    "task_status": "succeed",
+    "task_status_msg": "string",
+    "task_info": {
+      "external_task_id": "string"
+    },
+    "task_result": {
+      "result_type": "single",
+      "images": [
+        {
+          "index": 0,
+          "url": "string",
+          "watermark_url": "string"
+        }
+      ],
+      "series_images": [
+        {
+          "index": 0,
+          "url": "string",
+          "watermark_url": "string"
+        }
+      ]
+    },
+    "watermark_info": {
+      "enabled": true
+    },
+    "final_unit_deduction": "string",
+    "final_balance_deduction": {
+      "quota": "string",
+      "list_price": "string"
+    },
+    "created_at": 1722769557708,
+    "updated_at": 1722769557708
+  }
+}

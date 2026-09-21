@@ -1,0 +1,14 @@
+{
+  "code": 0,
+  "message": "string",
+  "request_id": "string",
+  "data": {
+    "task_id": "string",
+    "task_status": "submitted",
+    "task_info": {
+      "external_task_id": "string"
+    },
+    "created_at": 1722769557708,
+    "updated_at": 1722769557708
+  }
+}

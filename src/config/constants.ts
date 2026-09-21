@@ -328,3 +328,22 @@ export const WRITE_NOT_CREATED_CODES: ReadonlySet<number> = new Set([
   ERROR_CODES_V2.CONCURRENCY_LIMIT_EXCEEDED,
   ERROR_CODES_V2.IP_WHITELIST_POLICY,
 ]);
+
+// ============================================================================
+// 2.0 — output retention (spec D4, D14)
+// ============================================================================
+
+/**
+ * How long the vendor keeps generated output URLs alive: every result field in
+ * `docs/api` carries "generated results will be cleared after 30 days". The codecs
+ * derive `Task.outputsExpireAt = updatedAt + OUTPUT_RETENTION_MS` on `succeeded`
+ * tasks; the saver refuses past it unless forced. Vendor-stated, not measured.
+ */
+export const OUTPUT_RETENTION_MS = 30 * 86_400_000;
+
+/**
+ * Timestamps below this are read as SECONDS and multiplied by 1000 (spec Q12). Both
+ * standards document Unix ms, and 1e11 ms is 1973 — no vendor task predates it — while
+ * 1e11 s is the year 5138, so no ms value ever falls below the line.
+ */
+export const TIMESTAMP_SECONDS_CEILING = 1e11;

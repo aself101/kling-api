@@ -149,6 +149,11 @@ export default tseslint.config(
     },
   },
   {
+    // Node ESM scripts under test/ (the fixture extractor). Only the globals they use.
+    files: ['test/**/*.mjs', 'scripts/**/*.mjs'],
+    languageOptions: { globals: { console: 'readonly', process: 'readonly' } },
+  },
+  {
     files: ['test/**/*.ts'],
     rules: {
       // Relax rules for tests - no type-aware linting
