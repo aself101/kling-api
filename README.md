@@ -285,6 +285,25 @@ const files = await client.save(task, './output', { includeWatermark: false, req
 
 `save()` **streams** each output straight to disk — the body is never held in memory, so `maxBytes` is a cap on the file, not a per-call heap ceiling. Measured on a 220 MB body: +52 MB with `save()`, +389 MB with `fetchToBuffer`. `fetchToFile(url, path, options)` is the same thing as a public export for anyone downloading outside `save()`; `fetchToBuffer` still buffers, deliberately, for callers that want the bytes.
 
+**DNS rebinding is out of scope by default, and here is how to close it.** `assertSafeUrl` resolves a hostname, checks every address, then hands the *URL* to `fetch` — a host that answers with a public address at check time and a private one at connect time defeats it (CWE-367). Pinning the socket needs control the WHATWG `fetch` does not expose, and the library will not take a fourth runtime dependency for a hole whose exploitation requires controlling the vendor's own CDN DNS. If your threat model differs, supply a pinned `fetch`:
+
+```ts
+import { Agent, fetch as undiciFetch } from 'undici';
+
+/** Force the socket to one already-validated address; TLS still validates the HOSTNAME. */
+function pinnedFetch(pinTo: string) {
+  const agent = new Agent({
+    connect: {
+      lookup: (_host, options, cb) =>
+        cb(null, options?.all ? [{ address: pinTo, family: 4 }] : pinTo, 4),
+    },
+  });
+  return (input, init) => undiciFetch(String(input), { ...init, dispatcher: agent });
+}
+```
+
+This recipe is exercised in the test suite (`test/2.0/media/pinning.test.ts`), including a control proving the pin decides the destination — it is a tested mitigation, not a suggestion. The library's own guard still runs first either way.
+
 **Downloads are not retried.** One CDN 5xx or a reset mid-body is a `KlingSaveError` (`written` lists what landed); calling `save()` again re-downloads every output, not just the missing ones. The retry table above applies to requests against the vendor API only.
 
 Downloads go through the client's `fetch` with a byte cap (default 500 MiB — also the per-call heap ceiling, since the body is buffered before it is written), a redirect cap (5), a per-hop deadline (120 s for videos, 60 s for images/audio; `timeoutMs` overrides — re-armed on each of up to 5 redirects, so a pathological chain can take 6× that; your `signal` is the overall ceiling), and a per-hop URL safety check (below). `KlingOutputsExpiredError` is thrown **before any fetch** once `outputsExpireAt` has passed (`force: true` bypasses); `KlingNoOutputsError` for a `succeeded` task with no outputs. A download that fails after earlier files were written throws `KlingSaveError { written, failedUrl, cause }` — the files already on disk are listed, and no sidecar is written. The vendor's `task.id` is checked to be a single path segment before it becomes a file name. The sidecar's `request` is the handle's redacted record — a 20 MB inline frame is a `{ kind, bytes, sha256 }` triple there, not a second copy.
