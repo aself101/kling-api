@@ -5,7 +5,7 @@ Node.js client and CLI for the [Kling AI](https://kling.ai) API — video genera
 **2.0 is a full reboot.** The vendor discontinued every model 1.x defaulted to, moved video to a path-per-model API, and made the API Key the only credential that works there. Nothing from 1.x is source-compatible; the [migration table](#migration-from-1x) maps every 1.x method to its 2.0 disposition.
 
 - Node **≥ 20** (native `fetch`; no axios). ESM only.
-- Runtime dependencies: `commander`, `dotenv`, `ora` — the latter two used only by the CLI.
+- Runtime dependencies: `commander`, `dotenv`, `ora` — the latter two used only by the CLI. Plus `@types/node`, which is types-only and carries no runtime weight: the published `.d.ts` files name `Buffer` (this is a Node-only library), so without it a TypeScript consumer cannot compile against the package at all.
 - Vendor docs snapshot the library was built against: [`docs/api/`](docs/api/) (fetched 2026-09-20).
 
 ## Table of contents
