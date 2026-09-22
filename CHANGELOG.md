@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [2.0.0] - 2026-09-20
+## [2.0.0] - 2026-09-22
 
 ### Fixed
 - `TaskHandle.wait()`: a caller that re-joined a handle right after the previous caller aborted or timed out was rejected with the shared poll loop's own `AbortError` and never polled (abort-then-retry on one handle could not work). The loop's self-abort is no longer a subscriber failure and a fresh loop starts when subscribers remain.
