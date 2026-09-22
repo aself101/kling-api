@@ -187,6 +187,35 @@ describe('lifecycle, batch, download, webhook errors', () => {
     expect(e.message).toContain('force: true');
   });
 
+  it('a CYCLIC cause chain terminates and still classifies (isPreRequestNetworkFailure)', () => {
+    // Termination here is carried by the `depth > 4` cap, NOT by the `e.cause !== err` guard:
+    // deleting that guard leaves this test green (mutation-verified, ship run #6). So this
+    // asserts the property that matters to a caller — a self-referencing or mutual cause
+    // chain does not hang and still yields a verdict — and claims nothing about which line
+    // achieves it. The guard remains as the cheaper of the two stops.
+    const self = Object.assign(new Error('boom'), { code: 'ENOTFOUND' }) as Error & { cause?: unknown };
+    self.cause = self;
+    expect(isPreRequestNetworkFailure(self)).toBe(true);
+
+    const a = Object.assign(new Error('a'), { code: 'ECONNREFUSED' }) as Error & { cause?: unknown };
+    const b = Object.assign(new Error('b'), { code: 'ECONNREFUSED' }) as Error & { cause?: unknown };
+    a.cause = b;
+    b.cause = a;
+    expect(isPreRequestNetworkFailure(a)).toBe(true);
+
+    // control: the same walk still reaches a nested code and still says false for a non-pre-request one.
+    const wrapped = new Error('outer', { cause: Object.assign(new Error('inner'), { code: 'ECONNRESET' }) });
+    expect(isPreRequestNetworkFailure(wrapped)).toBe(false);
+  });
+
+  it('KlingOutputsExpiredError reads without an outputsExpireAt (the undefined branch of its message)', () => {
+    const noExpiry: Task = { ...task, outputsExpireAt: undefined };
+    const e = new KlingOutputsExpiredError(noExpiry);
+    expect(e.message).toBeTruthy();
+    expect(e.message).not.toMatch(/undefined|NaN|Invalid Date/);
+    expect(e.task).toBe(noExpiry);
+  });
+
   it('KlingBatchError separates missing (attempted) from unattempted', () => {
     const e = new KlingBatchError('chunk 2 failed', { tasks: [task], missing: ['a'], unattempted: ['b', 'c'] }, new Error('boom'));
     expect(e.tasks).toHaveLength(1);

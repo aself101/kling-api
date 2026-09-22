@@ -41,11 +41,18 @@ describe('verifyWebhookSignature (V13)', () => {
     expect(() => verifyWebhookSignature({ ...VECTOR, now: () => AT_VECTOR() + 301_000, toleranceSeconds: 600 })).not.toThrow();
   });
 
-  it('rotation: several space-separated v1 signatures — any match passes; a non-v1 entry is ignored; wrong ones alone fail', () => {
+  it('rotation: a correct v1 signature among several passes', () => {
     expect(() => verifyWebhookSignature({ ...VECTOR, signature: `v1,AAAA${'A'.repeat(40)}= ${VECTOR.signature}`, now: AT_VECTOR })).not.toThrow();
+  });
+
+  it('rotation: a non-v1 scheme entry is not accepted in place of v1', () => {
     expect(() => verifyWebhookSignature({ ...VECTOR, signature: `v0,${VECTOR.signature.slice(3)}`, now: AT_VECTOR })).toThrow(/bad-signature|not a v1/);
+  });
+
+  it('rotation: a malformed v1 entry alone fails', () => {
     expect(() => verifyWebhookSignature({ ...VECTOR, signature: 'v1,nope', now: AT_VECTOR })).toThrow(KlingWebhookError);
   });
+
 
   it('a different secret fails (so the vector test is not vacuous); the whsec_ prefix is optional', () => {
     expect(() => verifyWebhookSignature({ ...VECTOR, secret: 'whsec_b3RoZXJzZWNyZXRvdGhlcnNlY3JldG90aGVyc2VjcmV0', now: AT_VECTOR })).toThrow(KlingWebhookError);
