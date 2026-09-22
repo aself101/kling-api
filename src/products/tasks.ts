@@ -256,6 +256,13 @@ export class TasksApi {
   }
 
   /**
+   * Recover a create whose response was lost, by the `external_task_id` it carried (D10).
+   * `null` means *not visible to this account* — not *never created*. TTS carries no
+   * external id and is not a `Product`; it cannot reach here.
+   *
+   * @param product The product the lost create targeted; routes the read.
+   * @param externalId The `external_task_id` the create carried.
+   * @returns The task, or `null` when this account cannot see it.
    * @example
    * ```ts
    * // After a `may-exist` failure — see the README's recovery section for the full loop.
@@ -266,11 +273,6 @@ export class TasksApi {
    *   await client.video.textToVideo({ ...params, externalTaskId: err.externalId });
    * }
    * ```
-   */
-  /**
-   * Recover a create whose response was lost, by the `external_task_id` it carried (D10).
-   * `null` means *not visible to this account* — not *never created*. TTS carries no
-   * external id and is not a `Product`; it cannot reach here.
    */
   async recover(
     product: Product,

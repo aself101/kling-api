@@ -37,6 +37,16 @@ export interface RequestDescriptor {
 // Base
 // ============================================================================
 
+/**
+ * The base of every error this library throws — `err instanceof KlingError` is the one check
+ * that separates "the library or the vendor said no" from a bug in your own code.
+ *
+ * Carries `requestId` whenever a response was received, which is what the vendor asks for when
+ * you report a problem. Subclasses add the fields that make an error actionable: `taskState`
+ * (the re-submit decision), `code`/`httpStatus` (the vendor's own classification), `written`
+ * (what already landed on disk). Everything thrown from a public method is one of these except
+ * the caller's own abort reason, which is rethrown unwrapped by design.
+ */
 export class KlingError extends Error {
   /** The vendor's `request_id`, when a response was received. */
   requestId?: string;
@@ -251,6 +261,13 @@ export class KlingTaskNotFoundError extends KlingError {
   }
 }
 
+/**
+ * `wait()`/`poll()` hit the caller's `deadlineMs`.
+ *
+ * **The deadline is yours, not the vendor's: the task is still running and still billed.** Do
+ * not re-submit on this — read `task` for the last status seen, and `handle.get()` later, or
+ * `tasks.recover()` by external id. Verified live: killing the client does not cancel the task.
+ */
 export class KlingPollTimeoutError extends KlingError {
   readonly task: Task | null;
   readonly elapsedMs: number;

@@ -48,6 +48,7 @@ const SECONDS_3_TO_10 = [3, 4, 5, 6, 7, 8, 9, 10];
 /** 5 | 10 (`kling-2.6-t2v.md`, `kling-2.5-turbo-t2v.md`). */
 const SECONDS_5_OR_10 = [5, 10];
 
+/** Per-model video capabilities (durations, products, audio modes) the validators check a create against, keyed by vendor model id. */
 export const VIDEO_MODELS: Readonly<Record<KnownVideoModel, VideoModelCaps>> = {
   // docs/api/kling-3.0-turbo-t2v.md, kling-3.0-turbo-i2v.md. No `audio` field (native audio
   // is always on — inferred from kling-pricing-video.md, §11 Q3), no `multi_shot` field
@@ -168,6 +169,7 @@ export interface ImageModelCaps {
 
 const EIGHT_RATIOS = ['16:9', '9:16', '1:1', '4:3', '3:4', '3:2', '2:3', '21:9'];
 
+/** Per-model image capabilities keyed by vendor model id; the image counterpart to `VIDEO_MODELS`. */
 export const IMAGE_MODELS: Readonly<Record<KnownImageModel, ImageModelCaps>> = {
   // docs/api/kling-image-2.1-generation.md (the page is titled 2.1 but its enum is v2-1 | v3, default v3).
   'kling-v3': {
@@ -221,6 +223,7 @@ export const IMAGE_MODEL_SOURCES: Readonly<Record<KnownImageModel, string>> = {
 
 /** Image defaults (D7): newest model per endpoint. */
 export const DEFAULT_IMAGE_MODEL: KnownImageModel = 'kling-v3';
+/** Default model for `image.omni` — the newest omni image model (policy: newest for image, cheapest current-gen with audio for video). */
 export const DEFAULT_OMNI_IMAGE_MODEL: KnownImageModel = 'kling-v3-omni';
 /** The multi-image endpoint documents exactly one model. */
 export const MULTI_IMAGE_MODEL: KnownImageModel = 'kling-v2-1';

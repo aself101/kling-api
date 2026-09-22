@@ -180,6 +180,7 @@ export class ElementsApi extends LegacyResourceApi {
     return this.tasks.getByProduct('element', taskId, options);
   }
 
+  /** `GET /v1/general/elements` — the account's custom elements, newest first. */
   list(options: PageOptions = {}): Promise<Task[]> {
     return this.tasks.listByProduct('element', options);
   }
@@ -218,6 +219,7 @@ export class VoicesApi extends LegacyResourceApi {
     );
   }
 
+  /** `GET /v1/general/voice/{id}` — one custom voice by its create task id. */
   get(taskId: string, options?: RequestOptions): Promise<Task> {
     return this.tasks.getByProduct('voice', taskId, options);
   }
@@ -227,6 +229,12 @@ export class VoicesApi extends LegacyResourceApi {
     return this.tasks.listByProduct('voice', options);
   }
 
+  /**
+   * `GET /v1/general/presets-voices` — the vendor's stock voices.
+   *
+   * NOTE these ids are NOT usable with `audio.tts`, which takes ids from the vendor's separate
+   * TTS Voice Guide (`oversea_male1`, …); a presets id there answers `1201 "Voice id not found"`.
+   */
   presets(options: PageOptions = {}): Promise<Task[]> {
     return this.listAt(RESOURCE_PATHS.voicePresets, 'voice', options, 1000);
   }

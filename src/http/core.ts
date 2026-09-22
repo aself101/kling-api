@@ -83,6 +83,7 @@ export interface ResolvedRetryOptions {
   jitter: 'equal' | 'none';
 }
 
+/** The retry policy applied when `KlingConfig.retry` leaves a field unset. Reads only — writes never retry after a response. */
 export const DEFAULT_RETRY: ResolvedRetryOptions = {
   maxAttempts: 3,
   baseDelayMs: 1_000,
@@ -90,8 +91,8 @@ export const DEFAULT_RETRY: ResolvedRetryOptions = {
   jitter: 'equal',
 };
 
-/** A `Logger` that says nothing — the library's default. The CLI installs its own. */
 const noop = (): void => undefined;
+/** A `Logger` that says nothing — the library's default. The CLI installs its own. */
 export const silentLogger: Logger = { debug: noop, info: noop, warn: noop, error: noop };
 
 // ============================================================================

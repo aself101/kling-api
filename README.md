@@ -6,7 +6,7 @@ Node.js client and CLI for the [Kling AI](https://kling.ai) API — video genera
 
 - Node **≥ 20** (native `fetch`; no axios). ESM only.
 - Runtime dependencies: `commander`, `dotenv`, `ora` — the latter two used only by the CLI. Plus `@types/node`, which is types-only and carries no runtime weight: the published `.d.ts` files name `Buffer` (this is a Node-only library), so without it a TypeScript consumer cannot compile against the package at all.
-- Vendor docs snapshot the library was built against: [`docs/api/`](docs/api/) (fetched 2026-09-20).
+- Vendor docs snapshot the library was built against: [`docs/api/`](https://github.com/aself101/kling-api/blob/main/docs/api/) (fetched 2026-09-20).
 
 ## Table of contents
 
@@ -129,7 +129,7 @@ interface Task {
 }
 ```
 
-`handle.wait()` resolves on `succeeded`, throws `KlingTaskFailedError` on `failed`, `KlingPollTimeoutError` on the deadline (the task is **still running and still billed** — a timeout is not a failure; `handle.get()` later, do not re-submit), and `KlingTaskNotFoundError` if a poll answers `200` with no record for the id — the vendor said the task does not exist, which is not retried and fails every `wait()` on that handle. Whether a just-created task can be briefly invisible to `GET /tasks` is unmeasured (Known limits), so a `KlingTaskNotFoundError` on the *first* poll after a create is worth one `handle.get()` before you treat the task as gone. **It also rethrows any read error the poll itself hits** once that read's own retries are exhausted (~96 s of vendor read trouble at defaults): a `KlingAPIError`/`KlingNetworkError`/`KlingTimeoutError` with `taskState: 'n/a'` — *n/a* means the task is unaffected; the vendor just could not be asked about it. Do not treat that as a failed create: call `wait()` again on the same handle, or `get()`. Two concurrent `wait()` calls on one handle share a single poll loop; each caller's `deadlineMs` and `signal` apply to that caller only.
+`handle.wait()` resolves on `succeeded`, throws `KlingTaskFailedError` on `failed`, `KlingPollTimeoutError` on the deadline (the task is **still running and still billed** — a timeout is not a failure; `handle.get()` later, do not re-submit), and `KlingTaskNotFoundError` if a poll answers `200` with no record for the id — the vendor said the task does not exist, which is not retried and fails every `wait()` on that handle. Whether a just-created task can be briefly invisible to `GET /tasks` is measured at 152 reads across 19 tasks with zero misses (Known limits) but not under load, so a `KlingTaskNotFoundError` on the *first* poll after a create is an anomaly rather than an expected race — still worth one `handle.get()` before you treat the task as gone. **It also rethrows any read error the poll itself hits** once that read's own retries are exhausted (~96 s of vendor read trouble at defaults): a `KlingAPIError`/`KlingNetworkError`/`KlingTimeoutError` with `taskState: 'n/a'` — *n/a* means the task is unaffected; the vendor just could not be asked about it. Do not treat that as a failed create: call `wait()` again on the same handle, or `get()`. Two concurrent `wait()` calls on one handle share a single poll loop; each caller's `deadlineMs` and `signal` apply to that caller only.
 
 `outputsExpireAt` is derived, not vendor-supplied, from the vendor's stated 30-day retention. Compared against the vendor's own signed-URL `Expires=` on **five new-standard video tasks** (2026-09-22) plus one legacy image task (2026-09-20): the derived value landed **1.1-2.1 s after** the vendor's, every time. So the derivation is right to the second over 30 days — and errs *late*, meaning there is a ~2 s window at the very end where `save()` would still try a URL the CDN has just stopped signing. Immaterial in practice; stated because the direction of the error is the part worth knowing. `save()` refuses an expired task unless `force: true`.
 
@@ -156,7 +156,7 @@ Local files and buffers are checked before anything is sent: extension (`.jpg/.j
 
 ## Default models and the price table
 
-**Video defaults to the cheapest current-generation model whose output includes native audio**; image defaults to the newest model. Per second at 720p / 1080p, from the vendor's price list ([`docs/api/kling-pricing-video.md`](docs/api/kling-pricing-video.md), fetched 2026-09-20):
+**Video defaults to the cheapest current-generation model whose output includes native audio**; image defaults to the newest model. Per second at 720p / 1080p, from the vendor's price list ([`docs/api/kling-pricing-video.md`](https://github.com/aself101/kling-api/blob/main/docs/api/kling-pricing-video.md), fetched 2026-09-20):
 
 | Model | Silent | With native audio | Default for |
 |---|---|---|---|
@@ -306,7 +306,7 @@ This recipe is exercised in the test suite (`test/2.0/media/pinning.test.ts`), i
 
 **Downloads are not retried.** One CDN 5xx or a reset mid-body is a `KlingSaveError` (`written` lists what landed); calling `save()` again re-downloads every output, not just the missing ones. The retry table above applies to requests against the vendor API only.
 
-Downloads go through the client's `fetch` with a byte cap (default 500 MiB — also the per-call heap ceiling, since the body is buffered before it is written), a redirect cap (5), a per-hop deadline (120 s for videos, 60 s for images/audio; `timeoutMs` overrides — re-armed on each of up to 5 redirects, so a pathological chain can take 6× that; your `signal` is the overall ceiling), and a per-hop URL safety check (below). `KlingOutputsExpiredError` is thrown **before any fetch** once `outputsExpireAt` has passed (`force: true` bypasses); `KlingNoOutputsError` for a `succeeded` task with no outputs. A download that fails after earlier files were written throws `KlingSaveError { written, failedUrl, cause }` — the files already on disk are listed, and no sidecar is written. The vendor's `task.id` is checked to be a single path segment before it becomes a file name. The sidecar's `request` is the handle's redacted record — a 20 MB inline frame is a `{ kind, bytes, sha256 }` triple there, not a second copy.
+Downloads go through the client's `fetch` with a byte cap (default 500 MiB — a cap on the file, not on memory: the body is streamed to disk, never buffered whole), a redirect cap (5), a per-hop deadline (120 s for videos, 60 s for images/audio; `timeoutMs` overrides — re-armed on each of up to 5 redirects, so a pathological chain can take 6× that; your `signal` is the overall ceiling), and a per-hop URL safety check (below). `KlingOutputsExpiredError` is thrown **before any fetch** once `outputsExpireAt` has passed (`force: true` bypasses); `KlingNoOutputsError` for a `succeeded` task with no outputs. A download that fails after earlier files were written throws `KlingSaveError { written, failedUrl, cause }` — the files already on disk are listed, and no sidecar is written. The vendor's `task.id` is checked to be a single path segment before it becomes a file name. The sidecar's `request` is the handle's redacted record — a 20 MB inline frame is a `{ kind, bytes, sha256 }` triple there, not a second copy.
 
 ## Account and billing
 
@@ -325,7 +325,7 @@ Every error extends `KlingError` (`requestId` when a response was received):
 
 | Class | When | Fields |
 |---|---|---|
-| `KlingAPIError` | the vendor answered with a business code | `code`, `httpStatus`, `request { kind, method, path, externalId }`, `externalId`, `taskState`, `isTransient()`, `isRetryable()` |
+| `KlingAPIError` | the vendor answered with a business code | `code`, `httpStatus`, `request { kind, method, path, externalId }`, `externalId`, `retryAfterMs` (the vendor's parsed `Retry-After`, when it sent one), `taskState`, `isTransient()`, `isRetryable()` |
 | `KlingNetworkError` | `fetch` failed | `cause`, `externalId`, `taskState` |
 | `KlingTimeoutError` | the per-attempt deadline fired | `deadlineMs`, `attempt`, `attempts`, `externalId`, `taskState` |
 | `KlingResponseError` | non-JSON body or an unexpected 3xx | `httpStatus`, `bodySnippet`, `location` |
@@ -334,12 +334,12 @@ Every error extends `KlingError` (`requestId` when a response was received):
 | `KlingTaskFailedError` / `KlingPollTimeoutError` | `wait()` | `task`, `code` (always `null` today — neither standard puts a code on a failed record; read `task.message`) / `task` (the last state this handle polled, `null` if it never got a response), `elapsedMs`. `wait()` also rethrows read errors — see [How it fits together](#how-it-fits-together) |
 | `KlingTaskNotFoundError` | a single-task lookup the vendor cannot see | `product`, `id`, `byExternalId` |
 | `KlingNoOutputsError` / `KlingOutputsExpiredError` / `KlingSaveError` | `save()` | `task` / `task` / `task`, `written`, `failedUrl`, `cause`, `leftover?` (`{ path, cause }` — set only when the failed write's `<file>.<pid>.part` could not be removed either; remove it alongside `written` when cleaning up). `cause` is a `KlingDownloadError { url, reason: 'too-large' \| 'too-many-redirects' \| 'blocked-host' \| 'http' \| 'timeout' \| 'invalid-redirect', httpStatus }` when a download failed, or the Node fs error (`ENOSPC`, `EACCES`, …) when a write failed — then `failedUrl` is the file path. Check `cause instanceof KlingDownloadError` before reading `reason` |
-| `KlingBatchError` | a `tasks.get` chunk failed | `tasks`, `missing`, `unattempted`, `cause` |
+| `KlingBatchError` | a `tasks.get` chunk failed | `tasks`, `missing`, `unattempted`, `cause`. **Your own abort is not wrapped in this** — it is rethrown unwrapped, as everywhere else on the read path |
 | `KlingWebhookError` | `parseCallback` with a secret | `reason: 'missing-headers' \| 'bad-signature' \| 'stale-timestamp'` |
 
 `ERROR_CODES` is the vendor's 22-row table (21 codes + success).
 
-**Retry policy.** Reads (`GET /tasks`, `POST /tasks`, `GET /v1/…/{id}`, lists, presets, `/account/*`) are retried with exponential backoff (2 s, 4 s; `retry: { maxAttempts: 3, baseDelayMs: 1000, maxDelayMs: 30_000 }`) on network errors, timeouts, HTTP 429/502/503/504 and business codes `1302 1303 5000 5001 5002`. **Creates and deletes are never re-sent once any HTTP response was received** — a `5002 "internal timeout"` is exactly the case where the task may already exist and a retry would bill twice. They are retried only on a provably pre-request network failure (DNS, connection refused).
+**Retry policy.** Reads (`GET /tasks`, `POST /tasks`, `GET /v1/…/{id}`, lists, presets, `/account/*`) are retried with jittered exponential backoff (2 s, 4 s before jitter; `retry.jitter` defaults to `'equal'` — each wait is `delay/2 + random(0, delay/2)`, so clients failing on the same burst do not retry in lockstep; `'none'` restores the exact schedule. The vendor's `Retry-After` wins over both when it sends one. `retry: { maxAttempts: 3, baseDelayMs: 1000, maxDelayMs: 30_000 }`) on network errors, timeouts, HTTP 429/502/503/504 and business codes `1302 1303 5000 5001 5002`. **Creates and deletes are never re-sent once any HTTP response was received** — a `5002 "internal timeout"` is exactly the case where the task may already exist and a retry would bill twice. They are retried only on a provably pre-request network failure (DNS, connection refused).
 
 **Key your re-submit decision on `taskState`, not `isTransient()`:**
 
@@ -380,7 +380,9 @@ Concurrency refusals (`1303 "parallel task over resource pack limit"`) surface i
 - **Status vocabulary is closed.** A task record whose `status` is not one of `submitted | processing | succeeded | failed` (the legacy `succeed` is normalized) throws `KlingCodecError` — for the whole `tasks.get` chunk or `tasks.list` page it appears in, and for every `wait()` on that task. This is deliberate: an unknown word must never read as "still processing" and be polled forever. If the vendor adds a status, `list`/`get` on affected tasks fail until a library release; `task.raw` is unaffected.
 - **Capability rules refuse by default, and the registry is the docs as of 2026-09-20.** If the vendor adds a resolution or duration to a model, `capabilityValidation: 'error'` refuses a request the API would accept until the registry is updated. `capabilityValidation: 'warn'` sends anyway with a log line; `unknownModels: 'passthrough'` (the default) already lets a brand-new model id through with shape checks only. If the vendor retires a default model — as it did to every 1.x default — the vendor's own error surfaces; pass `model` explicitly.
 
-**Polling at scale.** Each `TaskHandle` polls independently (`GET /tasks` for one id every `intervalMs`); `wait()` does not batch across handles, and the read backoff is deterministic (2 s, 4 s) without jitter. Fifty in-flight handles at the default 3 s interval are ~17 read requests per second and will retry in lockstep after a `1302`. For fan-out, poll with your own scheduler over `tasks.get(ids)` (20 ids per request) instead of fifty `wait()`s.
+**Polling at scale.** `wait()` batches reads across handles for you. Single-id reads from one client that land in the same turn are merged into the vendor's 20-id `GET /tasks`, and the poll cadence is quantised to a shared grid so handles created at different moments converge into the same turn. Measured over 25 handles polled to terminal: **6-8 requests, against 52-70 unbatched.** Fifty in-flight handles at the default 3 s interval are therefore ~3 requests per tick, not fifty. You do not need your own scheduler; `tasks.get(ids)` remains available if you want to drive the batch yourself.
+
+The read backoff *is* jittered (`retry.jitter`, default `'equal'`: `delay/2 + random(0, delay/2)`), so clients that fail on the same burst do not retry in lockstep, and the vendor's `Retry-After` wins over our schedule when it sends one. Note the poll interval is deliberately **not** jittered — aligned polls are exactly what the batching feeds on.
 
 ## Timeouts, proxies and `fetch`
 
@@ -396,7 +398,7 @@ new KlingClient({
 });
 ```
 
-- **Read-retry span** at defaults: **~6 s on a fast refusal, ~96 s on timeouts.** The backoff is 2 s + 4 s either way — what varies is the attempt itself, so a `1302` that answers instantly exhausts all three attempts in about six seconds, while three full 30 s timeouts take 96. `KlingTimeoutError` carries `attempt` / `attempts`. `wait()` rethrows whichever one ends the sequence to **every** subscriber on that handle.
+- **Read-retry span** at defaults: **~6 s on a fast refusal, ~96 s on timeouts.** The backoff is 2 s + 4 s before jitter either way (jitter halves each and re-randomises the remainder) — what varies is the attempt itself, so a `1302` that answers instantly exhausts all three attempts in about six seconds, while three full 30 s timeouts take 96. `KlingTimeoutError` carries `attempt` / `attempts`. `wait()` rethrows whichever one ends the sequence to **every** subscriber on that handle.
 - **Creates with inline media** get a longer deadline automatically: `max(timeout, 30 s + 4 s per MB of body)` — a 20 MB frame is ~27 MB of JSON and gets ≥ 110 s. Raise `timeout` for slower uplinks.
 - **Proxies:** Node's `fetch` ignores `HTTP(S)_PROXY`. Inject a proxied fetch — e.g. undici's `fetch` bound to an `EnvHttpProxyAgent` or `ProxyAgent` — via the `fetch` option; `save()` downloads through the same fetch.
 - **Redirects:** the API core uses `redirect: 'manual'`; an unexpected 3xx from the API host is a `KlingResponseError { location }`, not a silent follow. Downloads follow at most 5 hops, re-checking each `Location`.
@@ -448,7 +450,7 @@ Global flags: `--api-key`, `--output-dir` (default `output`), `--json` (machine 
 
 ## healthCheck and advanced exports
 
-`await client.healthCheck()` → `true` when `GET /tasks?task_ids=0` returns an authenticated envelope, `false` on any throw (auth, network, timeout). It answers "can this client reach and authenticate right now", nothing finer.
+`await client.healthCheck()` → `true` when `GET /tasks?task_ids=0` returns an authenticated envelope, `false` on any throw (auth, network, timeout) **except the caller's own abort, which is rethrown** — a cancelled probe is not a verdict of "down". It answers "can this client reach and authenticate right now", nothing finer.
 
 Beyond the client, the root export also carries the pieces the client is built from, for consumers composing their own flows:
 
@@ -457,7 +459,8 @@ Beyond the client, the root export also carries the pieces the client is built f
 | `HttpCore`, `DEFAULT_RETRY`, `silentLogger` | the transport (`request({ method, path, body, kind: 'read' \| 'write' })`), its defaults, a no-op logger |
 | `TasksApi`, `VideoApi`, `ImageApi`, `ElementsApi`, `VoicesApi`, `AvatarApi`, `AudioApi`, `AccountApi` | the namespaces behind `client.*` |
 | `resolveMediaSource`, `MediaBudget`, `sniffImage`, `sniffAudio` | media input resolution and the per-request inline budget |
-| `fetchToBuffer`, `assertSafeUrl`, `isPublicAddress`, `UnsafeUrlError` | the guarded download primitive and the URL safety check it uses |
+| `fetchToBuffer`, `fetchToFile`, `assertSafeUrl`, `isPublicAddress`, `UnsafeUrlError` | the guarded download primitives — `fetchToFile` streams to disk, `fetchToBuffer` returns the bytes — and the URL safety check both use |
+| `HttpCoreInternals` | a **test seam**, not part of `KlingConfig`: the optional second `KlingClient` constructor argument, for injecting `sleep`/`random` so a test can pin timing. Exported only so that signature is nameable; you should not need it |
 | `save`, `extensionFor`, `defaultDownloadTimeoutMs`, `poll`, `recordOf`, `redactMedia`, `createTimeoutMs` | the saver, the library poller, and the handle-record helpers |
 | `parseCallback`, `verifyWebhookSignature`, `signWebhook` | webhook parsing, verification, and the signer (for tests and for building your own vectors) |
 | `LEGACY_PRODUCT_PATHS`, `RESOURCE_PATHS`, `standardOf`, `MODELED_SETTINGS`, `MODELED_OPTIONS`, `MODELED_LEGACY_FIELDS`, `VENDOR_HTTP_STATUS`, `ERROR_CODES`, `BASE_URL` | the routing tables, the field sets the escape hatches are checked against, and the vendor tables |
@@ -496,7 +499,7 @@ Every enum value in the registry is grep-verified against the vendor page its ro
 
 ## Migration from 1.x
 
-The full disposition table is [spec §7](docs/specs/kling-api-2.0-migration-spec-v0_4_3.md#7-migration-table--1x-method--20-disposition). The headline changes:
+The full disposition table is [spec §7](https://github.com/aself101/kling-api/blob/main/docs/specs/kling-api-2.0-migration-spec-v0_4_3.md#7-migration-table--1x-method--20-disposition). The headline changes:
 
 | 1.x | 2.0 |
 |---|---|
@@ -517,7 +520,7 @@ Semantics that changed **without a type-signature change**: the `TaskStatus` ter
 
 ## What has been verified live
 
-Against the production API on 2026-09-20 (the spend is recorded per item in the [migration checklist](docs/specs/kling-api-2.0-migration-checklist.md)):
+Against the production API on 2026-09-20 (the spend is recorded per item in the [migration checklist](https://github.com/aself101/kling-api/blob/main/docs/specs/kling-api-2.0-migration-checklist.md)):
 
 - `video.textToVideo` on `kling-3.0-turbo` (3 s, 720p): succeeded in 28 s, **2.4 units**, mp4 with an AAC track and no `audio` field sent — native audio is always on.
 - `video.omni` first-frame-only on `kling-3.0-omni` (3 s, 720p, silent): 83 s, **1.8 units** — the silent rate.

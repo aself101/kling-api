@@ -63,6 +63,41 @@ describe('packaging invariants (what a consumer installs, not what the repo has)
     expect(NODE_GLOBALS.test('export interface X { id: string; }')).toBe(false);
   });
 
+  it('no consumer-facing doc links point at paths the tarball does not ship', () => {
+    // README and CHANGELOG travel INSIDE the package; a relative link into docs/ resolves
+    // nowhere from node_modules (dx-validator, Phase 7d). Absolute repo URLs work everywhere.
+    const shipped = new Set((pkg.files ?? []).map((f) => f.replace(/\/$/, '')));
+    for (const doc of ['README.md', 'CHANGELOG.md']) {
+      const rel = [...readFileSync(doc, 'utf8').matchAll(/\]\((?!https?:|#)\.?\/?([^)]+)\)/g)].map((m) => m[1]);
+      const dead = rel.filter((r) => !shipped.has(r.split('/')[0]!));
+      expect(dead, `${doc} links to paths absent from package.json "files": ${dead.join(', ')}`).toEqual([]);
+    }
+  });
+
+  /**
+   * Anchors a handful of load-bearing behaviour claims to the code that decides them.
+   *
+   * Six README passages described superseded behaviour at once in this release — batching,
+   * streaming, jitter, abort semantics — because each behaviour change updated the CHANGELOG
+   * and left the prose section alone (consumer-validate, Phase 7d). This cannot verify prose
+   * generally; it pins the specific claims a consumer plans capacity and error handling
+   * against, and fails when the code moves and the README does not.
+   */
+  it('README behaviour claims match the code that decides them', () => {
+    const readme = readFileSync('README.md', 'utf8');
+    const anchors: [claim: string, sourceOfTruth: string, mustSay: RegExp, mustNotSay: RegExp][] = [
+      ['reads are batched', 'src/handlers/coalescer.ts', /batches reads across handles/i, /does not batch across handles/i],
+      ['save streams', 'src/handlers/saver.ts', /\bstreams\b[^.]*to disk/i, /buffered before it is written/i],
+      ['backoff is jittered', 'src/http/core.ts', /jitter/i, /backoff is deterministic/i],
+      ['a caller abort is rethrown', 'src/products/tasks.ts', /rethrown unwrapped/i, /never mind/],
+    ];
+    for (const [claim, source, mustSay, mustNotSay] of anchors) {
+      expect(existsSync(source), `${source} backs the "${claim}" claim`).toBe(true);
+      expect(mustSay.test(readme), `README must state: ${claim}`).toBe(true);
+      expect(mustNotSay.test(readme), `README still carries superseded text for: ${claim}`).toBe(false);
+    }
+  });
+
   it('every declared entry point exists in the build', () => {
     for (const p of [pkg.main, pkg.types, ...Object.values(pkg.bin ?? {})]) {
       expect(existsSync(String(p).replace(/^\.\//, '')), `${p} is declared but missing`).toBe(true);
