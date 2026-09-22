@@ -98,6 +98,16 @@ describe('packaging invariants (what a consumer installs, not what the repo has)
     }
   });
 
+  it('every type named in a public return signature is exported from the root', () => {
+    // A consumer can use `page.malformed` without this, but cannot name its type to hold it in
+    // a variable or a wrapper signature. The same gap shipped as TtsParams earlier in this
+    // release and was caught both times only by compiling a real consumer against the tarball.
+    const barrel = readFileSync('src/index.ts', 'utf8');
+    for (const t of ['MalformedRecord', 'TaskPage', 'CursorPage', 'TtsParams', 'StreamedResource']) {
+      expect(new RegExp(`\\b${t}\\b`).test(barrel), `${t} appears in a public return type but is not exported from src/index.ts`).toBe(true);
+    }
+  });
+
   it('every declared entry point exists in the build', () => {
     for (const p of [pkg.main, pkg.types, ...Object.values(pkg.bin ?? {})]) {
       expect(existsSync(String(p).replace(/^\.\//, '')), `${p} is declared but missing`).toBe(true);

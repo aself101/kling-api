@@ -98,6 +98,7 @@ export type {
   VoiceCreateParams,
 } from './codecs/params.js';
 export { TasksApi, LEGACY_PRODUCT_PATHS, standardOf, type GetOptions, type ListOptions, type ProductType } from './products/tasks.js';
+export type { MalformedRecord, TaskPage } from './codecs/shared.js';
 export type { CursorPage, NewStandardBody } from './codecs/new-standard.js';
 export type { LegacyBody } from './codecs/legacy.js';
 export { MODELED_LEGACY_FIELDS } from './config/constants.js';
