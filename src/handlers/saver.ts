@@ -189,8 +189,9 @@ const CONTENT_TYPE_EXT: Record<string, string> = {
 
 /** `Content-Type` → known extension; else the URL path's extension; else `bin`. */
 export function extensionFor(contentType: string | undefined, url: string): string {
-  const mime = contentType?.split(';')[0].trim().toLowerCase();
-  if (mime && CONTENT_TYPE_EXT[mime]) return CONTENT_TYPE_EXT[mime];
+  const mime = contentType?.split(';')[0]?.trim().toLowerCase();
+  const known = mime ? CONTENT_TYPE_EXT[mime] : undefined;
+  if (known) return known;
   try {
     const ext = extname(new URL(url).pathname).replace('.', '').toLowerCase();
     if (/^[a-z0-9]{1,5}$/.test(ext)) return ext;

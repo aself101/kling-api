@@ -26,6 +26,19 @@ describe('isPublicAddress', () => {
   ])('%s → public: %s', (address, expected) => {
     expect(isPublicAddress(address)).toBe(expected);
   });
+
+  // NO TEST for isPublicV4's fail-closed guard: it cannot fail. Every caller guarantees a
+  // well-formed quad (isPublicAddress gates on net.isIP === 4; the v6 mapped branch on a
+  // literal that already passed isIP === 6; embeddedV4 is built from hextets validated to
+  // 0..0xffff), and node's isIP rejects '1.2.3', '999.1.1.1', '01.02.03.04' and '1.2.3.x'
+  // outright. A parametrised test over those inputs passes with the guard DELETED — verified
+  // by mutation, ship run #6 — so it would assert net.isIP's behaviour, not ours. The guard
+  // stays as defence-in-depth against a future caller; this note is its only honest coverage.
+
+  it('a well-formed quad that IS public still passes — the fail-closed guard is not a blanket false', () => {
+    expect(isPublicAddress('93.184.216.34')).toBe(true);
+    expect(isPublicAddress('1.1.1.1')).toBe(true);
+  });
 });
 
 describe('assertSafeUrl', () => {

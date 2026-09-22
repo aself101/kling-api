@@ -319,7 +319,7 @@ export function warnUnresolvedReferences(prompt: string, ids: string[], warn?: (
   const seen = new Set<string>();
   for (const m of prompt.matchAll(/@([\p{L}\p{N}_-]+)/gu)) {
     const name = m[1];
-    if (known.has(name) || seen.has(name)) continue;
+    if (name === undefined || known.has(name) || seen.has(name)) continue;
     seen.add(name);
     warn(`prompt references @${name} but no contents[] entry has id "${name}"${ids.length > 0 ? ` (ids: ${ids.join(', ')})` : ''} — the vendor will not resolve it`);
   }

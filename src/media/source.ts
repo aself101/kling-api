@@ -175,6 +175,7 @@ export function sniffImage(b: Buffer): ImageInfo | undefined {
     while (i + 9 < b.length) {
       if (b[i] !== 0xff) return { format: 'jpeg' };
       const marker = b[i + 1];
+      if (marker === undefined) return { format: 'jpeg' };
       if (marker === 0xd8 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) {
         i += 2;
         continue;
@@ -194,7 +195,7 @@ export function sniffImage(b: Buffer): ImageInfo | undefined {
 export function sniffAudio(b: Buffer): boolean {
   if (b.length < 12) return false;
   if (b[0] === 0x49 && b[1] === 0x44 && b[2] === 0x33) return true; // ID3
-  if (b[0] === 0xff && (b[1] & 0xe0) === 0xe0) return true; // MPEG audio sync (MP3 frame or ADTS AAC)
+  if (b[0] === 0xff && ((b[1] ?? 0) & 0xe0) === 0xe0) return true; // MPEG audio sync (MP3 frame or ADTS AAC)
   if (b.toString('latin1', 0, 4) === 'RIFF' && b.toString('latin1', 8, 12) === 'WAVE') return true;
   if (b.toString('latin1', 4, 8) === 'ftyp') return true; // MP4 container (m4a)
   return false;

@@ -39,7 +39,7 @@ import {
 import type { HttpCore } from '../http/core.js';
 import { KlingTaskFailedError } from '../http/errors.js';
 import { MediaBudget, resolveMediaSource, type ResolvedMedia } from '../media/source.js';
-import { createTimeoutMs, recordOf, redactMedia, type ProductApiConfig } from './shared.js';
+import { createTimeoutMs, recordOf, redactList, redactMedia, type ProductApiConfig } from './shared.js';
 import { LEGACY_PRODUCT_PATHS, TasksApi, createHandle, resolveExternalId } from './tasks.js';
 
 /** Paths the routing table does not carry: presets and deletes are not task products. */
@@ -168,9 +168,9 @@ export class ElementsApi extends LegacyResourceApi {
     );
     const record = recordOf({
       ...params,
-      frontalImage: frontal && redactMedia(params.frontalImage!, frontal),
-      referImages: refers?.map((r, i) => redactMedia(params.referImages![i], r)),
-      referVideos: videos?.map((v, i) => redactMedia(params.referVideos![i], v)),
+      frontalImage: frontal && params.frontalImage && redactMedia(params.frontalImage, frontal),
+      referImages: redactList(params.referImages, refers, redactMedia),
+      referVideos: redactList(params.referVideos, videos, redactMedia),
     });
     return this.submit('element', body, externalId, params.signal, record);
   }

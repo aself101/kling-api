@@ -85,7 +85,7 @@ export function validateTextToVideo(params: TextToVideoParams, caps: VideoModelC
 
 function describeSet(values: number[]): string {
   const sorted = [...values].sort((a, b) => a - b);
-  const contiguous = sorted.every((v, i) => i === 0 || v === sorted[i - 1] + 1);
+  const contiguous = sorted.every((v, i) => i === 0 || v === (sorted[i - 1] ?? NaN) + 1);
   return contiguous && sorted.length > 2 ? `${sorted[0]}–${sorted[sorted.length - 1]}` : sorted.join(' | ');
 }
 

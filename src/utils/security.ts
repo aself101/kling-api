@@ -85,7 +85,19 @@ export function isPublicAddress(address: string): boolean {
 }
 
 function isPublicV4(a: string): boolean {
-  const [o1, o2] = a.split('.').map(Number);
+  // Fail CLOSED on anything that is not a well-formed dotted quad.
+  //
+  // UNREACHABLE TODAY, deliberately kept: all three callers guarantee well-formedness
+  // (`isPublicAddress` gates on `net.isIP === 4`; the v6 mapped branch on a literal that
+  // already passed `isIP === 6`; `embeddedV4` is built from hextets validated to 0..0xffff),
+  // and `net.isIP` rejects '1.2.3', '999.1.1.1', '01.02.03.04', '1.2.3.x'. So this guard has
+  // no test — one over malformed input passes with the guard deleted (mutation-verified,
+  // ship run #6). It stays because the previous form indexed `o1`/`o2` off an unchecked
+  // `split()`, and a guard on the SSRF path should not rest on a caller's invariant
+  // (ship run #5, type-safety SEM-TYP/L; now also required by `noUncheckedIndexedAccess`).
+  const octets = a.split('.').map(Number);
+  if (octets.length !== 4 || octets.some((o) => !Number.isInteger(o) || o < 0 || o > 255)) return false;
+  const [o1, o2] = octets as [number, number, number, number];
   if (o1 === 0 || o1 === 10 || o1 === 127) return false; // this-network, private, loopback
   if (o1 === 169 && o2 === 254) return false; // link-local (incl. cloud metadata 169.254.169.254)
   if (o1 === 172 && o2 >= 16 && o2 <= 31) return false; // private
@@ -99,9 +111,11 @@ function isPublicV6(a: string): boolean {
   const lower = a.toLowerCase();
   // IPv4-mapped (::ffff:1.2.3.4) and NAT64 (64:ff9b::1.2.3.4): judge the embedded v4.
   const mapped = /^(?:::ffff:|64:ff9b::)(\d+\.\d+\.\d+\.\d+)$/.exec(lower);
-  if (mapped) return isPublicV4(mapped[1]);
-  const hextets = expandV6(lower);
-  if (!hextets) return false;
+  if (mapped?.[1] !== undefined) return isPublicV4(mapped[1]);
+  const expanded = expandV6(lower);
+  if (!expanded) return false;
+  // expandV6 returns exactly 8 groups or null; the tuple makes that readable to the compiler.
+  const hextets = expanded as [number, number, number, number, number, number, number, number];
   const first = hextets[0];
   if (hextets.every((h) => h === 0)) return false; // :: unspecified
   if (hextets.slice(0, 7).every((h) => h === 0) && hextets[7] === 1) return false; // ::1
@@ -124,8 +138,8 @@ function expandV6(a: string): number[] | null {
   const halves = addr.split('::');
   if (halves.length > 2) return null;
   const parse = (s: string) => (s === '' ? [] : s.split(':').map((h) => parseInt(h, 16)));
-  const head = parse(halves[0]);
-  const tail = halves.length === 2 ? parse(halves[1]) : [];
+  const head = parse(halves[0] ?? '');
+  const tail = halves.length === 2 ? parse(halves[1] ?? '') : [];
   const fill = 8 - head.length - tail.length;
   if (fill < 0 || (halves.length === 1 && fill !== 0)) return null;
   const out = [...head, ...Array<number>(fill).fill(0), ...tail];

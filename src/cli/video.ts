@@ -82,10 +82,12 @@ const common = (o: CreateFlagOptions): CreateFlagOptions => ({
 
 /** `file|url[:alias]` — the alias is the `@name` the prompt uses. A trailing `:word` on a URL with a port is not an alias risk: ports are digits after a host, aliases follow the whole path. */
 function referImageArg(v: string): { source: ReturnType<typeof mediaArg>; id?: string } {
+  // The regex is total today (the first group is optional-lazy), so `m` is never null — but the
+  // fallbacks are real code, not decoration: an edit that makes it partial degrades to "the whole
+  // value is the source" instead of crashing (ship run #5, type-safety PRA-DOC/L).
   const m = /^(.*?)(?::([A-Za-z_][A-Za-z0-9_-]*))?$/.exec(v);
-  // The regex is total (the whole first group is optional-lazy), so `m` is never null; the check is for a reader, not the runtime.
-  if (!m) return { source: mediaArg(v) };
-  return { source: mediaArg(m[1]), ...(m[2] ? { id: m[2] } : {}) };
+  const source = mediaArg(m?.[1] ?? v);
+  return { source, ...(m?.[2] ? { id: m[2] } : {}) };
 }
 
 export function registerVideo(program: Command): void {

@@ -62,3 +62,27 @@ export function redactMedia(source: MediaSource, resolved: ResolvedMedia): Recor
     sha256: createHash('sha256').update(bytes).digest('hex'),
   };
 }
+
+/**
+ * Redact a resolved list against the source array it was derived from, index by index.
+ *
+ * The pair is only ever produced by `sources.map(resolve)`, so element `i` of each side
+ * describes the same input — but the compiler cannot see that, and the ad-hoc form
+ * (`resolved.map((r, i) => redactMedia(sources![i], r))`) re-asserted it with a non-null
+ * assertion at ~10 sites. A derivation that ever filtered would break every one of them
+ * silently. Here the lookup is optional and a missing source drops the entry instead
+ * (ship run #5, type-safety: EPI-OVR/M, PRA-FRA/M).
+ */
+export function redactList<S, R>(
+  sources: readonly S[] | undefined,
+  resolved: readonly R[] | undefined,
+  redact: (source: S, resolvedItem: R) => unknown
+): unknown[] | undefined {
+  if (!resolved) return undefined;
+  const out: unknown[] = [];
+  resolved.forEach((r, i) => {
+    const source = sources?.[i];
+    if (source !== undefined) out.push(redact(source, r));
+  });
+  return out;
+}

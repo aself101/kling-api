@@ -41,7 +41,7 @@ import {
 import type { HttpCore } from '../http/core.js';
 import { MediaBudget, resolveMediaSource, type ResolvedMedia } from '../media/source.js';
 import { LEGACY_PRODUCT_PATHS, createHandle, resolveExternalId } from './tasks.js';
-import { createTimeoutMs, recordOf, redactMedia, type ProductApiConfig } from './shared.js';
+import { createTimeoutMs, recordOf, redactList, redactMedia, type ProductApiConfig } from './shared.js';
 
 /** `client.image` — generation, omni image, multi-image, outpainting and subject completion on the legacy `/v1/` standard (spec D7). */
 export class ImageApi {
@@ -98,7 +98,7 @@ export class ImageApi {
       recordOf({
         ...params,
         model,
-        images: images?.map((r, i) => redactMedia(params.images![i], r)),
+        images: redactList(params.images, images, redactMedia),
       }),
       policy
     );
@@ -134,9 +134,9 @@ export class ImageApi {
     const record = recordOf({
       ...params,
       model: MULTI_IMAGE_MODEL,
-      subjectImages: subjectImages.map((r, i) => redactMedia(params.subjectImages[i], r)),
-      sceneImage: sceneImage && redactMedia(params.sceneImage!, sceneImage),
-      styleImage: styleImage && redactMedia(params.styleImage!, styleImage),
+      subjectImages: redactList(params.subjectImages, subjectImages, redactMedia),
+      sceneImage: sceneImage && params.sceneImage && redactMedia(params.sceneImage, sceneImage),
+      styleImage: styleImage && params.styleImage && redactMedia(params.styleImage, styleImage),
     });
     return this.#create('multi-image-to-image', body, externalId, params.signal, record, policy);
   }

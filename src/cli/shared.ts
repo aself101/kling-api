@@ -93,7 +93,7 @@ export function elementArgs(
 ): { elementId: string; id?: string }[] | undefined {
   if (!values || values.length === 0) return undefined;
   return values.map((v) => {
-    const [elementId, id] = v.split(':', 2);
+    const [elementId = v, id] = v.split(':', 2);
     return id ? { elementId, id } : { elementId };
   });
 }

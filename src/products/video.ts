@@ -162,12 +162,18 @@ export class VideoApi {
     const record = recordOf({
       ...params,
       model,
-      firstFrame: firstFrame && redactMedia(params.firstFrame!, firstFrame),
-      lastFrame: lastFrame && redactMedia(params.lastFrame!, lastFrame),
-      referImages: referImages?.map((r, i) => ({
-        ...(params.referImages![i].id ? { id: params.referImages![i].id } : {}),
-        source: redactMedia(params.referImages![i].source, r),
-      })),
+      // Each redaction reads the SAME array the resolved list was derived from, once — a
+      // second `params.x![i]` lookup would re-assert an invariant the compiler cannot see
+      // and would silently break if the derivation ever filtered (ship run #5, type-safety).
+      firstFrame: firstFrame && params.firstFrame && redactMedia(params.firstFrame, firstFrame),
+      lastFrame: lastFrame && params.lastFrame && redactMedia(params.lastFrame, lastFrame),
+      referImages: referImages?.map((r, i) => {
+        const ref = params.referImages?.[i];
+        return {
+          ...(ref?.id ? { id: ref.id } : {}),
+          ...(ref ? { source: redactMedia(ref.source, r) } : {}),
+        };
+      }),
     });
     return this.#create(product, model, body, externalId, params.signal, record, policy);
   }
