@@ -57,6 +57,8 @@ export interface KlingAPIErrorInit {
   httpStatus: number;
   request: RequestDescriptor;
   requestId?: string;
+  /** Parsed `Retry-After` in ms; see `KlingAPIError.retryAfterMs`. */
+  retryAfterMs?: number;
 }
 
 /**
@@ -76,6 +78,12 @@ export class KlingAPIError extends KlingError {
   readonly request: RequestDescriptor;
   /** The create's `external_task_id` — the recovery key. Mirrors `request.externalId`, as on the other request-bearing errors (ship run #6). */
   readonly externalId?: string;
+  /**
+   * The vendor's `Retry-After` for this response in ms, when it sent one and it parsed
+   * (delta-seconds or HTTP-date). The core waits this instead of its own backoff on a
+   * retryable read; a consumer re-submitting a create should honour it too.
+   */
+  readonly retryAfterMs?: number;
   readonly taskState: TaskState;
 
   constructor(message: string, init: KlingAPIErrorInit) {
@@ -84,6 +92,7 @@ export class KlingAPIError extends KlingError {
     this.httpStatus = init.httpStatus;
     this.request = init.request;
     if (init.request.externalId) this.externalId = init.request.externalId;
+    if (init.retryAfterMs !== undefined) this.retryAfterMs = init.retryAfterMs;
     this.taskState = deriveTaskStateFromResponse(init.request.kind, init.code, init.httpStatus);
   }
 
@@ -342,6 +351,20 @@ export class KlingSaveError extends KlingError {
     this.failedUrl = failedUrl;
     if (leftover) this.leftover = leftover;
   }
+}
+
+/**
+ * `Retry-After` → ms, per RFC 9110: either delta-seconds or an HTTP-date. Returns undefined for
+ * an absent, malformed, or already-past value — never a negative wait. The caller caps it.
+ */
+export function parseRetryAfter(value: string | null | undefined, now: number = Date.now()): number | undefined {
+  if (value === null || value === undefined) return undefined;
+  const raw = value.trim();
+  if (raw === '') return undefined;
+  if (/^\d+$/.test(raw)) return Number(raw) * 1000;
+  const at = Date.parse(raw);
+  if (Number.isNaN(at)) return undefined;
+  return Math.max(0, at - now);
 }
 
 export type DownloadFailureReason = 'too-large' | 'too-many-redirects' | 'blocked-host' | 'http' | 'timeout' | 'invalid-redirect';

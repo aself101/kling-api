@@ -66,8 +66,13 @@ const zones = [
   { target: `${SRC}/handlers`, from: `${SRC}/index.ts`, message: 'handlers must not import the barrel (spec §5)' },
   { target: `${SRC}/handlers`, from: `${SRC}/cli`, message: 'handlers must not import the CLI (spec §5)' },
 
-  // products: http/*, codecs/*, config/*, media/*, handlers/poller, products/*
-  { target: `${SRC}/products`, from: `${SRC}/handlers`, except: ['./poller.ts'], message: 'products may import handlers/poller only (spec §5)' },
+  // products: http/*, codecs/*, config/*, media/*, handlers/{poller,coalescer}, products/*
+  //
+  // `coalescer.ts` joined `poller.ts` in this exception in ship run #6. Both are polling
+  // mechanism with no product knowledge — the poller says WHEN to read, the coalescer says how
+  // many reads share a request — and `saver.ts`, the other handler, stays excluded because it
+  // is an application-level concern that products must not reach into (spec §5's actual point).
+  { target: `${SRC}/products`, from: `${SRC}/handlers`, except: ['./poller.ts', './coalescer.ts'], message: 'products may import handlers/poller and handlers/coalescer only (spec §5)' },
   { target: `${SRC}/products`, from: `${SRC}/webhooks.ts`, message: 'products must not import webhooks (spec §5)' },
   { target: `${SRC}/products`, from: `${SRC}/client.ts`, message: 'products must not import the client (spec §5)' },
   { target: `${SRC}/products`, from: `${SRC}/index.ts`, message: 'products must not import the barrel (spec §5)' },

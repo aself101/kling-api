@@ -62,7 +62,13 @@ const sleep = async (ms: number) => {
 
 function core(steps: Step[], overrides: Partial<ConstructorParameters<typeof HttpCore>[0]> = {}) {
   const { fetchImpl, calls } = fakeFetch(steps);
-  const c = new HttpCore({ apiKey: 'k-1234', fetch: fetchImpl, timeout: 50, ...overrides }, { sleep });
+  // jitter: 'none' by default in this rig — these tests assert the EXPONENTIAL schedule, which
+  // is still a contract. The jitter that now sits on top of it has its own tests below, with an
+  // injected `random` (ship run #6).
+  const c = new HttpCore(
+    { apiKey: 'k-1234', fetch: fetchImpl, timeout: 50, ...overrides, retry: { jitter: 'none', ...overrides.retry } },
+    { sleep }
+  );
   return { core: c, calls };
 }
 
@@ -225,6 +231,60 @@ describe('retry policy (V11)', () => {
     expect(sleeps).toEqual([15_000, 15_000]);
   });
 
+  // --- ship run #6: jitter and Retry-After -----------------------------------------------
+
+  it("equal jitter keeps half the delay and randomises the rest — [d/2, d) per attempt, never 0", async () => {
+    const busy = { status: 429, json: { code: 1303, message: 'busy' } };
+    for (const [r, expected] of [[0, [1000, 2000]], [0.5, [1500, 3000]], [0.999, [2000, 4000]]] as const) {
+      sleeps.length = 0;
+      const { fetchImpl } = fakeFetch([busy, busy, busy]);
+      const c = new HttpCore({ apiKey: 'k-1234', fetch: fetchImpl, timeout: 50 }, { sleep, random: () => r });
+      await c.request(READ).catch(() => undefined);
+      expect(sleeps.map((n) => Math.round(n / 10) * 10), `random=${r}`).toEqual(expected.map((n) => Math.round(n / 10) * 10));
+    }
+  });
+
+  it('the default is jittered: two clients failing on the same burst do not sleep in lockstep', async () => {
+    const busy = { status: 429, json: { code: 1303, message: 'busy' } };
+    const runs: number[] = [];
+    for (let i = 0; i < 12; i++) {
+      sleeps.length = 0;
+      const { fetchImpl } = fakeFetch([busy, OK]);
+      await new HttpCore({ apiKey: 'k-1234', fetch: fetchImpl, timeout: 50 }, { sleep }).request(READ);
+      runs.push(sleeps[0] ?? -1);
+    }
+    expect(new Set(runs).size).toBeGreaterThan(1);       // not a constant
+    for (const d of runs) expect(d).toBeGreaterThanOrEqual(1000); // the floor still rises with the attempt
+    for (const d of runs) expect(d).toBeLessThanOrEqual(2000);
+  });
+
+  it("the vendor's Retry-After wins over our backoff, in seconds and as an HTTP-date, capped by maxDelayMs", async () => {
+    const at = new Date(Date.now() + 7_000).toUTCString();
+    for (const [header, expected] of [['5', 5_000], [at, 7_000], ['9999', 30_000], ['garbage', 2_000]] as const) {
+      sleeps.length = 0;
+      const { fetchImpl } = fakeFetch([
+        { status: 429, json: { code: 1303, message: 'busy' }, headers: { 'retry-after': header } },
+        OK,
+      ]);
+      const c = new HttpCore({ apiKey: 'k-1234', fetch: fetchImpl, timeout: 50, retry: { jitter: 'none' } }, { sleep });
+      await c.request(READ);
+      // the HTTP-date case is computed against a moving now(), so allow a second of slack
+      expect(Math.abs((sleeps[0] ?? 0) - expected), `retry-after: ${header}`).toBeLessThanOrEqual(1_000);
+    }
+  });
+
+  it('KlingAPIError carries the parsed retryAfterMs so a consumer re-submitting a create can honour it', async () => {
+    const { fetchImpl } = fakeFetch([{ status: 429, json: { code: 1302, message: 'rate' }, headers: { 'retry-after': '12' } }]);
+    const c = new HttpCore({ apiKey: 'k-1234', fetch: fetchImpl, timeout: 50, retry: { maxAttempts: 1 } }, { sleep });
+    const err = await c.request(WRITE).catch((e) => e as KlingAPIError);
+    expect(err.retryAfterMs).toBe(12_000);
+  });
+
+  it("retry.jitter rejects anything but 'equal' or 'none'", () => {
+    const { fetchImpl } = fakeFetch([OK]);
+    expect(() => new HttpCore({ apiKey: 'k-1234', fetch: fetchImpl, retry: { jitter: 'full' as never } })).toThrow(/retry\.jitter/);
+  });
+
   it('write: 1303 → thrown immediately, ONE fetch call, taskState not-created, isRetryable false', async () => {
     const { core: c, calls } = core([{ status: 429, json: { code: 1303, message: 'busy' } }, OK]);
     const err = await c.request(WRITE).catch((e) => e);
@@ -318,7 +378,7 @@ describe('ship run #5 regressions', () => {
     const c = new HttpCore({ apiKey: 'k-1234', fetch: fetchImpl, timeout: 50, retry: { maxAttempts: undefined, baseDelayMs: undefined } }, { sleep });
     await expect(c.request(READ)).rejects.toBeInstanceOf(KlingAPIError);
     expect(calls).toHaveLength(3); // the default, not ∞
-    expect(c.retry).toEqual({ maxAttempts: 3, baseDelayMs: 1000, maxDelayMs: 30_000 });
+    expect(c.retry).toEqual({ maxAttempts: 3, baseDelayMs: 1000, maxDelayMs: 30_000, jitter: 'equal' });
     expect(() => new HttpCore({ apiKey: 'k-1234', fetch: fetchImpl, retry: { maxAttempts: 0 } })).toThrow(/retry\.maxAttempts must be an integer ≥ 1/);
     expect(() => new HttpCore({ apiKey: 'k-1234', fetch: fetchImpl, retry: { baseDelayMs: Number.NaN } })).toThrow(/retry\.baseDelayMs/);
   });

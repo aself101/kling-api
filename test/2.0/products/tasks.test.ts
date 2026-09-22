@@ -277,7 +277,12 @@ describe('TaskHandle', () => {
     expect(calls).toHaveLength(3);
 
     const failing = rig(() => ok([newRec('v2', 'failed', { message: 'risk control' })]));
-    const err = await createHandle(failing.core, failing.logger, 'text-to-video', 'v2', {}).wait().catch((e) => e as KlingTaskFailedError);
+    // Even the first poll needs a timer turn now: reads are batched on a macrotask so that
+    // concurrent handles share one request (ship run #6, handlers/coalescer.ts).
+    const failingWait = createHandle(failing.core, failing.logger, 'text-to-video', 'v2', {}).wait();
+    const settled = failingWait.catch((e) => e as KlingTaskFailedError);
+    await vi.advanceTimersByTimeAsync(0);
+    const err = await settled;
     expect(err).toBeInstanceOf(KlingTaskFailedError);
     expect(err.code).toBeNull();
     expect(err.task.message).toBe('risk control');
@@ -416,6 +421,66 @@ describe('TaskHandle — ship run #4 regressions', () => {
     const err = await p.catch((e) => e as KlingPollTimeoutError);
     expect(err.task).toMatchObject({ id: 'v1', status: 'processing', message: 'still rendering' });
     expect(err.elapsedMs).toBeGreaterThanOrEqual(2500);
+  });
+});
+
+describe('TaskHandle — ship run #6: N handles are not N requests', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('25 concurrent wait()s on one client poll in 2 requests per tick (20 + 5), not 25', async () => {
+    const ids = Array.from({ length: 25 }, (_, i) => `v${i}`);
+    let tick = 0;
+    const { core, logger, calls } = rig((call) => {
+      const asked = (call.url.searchParams.get('task_ids') ?? '').split(',');
+      // every id stays processing on the first tick, succeeds on the second
+      return ok(asked.map((id) => newRec(id, tick < 2 ? 'processing' : 'succeeded')));
+    });
+    const handles = ids.map((id) => createHandle(core, logger, 'text-to-video', id, {}));
+    const waits = handles.map((h) => h.wait({ intervalMs: 1000 }));
+
+    await vi.advanceTimersByTimeAsync(0);
+    const firstTick = calls.length;
+    expect(firstTick).toBe(2); // 20 + 5, not 25
+    expect(calls.map((c) => (c.url.searchParams.get('task_ids') ?? '').split(',').length)).toEqual([20, 5]);
+
+    tick = 2;
+    await vi.advanceTimersByTimeAsync(1000);
+    const settled = await Promise.all(waits);
+    expect(settled.map((t) => t.id).sort()).toEqual([...ids].sort());
+    // Two ticks of polling over 25 handles: 4 requests total, not 50.
+    expect(calls.length).toBeLessThanOrEqual(4);
+  });
+
+  it('every handle still gets ITS OWN task back — the fan-out is keyed by id, not by arrival order', async () => {
+    const { core, logger } = rig((call) => {
+      const asked = (call.url.searchParams.get('task_ids') ?? '').split(',');
+      // answer in REVERSE order: a positional fan-out would mismatch every id
+      return ok([...asked].reverse().map((id) => newRec(id, 'succeeded', { outputs: [{ type: 'video', id: `out-${id}`, url: `https://cdn.example/${id}.mp4` }] })));
+    });
+    const ids = ['a1', 'b2', 'c3'];
+    const waiting = Promise.all(
+      ids.map((id) => createHandle(core, logger, 'text-to-video', id, {}).wait({ intervalMs: 1000 }))
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    const tasks = await waiting;
+    expect(tasks.map((t) => t.id)).toEqual(ids);
+    expect(tasks.map((t) => t.outputs[0]?.id)).toEqual(['out-a1', 'out-b2', 'out-c3']);
+  });
+
+  it('one handle aborting does not disturb the others sharing its request', async () => {
+    const { core, logger } = rig((call) => {
+      const asked = (call.url.searchParams.get('task_ids') ?? '').split(',');
+      return ok(asked.map((id) => newRec(id, 'succeeded')));
+    });
+    const ac = new AbortController();
+    const a = createHandle(core, logger, 'text-to-video', 'a', {}).wait({ intervalMs: 1000, signal: ac.signal });
+    const b = createHandle(core, logger, 'text-to-video', 'b', {}).wait({ intervalMs: 1000 });
+    const aRejects = expect(a).rejects.toThrow('stop');
+    ac.abort(new Error('stop'));
+    await aRejects;
+    await vi.advanceTimersByTimeAsync(0);
+    await expect(b).resolves.toMatchObject({ id: 'b', status: 'succeeded' });
   });
 });
 

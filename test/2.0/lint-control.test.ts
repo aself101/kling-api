@@ -51,6 +51,15 @@ describe('import-graph zones (production config)', () => {
     expect(await lint(`export * from '../codecs/shared.js';\n`, 'src/utils/whatever.ts')).toHaveLength(1);
   });
 
+  it('the handlers carve-out is exactly poller + coalescer: saver stays out (ship run #6)', async () => {
+    expect(await lint(`export { poll } from '../handlers/poller.js';\n`, 'src/products/legal.ts')).toHaveLength(0);
+    expect(await lint(`export { TaskReadCoalescer } from '../handlers/coalescer.js';\n`, 'src/products/legal.ts')).toHaveLength(0);
+    // CONTROL — widening the exception must not have opened the whole directory.
+    const denied = await lint(`export { save } from '../handlers/saver.js';\n`, 'src/products/illegal.ts');
+    expect(denied).toHaveLength(1);
+    expect(denied[0].message).toContain('handlers/poller and handlers/coalescer only');
+  });
+
   it('an UNRESOLVABLE import is invisible to the zones rule — so no-unresolved must catch it', async () => {
     // A file that does not exist. Without no-unresolved a typo would bypass the graph.
     const [result] = await eslint.lintText(`export * from '../handlers/does-not-exist.js';\n`, { filePath: 'src/products/x.ts' });

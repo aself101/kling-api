@@ -16,6 +16,7 @@ import { BASE_URL, DEFAULT_TIMEOUT } from '../config/constants.js';
 import { redactKey } from '../utils/security.js';
 import {
   KlingAPIError,
+  parseRetryAfter,
   KlingNetworkError,
   KlingResponseError,
   KlingTimeoutError,
@@ -36,6 +37,13 @@ export interface RetryOptions {
   baseDelayMs?: number;
   /** Backoff cap. Default 30 000. */
   maxDelayMs?: number;
+  /**
+   * Backoff jitter. `'equal'` (default) waits `delay/2 + random(0, delay/2)`, so N clients that
+   * failed together do not retry together — the failure mode a deterministic backoff creates is
+   * a thundering herd on the recovering side. `'none'` restores the exact `baseDelayMs * 2^n`
+   * schedule (tests, and anyone who needs a reproducible timeline).
+   */
+  jitter?: 'equal' | 'none';
 }
 
 export interface Logger {
@@ -72,12 +80,14 @@ export interface ResolvedRetryOptions {
   maxAttempts: number;
   baseDelayMs: number;
   maxDelayMs: number;
+  jitter: 'equal' | 'none';
 }
 
 export const DEFAULT_RETRY: ResolvedRetryOptions = {
   maxAttempts: 3,
   baseDelayMs: 1_000,
   maxDelayMs: 30_000,
+  jitter: 'equal',
 };
 
 /** A `Logger` that says nothing — the library's default. The CLI installs its own. */
@@ -124,6 +134,8 @@ export interface HttpResult<T = unknown> {
 /** Internal knobs the tests use; not part of `KlingConfig`. */
 export interface HttpCoreInternals {
   sleep?: (ms: number) => Promise<void>;
+  /** Jitter source; injected so a test can pin the schedule. Default `Math.random`. */
+  random?: () => number;
 }
 
 const REQUEST_ID_HEADER = 'x-request-id';
@@ -144,6 +156,7 @@ export class HttpCore {
   readonly #apiKey: string;
   readonly #fetchImpl: typeof fetch;
   readonly #sleep: (ms: number) => Promise<void>;
+  readonly #random: () => number;
   readonly #sleepInjected: boolean;
 
   constructor(
@@ -172,7 +185,14 @@ export class HttpCore {
       maxAttempts: config.retry?.maxAttempts ?? DEFAULT_RETRY.maxAttempts,
       baseDelayMs: config.retry?.baseDelayMs ?? DEFAULT_RETRY.baseDelayMs,
       maxDelayMs: config.retry?.maxDelayMs ?? DEFAULT_RETRY.maxDelayMs,
+      jitter: config.retry?.jitter ?? DEFAULT_RETRY.jitter,
     };
+    if (this.retry.jitter !== 'equal' && this.retry.jitter !== 'none') {
+      throw new KlingValidationError(
+        'retry.jitter',
+        `retry.jitter must be 'equal' or 'none', got ${JSON.stringify(this.retry.jitter)}`
+      );
+    }
     if (!Number.isInteger(this.retry.maxAttempts) || this.retry.maxAttempts < 1) {
       throw new KlingValidationError(
         'retry.maxAttempts',
@@ -189,6 +209,7 @@ export class HttpCore {
     this.#fetchImpl = config.fetch ?? globalThis.fetch;
     this.logger = config.logger ?? silentLogger;
     this.#sleep = internals.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
+    this.#random = internals.random ?? Math.random;
     this.#sleepInjected = internals.sleep !== undefined;
     if (typeof this.#fetchImpl !== 'function') {
       throw new KlingValidationError(
@@ -277,7 +298,7 @@ export class HttpCore {
         return await this.attempt<T>(req, descriptor, attempt, attempts);
       } catch (err) {
         if (attempt >= attempts || !this.shouldRetry(req.kind, err)) throw err;
-        const delay = Math.min(this.retry.baseDelayMs * 2 ** attempt, this.retry.maxDelayMs); // attempt 1 → 2 s, attempt 2 → 4 s (spec D11: 96 s worst case at defaults)
+        const delay = this.backoffFor(err, attempt);
         this.logger.debug(
           `kling: ${req.method} ${req.path} attempt ${attempt}/${attempts} failed (${(err as Error).name}); retrying in ${delay} ms`
         );
@@ -291,6 +312,24 @@ export class HttpCore {
   }
 
   // --------------------------------------------------------------------------
+
+  /**
+   * How long to wait before the next attempt.
+   *
+   * The vendor's own `Retry-After` wins when it sent one — it knows when it will be ready and
+   * we do not — capped by `maxDelayMs` so a hostile or mistaken header cannot park a caller for
+   * an hour. Otherwise exponential (`baseDelayMs * 2^attempt`: 2 s, 4 s at defaults), then
+   * jittered. Jitter is `equal` by default: half the delay is guaranteed, half is random, so the
+   * floor still rises with each attempt while N clients that failed on the same burst spread out
+   * instead of retrying in lockstep (ship run #4, anxiety-read: fifty in-flight handles).
+   */
+  private backoffFor(err: unknown, attempt: number): number {
+    const exponential = Math.min(this.retry.baseDelayMs * 2 ** attempt, this.retry.maxDelayMs);
+    const vendor = err instanceof KlingAPIError ? err.retryAfterMs : undefined;
+    if (vendor !== undefined) return Math.min(vendor, this.retry.maxDelayMs);
+    if (this.retry.jitter === 'none') return exponential;
+    return Math.round(exponential / 2 + this.#random() * (exponential / 2));
+  }
 
   private shouldRetry(kind: RequestKind, err: unknown): boolean {
     if (kind === 'write') {
@@ -409,11 +448,13 @@ export class HttpCore {
     }
 
     if (envelope.code !== 0) {
+      const retryAfterMs = parseRetryAfter(response.headers.get('retry-after'));
       throw new KlingAPIError(envelope.message ?? `Kling error ${envelope.code}`, {
         code: envelope.code,
         httpStatus: response.status,
         request: descriptor,
         requestId: envelope.request_id ?? requestId,
+        ...(retryAfterMs !== undefined ? { retryAfterMs } : {}),
       });
     }
 
