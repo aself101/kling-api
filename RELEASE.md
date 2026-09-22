@@ -13,6 +13,21 @@ npm publish                                       # no --registry → npmjs
 npm deprecate kling-api@"<2.0.0" "1.x cannot reach the current Kling API — see https://github.com/aself101/kling-api#migration-from-1x"
 ```
 
+### The artifact you are promoting
+
+The tarball validated against a clean consumer has **shasum `fd0abffff7ce7d9b4ad9110ec4dc1fa08f53e190`**
+(160 files, 785 KB unpacked). `npm pack --dry-run --json` from `main` reproduces exactly that
+shasum, so publishing from `main` ships the bytes that were tested. After publishing:
+
+```bash
+npm view kling-api@2.0.0 dist.shasum   # → fd0abffff7ce7d9b4ad9110ec4dc1fa08f53e190
+```
+
+The `v2.0.0` tag points at `a7203dd`, one commit behind `main` — the extra commit adds this
+file, which `package.json#files` does not ship. The tag marks the code that ships; the shasum
+above is the proof that the difference is not in the artifact. The tag was not moved because
+it is already pushed.
+
 Then confirm the promotion actually happened — a Verdaccio validation says nothing about npmjs:
 
 ```bash
