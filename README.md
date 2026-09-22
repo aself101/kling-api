@@ -146,6 +146,8 @@ type MediaSource =
   | Buffer | Uint8Array;
 ```
 
+**`{ path }` reads whatever path you hand it — never build one from untrusted input.** The object form is an explicit opt-in (that is the point of it), and the library applies no allow-list: `{ path: userInput }` in a server handler is arbitrary file read, the same class 1.x had implicitly. Resolve and constrain the path yourself, or take a URL.
+
 **A bare string is never a filesystem path.** 1.x read any string that happened to exist on disk; a server passing user input to `imageToVideo` would have read from its own filesystem. To send a file, pass `{ path: './frame.png' }`. The CLI wraps its file arguments for you.
 
 Local files and buffers are checked before anything is sent: extension (`.jpg/.jpeg/.png`; audio `.mp3/.wav/.m4a/.aac`), magic bytes, and for images the vendor's rules — at least 300 px per side, aspect ratio within 1:2.5 – 2.5:1. Inline caps: **10 MB** per input on the legacy standard (the vendor's documented limit), **20 MB** on the new standard (the vendor documents 50 MB for URLs and nothing for inline; a larger Base64 body inflates the JSON past what an unpublished edge limit is known to accept), and **40 MB** of encoded payload per request across all inputs. Over a cap, the error tells you to host the file and pass a URL.
@@ -168,6 +170,9 @@ Local files and buffers are checked before anything is sent: extension (`.jpg/.j
 So a 3-second default text-to-video costs 2.4 video units (verified live). `kling-3.0` silent is 25 % cheaper than the default if you do not need audio — pass `model: 'kling-3.0', audio: 'off'`. Image defaults: `kling-v3` (`image.generate`), `kling-v3-omni` (`image.omni`); `image.multiImageToImage` has exactly one documented model, `kling-v2-1`.
 
 Resource packs are **per product type** (video / image) — a `1102` "balance not enough" on an image endpoint says nothing about your video pack.
+
+**What a failed task costs is not documented by the vendor and has not been measured here.** A task that reaches `failed` may or may not have consumed units; the library cannot tell you, and `KlingTaskFailedError` carries no billing signal. A loop that re-submits on `KlingTaskFailedError` may therefore be paying twice for the same intent — compare `account.packageLedger()` before and after one deliberate failure before you automate that path.
+
 
 ## Video
 
@@ -206,7 +211,7 @@ Multi-shot on `kling-3.0-turbo` is driven by the prompt syntax `"shot 1, 3, word
 
 Rules come in two classes. **`[shape]`** rules (required fields, types, mutually exclusive fields, anything that changes what a paid request means — e.g. `baseVideo` excludes frames) always throw `KlingValidationError`. **`[capability]`** rules ("does this known model accept this resolution / duration / audio / content type") throw by default and become logger warnings under `new KlingClient({ capabilityValidation: 'warn' })`.
 
-An **unknown model id** is passed through with shape rules only (`unknownModels: 'passthrough'`, the default — the vendor ships new ids monthly); `'reject'` refuses it. `extraSettings` / `extraOptions` / `extraContents` merge fields the library does not model yet; a key the library *does* model is rejected there.
+An **unknown model id** is passed through with shape rules only (`unknownModels: 'passthrough'`, the default — the vendor ships new ids monthly); `'reject'` refuses it. `extraSettings` / `extraOptions` / `extraContents` merge fields the library does not model yet; a key the library *does* model is rejected there. **Build these from your own values, not from forwarded end-user JSON** — they are merged onto the request body with `Object.assign`, so a `__proto__` key in caller-supplied input repoints that one request object's prototype. The blast radius is a single throwaway object per call, not `Object.prototype`, but the field is an escape hatch and carries an escape hatch's trust assumption.
 
 Omni element count matrices are stated by the vendor per element **kind** (video-character vs multi-image), which the id does not reveal — pass `kind` on each element for the exact check, omit it for the kind-independent envelopes.
 
@@ -366,7 +371,7 @@ new KlingClient({
 });
 ```
 
-- **Worst-case read time** at defaults: 3 attempts × 30 s + 2 s + 4 s backoff = **96 s**. `KlingTimeoutError` carries `attempt` / `attempts`.
+- **Read-retry span** at defaults: **~6 s on a fast refusal, ~96 s on timeouts.** The backoff is 2 s + 4 s either way — what varies is the attempt itself, so a `1302` that answers instantly exhausts all three attempts in about six seconds, while three full 30 s timeouts take 96. `KlingTimeoutError` carries `attempt` / `attempts`. `wait()` rethrows whichever one ends the sequence to **every** subscriber on that handle.
 - **Creates with inline media** get a longer deadline automatically: `max(timeout, 30 s + 4 s per MB of body)` — a 20 MB frame is ~27 MB of JSON and gets ≥ 110 s. Raise `timeout` for slower uplinks.
 - **Proxies:** Node's `fetch` ignores `HTTP(S)_PROXY`. Inject a proxied fetch — e.g. undici's `fetch` bound to an `EnvHttpProxyAgent` or `ProxyAgent` — via the `fetch` option; `save()` downloads through the same fetch.
 - **Redirects:** the API core uses `redirect: 'manual'`; an unexpected 3xx from the API host is a `KlingResponseError { location }`, not a silent follow. Downloads follow at most 5 hops, re-checking each `Location`.
@@ -387,6 +392,8 @@ app.post('/kling/callback', express.raw({ type: 'application/json' }), (req, res
 });
 ```
 
+**One unrecognised word fails the whole envelope, deliberately.** `parseStatus` throws on a status neither standard defines, and `tasks.list`/`get` have no per-record isolation — so if the vendor adds a status value, a page containing one task in that state fails entirely rather than silently reporting it as something it is not. A guess here would be a wrong answer about a paid task. The cost is that a vendor vocabulary change presents as an outage until the library ships the new value; `task.raw` on a successful parse is the escape hatch, and the vendor docs snapshot in `docs/api/` records the vocabulary the library was built against.
+
 `rawBody` must be the **exact bytes received** — a JSON body parser re-serializes and breaks the signature. The vendor signs with the Standard Webhooks scheme once a Webhook Secret exists (`webhook-id`, `webhook-timestamp`, `webhook-signature` headers; HMAC-SHA256 over `${id}.${timestamp}.${rawBody}`; ±5 min skew; rotation lists supported). Its published test vector passes the library's `verifyWebhookSignature`.
 
 **Without a `secret`, `verified` is `null` and the body is unauthenticated** — and `secret: undefined` *is* "without a secret": if `process.env.KLING_WEBHOOK_SECRET` is unset in one deployment, the snippet above parses without verifying and nothing throws. Check `verified === true` explicitly, or fail startup when the variable is missing. Anyone who can reach an unverified endpoint can make `save()` fetch whatever URLs they name. Both callback body shapes (new `id`, legacy `task_id`) parse into the same `Task`.
@@ -401,14 +408,16 @@ kling video t2v -p "…" [-m kling-3.0-turbo] [-r 720p] [-a 16:9] [-d 3] [--audi
 kling video i2v -p "…" --first-frame ./a.png [--last-frame ./b.png] [--element id:alias]… [--voice id:alias]…
 kling video omni -p "…" [--first-frame …] [--refer-image …]… [--feature-video URL | --base-video URL] [--element id:alias]…
 kling video motion-control --image ./p.png --video URL --character-orientation video
-kling image generate -p "…" [-m kling-v3] [-n 1] [-r 1k] [-a 1:1] | omni | multi --subject … | outpaint --image … --up 0.1 | subject-completion --frontal-image …
-kling elements create --name … --description … --reference-type image_refer --frontal-image … --refer-image … | get <taskId> | list | presets | delete <elementId> [--kind image]
+kling image generate -p "…" [-m kling-v3] [-n 1] [-r 1k] [-a 1:1] [--negative-prompt …] [--image …] [--image-reference subject|face] [--image-fidelity 0.5] [--element id:alias]… | omni | multi --subject … | outpaint --image … --up 0.1 | subject-completion --frontal-image …
+kling elements create --name … --description … --reference-type image_refer --frontal-image … --refer-image … [--refer-video URL]… [--voice-id …] [--tag …]… | get <taskId> | list | presets | delete <elementId> [--kind image]
 kling voices create --name … --voice-url URL | get | list | presets | delete <voiceId>
-kling avatar create --image … --audio-id … [--mode std|pro]
-kling audio tts -t "…" --voice-id oversea_male1 --voice-language en
+kling avatar create --image … --audio-id … [--sound-file …] [--mode std|pro]
+kling audio tts -t "…" --voice-id oversea_male1 --voice-language en [--voice-speed 1.0]
 kling tasks get <ids…> [--by-external-id] | list [--days 1] [--limit] [--cursor] [--status] [--product-type] | get-by-product <product> <id> | list-by-product <product> | recover <product> <externalId>
-kling account usage [--days 30] | balance | packages
+kling account usage [--days 30] [--pack <id>] | balance | packages
 ```
+
+`kling <command> --help` is the authority on flags; the table above is the shape, not the full set.
 
 Global flags: `--api-key`, `--output-dir` (default `output`), `--json` (machine output on stdout, logs on stderr), `--debug`, `-q`. Credential chain: `--api-key` → `KLING_API_KEY` → `./.env` → `~/.kling/.env`. File arguments are wrapped as `{ path }`; `https://` arguments pass through. `--wait` polls behind a spinner and saves unless `--no-download`. Errors exit 1 and print the error family's fields and cause chain.
 

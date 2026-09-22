@@ -252,6 +252,18 @@ export class TasksApi {
   }
 
   /**
+   * @example
+   * ```ts
+   * // After a `may-exist` failure — see the README's recovery section for the full loop.
+   * const found = await client.tasks.recover('text-to-video', err.externalId);
+   * if (!found) {
+   *   // Re-submit with the SAME id, never a fresh one, or the vendor's duplicate check
+   *   // cannot protect you from paying twice.
+   *   await client.video.textToVideo({ ...params, externalTaskId: err.externalId });
+   * }
+   * ```
+   */
+  /**
    * Recover a create whose response was lost, by the `external_task_id` it carried (D10).
    * `null` means *not visible to this account* — not *never created*. TTS carries no
    * external id and is not a `Product`; it cannot reach here.

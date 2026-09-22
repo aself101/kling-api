@@ -60,6 +60,14 @@ export class VideoApi {
     };
   }
 
+  /**
+   * @example
+   * ```ts
+   * const handle = await client.video.textToVideo({ prompt: 'a paper boat on a canal', duration: 5 });
+   * const task = await handle.wait();          // KlingPollTimeoutError leaves it running and billed
+   * const files = await client.save(task, 'output');
+   * ```
+   */
   /** `POST /text-to-video/<model>` (D6). Default model `kling-3.0-turbo` (§10.11). */
   async textToVideo(params: TextToVideoParams): Promise<TaskHandle> {
     const product: Product = 'text-to-video';

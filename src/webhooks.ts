@@ -96,6 +96,17 @@ export interface ParsedCallback {
  * given. Detects the standard by `id` (new) vs `task_id` (legacy); a body carrying both
  * is `KlingCodecError`.
  */
+/**
+ * @param rawBody The EXACT bytes received — a JSON body parser re-serializes and breaks the signature.
+ * @param options `secret` enables verification (a bad signature, stale timestamp or missing header
+ *   throws `KlingWebhookError`); without one, `verified` is `null` and the body is unauthenticated.
+ * @returns `{ task, verified }` — check `verified === true` explicitly before trusting `task`.
+ * @example
+ * ```ts
+ * const { task, verified } = parseCallback(req.body, { headers: req.headers, secret: SECRET });
+ * if (verified !== true) return res.sendStatus(401);
+ * ```
+ */
 export function parseCallback(rawBody: string | Uint8Array, options: ParseCallbackOptions = {}): ParsedCallback {
   let verified: true | null = null;
   if (options.secret !== undefined) {

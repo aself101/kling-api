@@ -54,6 +54,24 @@ const SAFE_ID = /^[A-Za-z0-9._-]{1,200}$/;
  * `force`), `KlingValidationError('task.id')`, or `KlingSaveError { written }` when a download
  * fails part-way. `client.save()` is this with the client's fetch and timeout.
  */
+/**
+ * @param task A `succeeded` task; `task.id` must be a single path segment (it becomes the file name).
+ * @param dir Target directory, created if absent.
+ * @param options `force` to save past the derived expiry, `timeoutMs` to override the per-download
+ *   deadline (120 s video / 60 s otherwise), `fetch` to supply the transport.
+ * @returns Absolute paths written — every output plus the `<id>.json` sidecar.
+ * @example
+ * ```ts
+ * try {
+ *   const files = await save(task, 'output');
+ * } catch (err) {
+ *   if (err instanceof KlingSaveError) {
+ *     await Promise.all(err.written.map((f) => rm(f)));       // what landed before the failure
+ *     if (err.leftover) await rm(err.leftover.path);           // the temp file that could not be removed
+ *   }
+ * }
+ * ```
+ */
 export async function save(task: Task, dir: string, options: SaveOptions = {}): Promise<string[]> {
   const now = options.now ?? Date.now;
   if (task.status !== 'succeeded') throw new KlingNoOutputsError(task);
