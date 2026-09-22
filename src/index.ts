@@ -109,7 +109,7 @@ export type { CashDeductionEntry, DeductionEntry, LedgerPage, ResourcePackage, U
 export { parseCallback, verifyWebhookSignature, sign as signWebhook, type ParseCallbackOptions, type ParsedCallback, type VerifyWebhookSignatureInput } from './webhooks.js';
 export { createTimeoutMs, recordOf, redactMedia, type ProductApiConfig } from './products/shared.js';
 export { MediaBudget, resolveMediaSource, sniffAudio, sniffImage, type ImageInfo, type MediaKind, type ResolvedMedia, type ResolveOptions } from './media/source.js';
-export { fetchToBuffer, type FetchToBufferOptions, type FetchedResource } from './media/download.js';
+export { fetchToBuffer, fetchToFile, type FetchToBufferOptions, type FetchedResource, type StreamedResource } from './media/download.js';
 export { save, extensionFor, defaultDownloadTimeoutMs } from './handlers/saver.js';
 export { assertSafeUrl, isPublicAddress, UnsafeUrlError, type AssertSafeUrlOptions, type LookupFn, type UrlRejection } from './utils/security.js';
 export { MODELED_OPTIONS, MODELED_SETTINGS } from './config/constants.js';

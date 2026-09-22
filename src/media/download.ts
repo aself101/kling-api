@@ -16,6 +16,7 @@
  * rethrown unwrapped wherever it lands (DNS lookup, fetch, body read).
  * Import graph (§5): `http/errors`, `utils/security`, `config/constants`.
  */
+import { open, rm } from 'node:fs/promises';
 import { MAX_REDIRECTS, MEDIA_DOWNLOAD_TIMEOUT } from '../utils/constants.js';
 import { KlingDownloadError } from '../http/errors.js';
 import { UnsafeUrlError, assertSafeUrl, type LookupFn } from '../utils/security.js';
@@ -54,6 +55,63 @@ export async function fetchToBuffer(
   url: string,
   options: FetchToBufferOptions
 ): Promise<FetchedResource> {
+  const chunks: Uint8Array[] = [];
+  const res = await fetchStreamed(url, options, (c) => {
+    chunks.push(c);
+  });
+  return { buffer: Buffer.concat(chunks, res.bytes), contentType: res.contentType, finalUrl: res.finalUrl, hops: res.hops };
+}
+
+/**
+ * Stream an https resource straight to `destPath` under the same three guards and per-hop
+ * deadline as `fetchToBuffer`, without ever holding the whole body in memory.
+ *
+ * `fetchToBuffer` buffers up to `maxBytes` (500 MiB for video in `save()`) before a single
+ * write — a per-call heap ceiling the README presented as a protective byte cap, and the reason
+ * a server saving several videos at once could OOM (ship run #4 anxiety read, 006bb99e). The
+ * cap still applies here; it just no longer has to fit in memory.
+ *
+ * On ANY failure the partial file is removed and the error propagates, so a caller never sees a
+ * truncated file at `destPath`. A write error (ENOSPC, EACCES) propagates as-is for the caller
+ * to classify — `save()` turns it into `KlingSaveError` like any other fs failure.
+ */
+export async function fetchToFile(
+  url: string,
+  destPath: string,
+  options: FetchToBufferOptions
+): Promise<StreamedResource> {
+  const handle = await open(destPath, 'w');
+  try {
+    const res = await fetchStreamed(url, options, async (chunk) => {
+      await handle.write(chunk);
+    });
+    await handle.close();
+    return res;
+  } catch (err) {
+    // close before unlink: an open descriptor on Windows refuses the unlink.
+    // AUDIT-OK(no_empty_catch): the download error below is the one to report; a close that
+    // fails on an already-failed handle adds nothing.
+    await handle.close().catch(() => undefined);
+    // AUDIT-OK(no_empty_catch): best-effort removal of the partial file; same reason.
+    await rm(destPath, { force: true }).catch(() => undefined);
+    throw err;
+  }
+}
+
+/** What `fetchToFile` returns — the same provenance as `FetchedResource`, minus the bytes. */
+export interface StreamedResource {
+  /** Bytes written. */
+  bytes: number;
+  contentType?: string;
+  finalUrl: string;
+  hops: number;
+}
+
+async function fetchStreamed(
+  url: string,
+  options: FetchToBufferOptions,
+  onChunk: (chunk: Uint8Array) => void | Promise<void>
+): Promise<StreamedResource> {
   const fetchImpl = options.fetch ?? globalThis.fetch;
   const maxRedirects = options.maxRedirects ?? MAX_REDIRECTS;
   const timeoutMs = options.timeoutMs ?? MEDIA_DOWNLOAD_TIMEOUT;
@@ -144,9 +202,9 @@ export async function fetchToBuffer(
           { url: current, reason: 'too-large', httpStatus: res.status }
         );
       }
-      const buffer = await readCapped(res, options.maxBytes, current, controller, classify);
+      const bytes = await consumeCapped(res, options.maxBytes, current, controller, classify, onChunk);
       return {
-        buffer,
+        bytes,
         contentType: res.headers.get('content-type') ?? undefined,
         finalUrl: current,
         hops: hop,
@@ -180,16 +238,20 @@ function abortPromise(signal: AbortSignal): Promise<never> {
   });
 }
 
-/** Stream the body, abort past `maxBytes`. Works for both a ReadableStream body and a body-less 200. */
-async function readCapped(
+/**
+ * Stream the body past `onChunk`, abort past `maxBytes`. Works for a ReadableStream body and a
+ * body-less 200 alike. The sink decides where the bytes go — memory for `fetchToBuffer`, a file
+ * for `fetchToFile` — so the three guards and the abort classification are written once.
+ */
+async function consumeCapped(
   res: Response,
   maxBytes: number,
   url: string,
   controller: AbortController,
-  classify: (cause: unknown) => never
-): Promise<Buffer> {
-  if (!res.body) return Buffer.alloc(0);
-  const chunks: Uint8Array[] = [];
+  classify: (cause: unknown) => never,
+  onChunk: (chunk: Uint8Array) => void | Promise<void>
+): Promise<number> {
+  if (!res.body) return 0;
   let total = 0;
   const reader = res.body.getReader();
   try {
@@ -204,7 +266,7 @@ async function readCapped(
           reason: 'too-large',
         });
       }
-      chunks.push(value);
+      await onChunk(value);
     }
   } catch (err) {
     if (err instanceof KlingDownloadError) throw err;
@@ -215,7 +277,7 @@ async function readCapped(
   } finally {
     reader.releaseLock();
   }
-  return Buffer.concat(chunks, total);
+  return total;
 }
 
 const describe = (e: unknown) => (e instanceof Error ? `${e.name}: ${e.message}` : String(e));

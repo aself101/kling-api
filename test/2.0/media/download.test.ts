@@ -1,7 +1,10 @@
 /** fetchToBuffer (spec D12, run #1 A3, run #3 anxiety F3): byte cap, redirect cap, per-hop SSRF. */
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { KlingDownloadError } from '../../../src/http/errors.js';
-import { fetchToBuffer } from '../../../src/media/download.js';
+import { fetchToBuffer, fetchToFile } from '../../../src/media/download.js';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 interface Step { status?: number; body?: Uint8Array | string; headers?: Record<string, string>; stream?: Uint8Array[]; throw?: unknown }
 const publicDns = async () => [{ address: '93.184.216.34', family: 4 }];
@@ -165,5 +168,63 @@ describe('fetchToBuffer — ship run #4 regressions', () => {
     setTimeout(() => ac.abort('cancelled-during-dns'), 5);
     await expect(p).rejects.toBe('cancelled-during-dns');
     expect(calls).toEqual([]);
+  });
+});
+
+describe('fetchToFile — streamed to disk (ship run #6, 006bb99e)', () => {
+  let dir: string;
+  beforeEach(() => { dir = mkdtempSync(join(tmpdir(), 'kling-stream-')); });
+  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+
+  const dest = () => join(dir, 'out.bin');
+
+  it('writes the body to disk and reports bytes, contentType and finalUrl', async () => {
+    const { fetchImpl } = routed({
+      'https://cdn.example/a.mp4': { stream: [new Uint8Array([1, 2, 3]), new Uint8Array([4, 5])], headers: { 'content-type': 'video/mp4' } },
+    });
+    const res = await fetchToFile('https://cdn.example/a.mp4', dest(), opts(fetchImpl));
+    expect(res).toMatchObject({ bytes: 5, contentType: 'video/mp4', finalUrl: 'https://cdn.example/a.mp4', hops: 0 });
+    expect([...readFileSync(dest())]).toEqual([1, 2, 3, 4, 5]);
+  });
+
+  it('the byte cap still fires mid-stream AND the partial file is removed', async () => {
+    const chunk = new Uint8Array(400);
+    const { fetchImpl } = routed({ 'https://cdn.example/big.mp4': { stream: [chunk, chunk, chunk] } });
+    const err = await fetchToFile('https://cdn.example/big.mp4', dest(), opts(fetchImpl, { maxBytes: 500 }))
+      .catch((e) => e as KlingDownloadError);
+    expect(err).toBeInstanceOf(KlingDownloadError);
+    expect(err.reason).toBe('too-large');
+    expect(existsSync(dest())).toBe(false); // no truncated file left behind
+  });
+
+  it('a mid-stream network failure removes the partial file too', async () => {
+    const boom = new Error('socket reset');
+    const body = new ReadableStream<Uint8Array>({
+      start(c) { c.enqueue(new Uint8Array(10)); },
+      pull() { throw boom; },
+    });
+    const fetchImpl = (async () => new Response(body, { status: 200 })) as typeof fetch;
+    await expect(fetchToFile('https://cdn.example/x.mp4', dest(), opts(fetchImpl))).rejects.toBeInstanceOf(KlingDownloadError);
+    expect(existsSync(dest())).toBe(false);
+  });
+
+  it('the SSRF and redirect guards apply on every hop, as they do for fetchToBuffer', async () => {
+    const { fetchImpl } = routed({
+      'https://cdn.example/r.mp4': { status: 302, headers: { location: 'https://169.254.169.254/latest/meta-data' } },
+    });
+    const err = await fetchToFile('https://cdn.example/r.mp4', dest(), opts(fetchImpl)).catch((e) => e as KlingDownloadError);
+    expect(err.reason).toBe('blocked-host');
+    expect(existsSync(dest())).toBe(false);
+  });
+
+  it('the caller\'s own abort is rethrown unwrapped and leaves no file', async () => {
+    const ac = new AbortController();
+    const reason = new Error('cancelled');
+    const body = new ReadableStream<Uint8Array>({
+      pull(c) { ac.abort(reason); c.enqueue(new Uint8Array(4)); },
+    });
+    const fetchImpl = (async () => new Response(body, { status: 200 })) as typeof fetch;
+    await expect(fetchToFile('https://cdn.example/x.mp4', dest(), opts(fetchImpl, { signal: ac.signal }))).rejects.toBe(reason);
+    expect(readdirSync(dir)).toEqual([]);
   });
 });

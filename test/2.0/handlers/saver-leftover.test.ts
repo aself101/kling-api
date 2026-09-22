@@ -50,9 +50,12 @@ describe('save — temp-file cleanup failure', () => {
     const err = await save(task(), dir, { fetch: fetchImpl, lookup: publicDns, now: () => NOW }).catch((e) => e as KlingSaveError);
     expect(err).toBeInstanceOf(KlingSaveError);
     expect((err.cause as NodeJS.ErrnoException).code).toBe('EISDIR');
-    expect(err.leftover?.path).toBe(join(dir, `t-1-0.mp4.${process.pid}.part`));
+    // The temp name is keyed on the OUTPUT INDEX, not the final file name: since ship run #6
+    // the body is streamed straight into it, and the extension is only known once the
+    // response's Content-Type arrives.
+    expect(err.leftover?.path).toBe(join(dir, `t-1-0.${process.pid}.part`));
     expect((err.leftover?.cause as NodeJS.ErrnoException).code).toBe('EACCES');
-    expect(err.message).toMatch(/temp file .*t-1-0\.mp4\.\d+\.part could not be removed: permission denied/);
+    expect(err.message).toMatch(/temp file .*t-1-0\.\d+\.part could not be removed: permission denied/);
     expect(err.written).toEqual([]);
   });
 

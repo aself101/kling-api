@@ -14,7 +14,7 @@
  * deadline: 120 s for videos, 60 s for images/audio, or `timeoutMs`. `request` is
  * the handle's redacted record, so a 20 MB inline frame is a `{ kind, bytes, sha256 }`
  * triple here, not a second copy (run #3 architect F-5). Every download goes through
- * `fetchToBuffer` and its byte / redirect / per-hop SSRF guards. Import graph (§5):
+ * `fetchToFile` (streamed) and its byte / redirect / per-hop SSRF guards. Import graph (§5):
  * `codecs/task`, `media/download`, `http/errors`, `utils/*`.
  */
 import { mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
@@ -26,7 +26,7 @@ import {
   KlingSaveError,
   KlingValidationError,
 } from '../http/errors.js';
-import { fetchToBuffer } from '../media/download.js';
+import { fetchToFile } from '../media/download.js';
 import {
   MAX_VIDEO_SIZE,
   MEDIA_DOWNLOAD_TIMEOUT,
@@ -93,9 +93,14 @@ export async function save(task: Task, dir: string, options: SaveOptions = {}): 
     throw new KlingSaveError(task, written, dir, cause);
   }
   for (const [index, d] of downloads.entries()) {
+    // Stream straight to the temp name this output would be renamed from anyway, so the body
+    // never sits in the heap (ship run #4 anxiety read: `maxBytes` was a 500 MiB-per-call heap
+    // ceiling presented as a protective byte cap). The final name needs the response's
+    // Content-Type, which is why the temp name is keyed on the index rather than the name.
+    const tmp = join(dir, `${task.id}-${index}${d.label}.${process.pid}.part`);
     let res;
     try {
-      res = await fetchToBuffer(d.url, {
+      res = await fetchToFile(d.url, tmp, {
         maxBytes: options.maxBytes ?? MAX_VIDEO_SIZE,
         timeoutMs: options.timeoutMs ?? defaultDownloadTimeoutMs(d.video),
         signal: options.signal,
@@ -104,6 +109,7 @@ export async function save(task: Task, dir: string, options: SaveOptions = {}): 
       });
     } catch (cause) {
       // The caller's own abort stays theirs; everything else reports what is already on disk.
+      // `fetchToFile` has already removed its partial file.
       if (options.signal?.aborted && cause === options.signal.reason) throw cause;
       throw new KlingSaveError(task, written, d.url, cause);
     }
@@ -111,7 +117,7 @@ export async function save(task: Task, dir: string, options: SaveOptions = {}): 
       dir,
       `${task.id}-${index}${d.label}.${extensionFor(res.contentType, res.finalUrl)}`
     );
-    writeTo(file, res.buffer, task, written);
+    renameInto(file, tmp, task, written);
     written.push(file);
   }
   const sidecar = join(dir, `${task.id}.json`);
@@ -140,6 +146,20 @@ export async function save(task: Task, dir: string, options: SaveOptions = {}): 
  * One failure signal for the whole save: an fs error (ENOSPC, EACCES) is a `KlingSaveError`
  * like a download error, and a half-written file is removed so `written` stays truthful.
  */
+function renameInto(file: string, tmp: string, task: Task, written: string[]): void {
+  try {
+    renameSync(tmp, file);
+  } catch (cause) {
+    let leftover: { path: string; cause: unknown } | undefined;
+    try {
+      rmSync(tmp, { force: true });
+    } catch (rmCause) {
+      leftover = { path: tmp, cause: rmCause };
+    }
+    throw new KlingSaveError(task, written, file, cause, leftover);
+  }
+}
+
 function writeTo(file: string, data: Buffer | string, task: Task, written: string[]): void {
   // Write to a sibling temp name and rename into place: a failure part-way leaves the temp
   // file to remove, never a truncated target — and never touches a PRE-EXISTING file at
