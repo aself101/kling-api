@@ -17,7 +17,7 @@
  */
 import { OUTPUT_RETENTION_MS, TIMESTAMP_SECONDS_CEILING } from '../config/constants.js';
 import { KlingCodecError } from '../http/errors.js';
-import type { Product, Standard, TaskStatus } from './task.js';
+import type { Product, Standard, Task, TaskStatus } from './task.js';
 
 /** Per-call context a product module passes down; codecs hold no state. */
 export interface ParseContext {
@@ -98,6 +98,66 @@ export function optTimestampMs(v: unknown, path: string, ctx: ParseContext | und
  * already. Anything else throws (§8 V2): an unknown status must never read as
  * `processing`, because `wait()` would poll it forever.
  */
+/**
+ * A record the vendor returned that this library could not parse.
+ *
+ * Surfaced rather than thrown so ONE unrecognised record cannot fail a whole page: the vendor
+ * has changed a status spelling once already (`succeed` → `succeeded`), and a page of 20 tasks
+ * failing because one of them is in a state we have not shipped yet is an outage on work the
+ * caller has already paid for. A single-task read still throws — there, the unparseable record
+ * IS the answer.
+ *
+ * `raw` is the vendor's entry untouched, so a caller can act on a task we cannot model.
+ */
+export interface MalformedRecord {
+  /** Where in the envelope it sat, e.g. `data.result[3]`. */
+  path: string;
+  /** Why it could not be parsed. */
+  reason: string;
+  /** The vendor's record, verbatim. */
+  raw: unknown;
+}
+
+/** A batch read: the tasks that parsed, plus any record that did not. */
+export interface TaskPage {
+  tasks: Task[];
+  malformed: MalformedRecord[];
+}
+
+/**
+ * Map records to tasks, isolating failures per record.
+ *
+ * Note the warning goes to a logger that is `silentLogger` by default — which is exactly why
+ * the malformed records are RETURNED and not merely logged.
+ */
+export function parseRecords<T>(
+  records: unknown[],
+  parseOne: (rec: unknown, path: string) => T,
+  path: string,
+  ctx?: ParseContext
+): { items: T[]; malformed: MalformedRecord[] } {
+  const items: T[] = [];
+  const malformed: MalformedRecord[] = [];
+  let first: unknown;
+  records.forEach((rec, i) => {
+    const at = `${path}[${i}]`;
+    try {
+      items.push(parseOne(rec, at));
+    } catch (err) {
+      if (malformed.length === 0) first = err;
+      const reason = err instanceof Error ? err.message : String(err);
+      ctx?.warn?.(`${at}: ${reason} — dropped from the page; the vendor entry is in malformed[].raw`);
+      malformed.push({ path: at, reason, raw: rec });
+    }
+  });
+  // Partial failure isolates; TOTAL failure throws. A page where not one record parsed is not
+  // "one unknown value" — it is the wrong codec for this envelope, or a wholesale format change,
+  // and swallowing that would turn the cross-codec safety control into an empty list. (Caught by
+  // test/2.0/codecs/controls.test.ts when this function first shipped without the rule.)
+  if (records.length > 0 && items.length === 0) throw first;
+  return { items, malformed };
+}
+
 export function parseStatus(v: unknown, standard: Standard, path: string): TaskStatus {
   switch (v) {
     case 'submitted':

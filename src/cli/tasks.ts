@@ -1,5 +1,6 @@
 /** `kling tasks …` and `kling account …` (spec D15, D5; App. C §6). */
 import type { Command } from 'commander';
+import type { MalformedRecord } from '../codecs/shared.js';
 import type { LegacyProduct, Product, Task, TaskStatus } from '../codecs/task.js';
 import type { ProductType } from '../products/tasks.js';
 import {
@@ -54,7 +55,17 @@ function asLegacyProduct(value: string): LegacyProduct {
   return value as LegacyProduct;
 }
 
-function printTaskList(g: GlobalOptions, tasks: Task[], extra: Record<string, unknown> = {}): void {
+/**
+ * `malformed` is printed, never swallowed: a record the codec could not parse is dropped from
+ * the page so one unknown value cannot fail the whole read, which means the ONLY way an
+ * operator learns a task is missing from their list is if we say so here.
+ */
+function printTaskList(
+  g: GlobalOptions,
+  page: { tasks: Task[]; malformed?: MalformedRecord[] },
+  extra: Record<string, unknown> = {}
+): void {
+  const { tasks, malformed = [] } = page;
   const human =
     tasks.length === 0
       ? '(no tasks)'
@@ -64,7 +75,12 @@ function printTaskList(g: GlobalOptions, tasks: Task[], extra: Record<string, un
               `${t.id}\t${t.status}\t${t.product ?? t.standard}\t${t.outputs.map((o) => o.type).join(',') || '-'}\t${t.billing?.map((b) => `${b.amount} ${b.chargeType}`).join(' ') ?? ''}`
           )
           .join('\n');
-  print(g, human, { tasks, ...extra });
+  const withNote =
+    malformed.length === 0
+      ? human
+      : `${human}\n${malformed.length} record(s) could not be parsed and are NOT listed above:\n` +
+        malformed.map((m) => `  ${m.path}: ${m.reason}`).join('\n');
+  print(g, withNote, { tasks, ...(malformed.length > 0 ? { malformed } : {}), ...extra });
 }
 
 export function registerTasks(program: Command): void {
@@ -77,7 +93,7 @@ export function registerTasks(program: Command): void {
       handler1<string[], GetOptions>(async (ids, o, cmd) => {
         const g = globalsOf(cmd);
         const r = await makeClient(g).tasks.get(ids, { byExternalId: o.byExternalId });
-        printTaskList(g, r.tasks, { missing: r.missing });
+        printTaskList(g, r, { missing: r.missing });
         if (r.missing.length > 0 && !g.json && !g.quiet)
           process.stdout.write(`missing: ${r.missing.join(', ')}\n`);
       })
@@ -122,7 +138,7 @@ export function registerTasks(program: Command): void {
           startTime: o.days !== undefined ? end - o.days * 86_400_000 : undefined,
           endTime: o.days !== undefined ? end : undefined,
         });
-        printTaskList(g, page.tasks, {
+        printTaskList(g, page, {
           count: page.count,
           nextCursor: page.nextCursor,
           hasMore: page.hasMore,

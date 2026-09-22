@@ -419,7 +419,15 @@ app.post('/kling/callback', express.raw({ type: 'application/json' }), (req, res
 });
 ```
 
-**One unrecognised word fails the whole envelope, deliberately.** `parseStatus` throws on a status neither standard defines, and `tasks.list`/`get` have no per-record isolation — so if the vendor adds a status value, a page containing one task in that state fails entirely rather than silently reporting it as something it is not. A guess here would be a wrong answer about a paid task. The cost is that a vendor vocabulary change presents as an outage until the library ships the new value; `task.raw` on a successful parse is the escape hatch, and the vendor docs snapshot in `docs/api/` records the vocabulary the library was built against.
+**An unrecognised value never guesses, but it no longer fails the page.** `parseStatus` still throws on a status neither standard defines — a wrong answer about a paid task is worse than an error, and `wait()` polling an unknown status forever is the specific failure being avoided. What changed is the blast radius: list reads isolate per record, so one task in a state the library has not shipped yet is dropped from the page and reported in **`malformed[]`** (`{ path, reason, raw }`) instead of failing the whole read. The other nineteen tasks come back.
+
+```ts
+const page = await client.tasks.list({ /* … */ });
+page.tasks;       // what parsed
+page.malformed;   // what did not — `raw` is the vendor's record, untouched
+```
+
+`tasks.get`, `tasks.list`, `listByProduct`, `elements.list`/`presets` and `voices.list`/`presets` all return `malformed` alongside their tasks; the CLI prints it under the table. **A single-task read still throws** (`getByProduct`, `recover`) — there the unparseable record *is* the answer. And a page where *nothing* parsed still throws, because that is the wrong codec or a wholesale format change, not one unknown value. Note `malformed` is a return value, not just a log line: the default logger is silent, so a dropped record would otherwise be invisible.
 
 `rawBody` must be the **exact bytes received** — a JSON body parser re-serializes and breaks the signature. The vendor signs with the Standard Webhooks scheme once a Webhook Secret exists (`webhook-id`, `webhook-timestamp`, `webhook-signature` headers; HMAC-SHA256 over `${id}.${timestamp}.${rawBody}`; ±5 min skew; rotation lists supported). Its published test vector passes the library's `verifyWebhookSignature`.
 

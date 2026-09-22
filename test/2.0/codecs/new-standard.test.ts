@@ -38,7 +38,7 @@ describe('new-standard parseCreate — 3.0-turbo t2v create', () => {
 });
 
 describe('new-standard parseTasks — GET /tasks', () => {
-  const tasks = parseTasks(fixture('new/tasks-get.json'));
+  const tasks = parseTasks(fixture('new/tasks-get.json')).tasks;
 
   it('returns one Task per data[] entry with every output type mapped', () => {
     expect(tasks).toHaveLength(1);
@@ -77,7 +77,7 @@ describe('new-standard parseTasks — GET /tasks', () => {
   });
 
   it('an empty data[] (unknown ids — the vendor answers 200 []) → []', () => {
-    expect(parseTasks({ code: 0, message: 'SUCCEED', request_id: 'r', data: [] })).toEqual([]);
+    expect(parseTasks({ code: 0, message: 'SUCCEED', request_id: 'r', data: [] }).tasks).toEqual([]);
   });
 });
 
@@ -102,7 +102,7 @@ describe('new-standard parseCursor — POST /tasks', () => {
 
   it('a page without cursor fields → count from length, hasMore false, no nextCursor', () => {
     const p = parseCursor({ code: 0, data: { result: [] } });
-    expect(p).toEqual({ tasks: [], count: 0, hasMore: false });
+    expect(p).toEqual({ tasks: [], malformed: [], count: 0, hasMore: false });
   });
 });
 
@@ -140,6 +140,32 @@ describe('new-standard guards (V2) and lenient paths', () => {
   it('missing id → KlingCodecError at data.id', () => {
     expect(() => parseTaskRecord({ status: 'submitted' })).toThrow(KlingCodecError);
     expect(() => parseTaskRecord({ status: 'submitted' })).toThrow(/data\.id/);
+  });
+
+  it('ONE unrecognised status does not fail the page: the other records come back, the bad one is in malformed', () => {
+    const warns: string[] = [];
+    const rec = (id: string, status: string) => ({ id, status, create_time: 1781080778802, update_time: 1781080794151 });
+    const page = parseTasks(
+      { code: 0, message: 'SUCCEED', request_id: 'r', data: [rec('a', 'processing'), rec('b', 'quantum-superposition'), rec('c', 'succeeded')] },
+      { warn: (m) => warns.push(m) }
+    );
+    expect(page.tasks.map((t) => t.id)).toEqual(['a', 'c']);
+    expect(page.malformed).toHaveLength(1);
+    expect(page.malformed[0]).toMatchObject({ path: 'data[1]', reason: expect.stringMatching(/unknown task status/) });
+    // the vendor's record survives verbatim, so a caller can act on a task we cannot model
+    expect((page.malformed[0]!.raw as { id: string }).id).toBe('b');
+    expect(warns.some((w) => w.includes('data[1]'))).toBe(true);
+  });
+
+  it('a page where NOTHING parses still throws — that is the wrong codec, not one bad record', () => {
+    // The rule that keeps the cross-codec control in controls.test.ts meaningful.
+    expect(() =>
+      parseTasks({ code: 0, data: [{ task_id: 'legacy-shaped' }, { task_id: 'also-legacy' }] })
+    ).toThrow(KlingCodecError);
+  });
+
+  it('an empty page is not a total failure — [] stays []', () => {
+    expect(parseTasks({ code: 0, data: [] })).toEqual({ tasks: [], malformed: [] });
   });
 
   it('non-envelope input → KlingCodecError at data', () => {

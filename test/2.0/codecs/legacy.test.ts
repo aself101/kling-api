@@ -49,7 +49,7 @@ describe('legacy parseTask — image generation query', () => {
 
 describe('legacy parseList — image generation list', () => {
   it('one Task per data[] entry', () => {
-    const tasks = parseList(fixture('legacy/image-generation-list.json'), { product: 'image-generation' });
+    const tasks = parseList(fixture('legacy/image-generation-list.json'), { product: 'image-generation' }).tasks;
     expect(tasks).toHaveLength(1);
     expect(tasks[0]).toMatchObject({ id: 'string', standard: 'legacy', product: 'image-generation', status: 'succeeded' });
     expect(tasks[0].outputs).toHaveLength(1);
@@ -93,7 +93,7 @@ describe('legacy task_result shapes', () => {
   });
 
   it('elements: element_id (number) → id string, element_name → name, succeed → succeeded, elementType unset, record in raw', () => {
-    const [t] = parseList(fixture('legacy/element-list.json'), { product: 'element' });
+    const [t] = parseList(fixture('legacy/element-list.json'), { product: 'element' }).tasks;
     expect(t.outputs).toHaveLength(1);
     const el = t.outputs[0];
     expect(el).toMatchObject({ type: 'element', id: '0', name: 'string', description: 'string', status: 'succeeded' });
@@ -102,7 +102,7 @@ describe('legacy task_result shapes', () => {
   });
 
   it('voices: voice_id/voice_name/trial_url/owned_by → id/name/url/ownedBy; status succeeded (no vendor field)', () => {
-    const [t] = parseList(fixture('legacy/voice-list.json'), { product: 'voice' });
+    const [t] = parseList(fixture('legacy/voice-list.json'), { product: 'voice' }).tasks;
     expect(t.outputs).toEqual([{ type: 'voice', id: 'string', name: 'string', url: 'string', ownedBy: 'kling', status: 'succeeded' }]);
   });
 

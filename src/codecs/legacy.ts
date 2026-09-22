@@ -44,7 +44,9 @@ import {
   requireString,
   type JsonObject,
   type ParseContext,
+  parseRecords,
 } from './shared.js';
+import type { TaskPage } from './shared.js';
 
 const STANDARD = 'legacy' as const;
 
@@ -71,9 +73,15 @@ export function parseTask(json: unknown, ctx?: ParseContext): Task {
 }
 
 /** `GET /v1/<product>?pageNum&pageSize` → `data[]`. */
-export function parseList(json: unknown, ctx?: ParseContext): Task[] {
+export function parseList(json: unknown, ctx?: ParseContext): TaskPage {
   const data = requireArray(envelopeData(json, STANDARD), STANDARD, 'data');
-  return data.map((rec, i) => parseTaskRecord(requireObject(rec, STANDARD, `data[${i}]`), ctx, `data[${i}]`));
+  const { items, malformed } = parseRecords(
+    data,
+    (rec, at) => parseTaskRecord(requireObject(rec, STANDARD, at), ctx, at),
+    'data',
+    ctx
+  );
+  return { tasks: items, malformed };
 }
 
 // ============================================================================

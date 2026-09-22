@@ -1,6 +1,7 @@
 /** `kling elements|voices|avatar|audio …` (spec D15, D8). */
 import type { Command } from 'commander';
 import type { ElementTag } from '../codecs/params.js';
+import type { MalformedRecord } from '../codecs/shared.js';
 import type { Task } from '../codecs/task.js';
 import {
   collect,
@@ -60,7 +61,10 @@ const common = (o: CreateFlagOptions): CreateFlagOptions => ({
   externalTaskId: o.externalTaskId,
 });
 
-function printTasks(g: GlobalOptions, tasks: Task[]): void {
+/** Accepts a page so unparseable records are reported rather than silently missing from the list. */
+function printTasks(g: GlobalOptions, page: { tasks: Task[]; malformed?: MalformedRecord[] } | Task[]): void {
+  const tasks = Array.isArray(page) ? page : page.tasks;
+  const malformed = Array.isArray(page) ? [] : (page.malformed ?? []);
   const rows = tasks.flatMap((t) =>
     t.outputs.map((o) => ({
       taskId: t.id,
@@ -84,8 +88,12 @@ function printTasks(g: GlobalOptions, tasks: Task[]): void {
             (r) =>
               `${r.taskId}\t${r.status}\t${'id' in r ? `${r.id}\t${r.name}\t${r.ownedBy ?? ''}\t${r.itemStatus}` : r.type}`
           )
-          .join('\n'),
-    { tasks }
+          .join('\n') +
+        (malformed.length === 0
+          ? ''
+          : `\n${malformed.length} record(s) could not be parsed and are NOT listed above:\n` +
+            malformed.map((m) => `  ${m.path}: ${m.reason}`).join('\n')),
+    { tasks, ...(malformed.length > 0 ? { malformed } : {}) }
   );
 }
 

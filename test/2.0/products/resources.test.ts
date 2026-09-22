@@ -49,7 +49,7 @@ describe('elements', () => {
     await elements.list({ pageNum: 2, pageSize: 50 });
     expect(calls[1].url.pathname).toBe('/v1/general/advanced-custom-elements');
     expect(calls[1].url.searchParams.get('pageSize')).toBe('50');
-    const presets = await elements.presets();
+    const presets = (await elements.presets()).tasks;
     expect(calls[2].url.pathname).toBe('/v1/general/advanced-presets-elements');
     expect(presets[0].product).toBe('element');
   });
@@ -79,7 +79,7 @@ describe('voices', () => {
     await voices.list({ pageSize: 1000 });
     expect(calls[1].url.searchParams.get('pageSize')).toBe('1000');
     await expect(voices.list({ pageSize: 1001 })).rejects.toThrow(/1–1000/);
-    const presets = await voices.presets();
+    const presets = (await voices.presets()).tasks;
     expect(calls[2].url.pathname).toBe('/v1/general/presets-voices');
     expect(presets[0].outputs[0]).toMatchObject({ type: 'voice', ownedBy: 'kling' });
     const d = await voices.delete('930801338081615883');

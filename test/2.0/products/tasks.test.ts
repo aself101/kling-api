@@ -208,7 +208,7 @@ describe('tasks.getByProduct / listByProduct / recover', () => {
 
   it('listByProduct → GET /v1/<path>?pageNum&pageSize; bounds enforced before the request', async () => {
     const { tasks, calls } = rig(() => ({ json: fixture('legacy/voice-list.json') }));
-    const list = await tasks.listByProduct('voice', { pageNum: 2, pageSize: 10 });
+    const list = (await tasks.listByProduct('voice', { pageNum: 2, pageSize: 10 })).tasks;
     expect(calls[0].url.pathname).toBe('/v1/general/custom-voices');
     expect(calls[0].url.searchParams.get('pageNum')).toBe('2');
     expect(calls[0].url.searchParams.get('pageSize')).toBe('10');

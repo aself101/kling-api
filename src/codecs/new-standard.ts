@@ -36,13 +36,17 @@ import {
   requireString,
   type JsonObject,
   type ParseContext,
+  parseRecords,
 } from './shared.js';
+import type { MalformedRecord, TaskPage } from './shared.js';
 
 const STANDARD = 'new' as const;
 
 /** Result of `POST /tasks` (cursor query). */
 export interface CursorPage {
   tasks: Task[];
+  /** Records the vendor returned that could not be parsed — one bad record does not fail the page. */
+  malformed: MalformedRecord[];
   count: number;
   nextCursor?: string;
   hasMore: boolean;
@@ -59,20 +63,30 @@ export function parseCreate(json: unknown, ctx?: ParseContext): Task {
 }
 
 /** `GET /tasks?task_ids=…` → `data[]`. The vendor answers `[]` for unknown ids; the caller computes `missing`. */
-export function parseTasks(json: unknown, ctx?: ParseContext): Task[] {
+export function parseTasks(json: unknown, ctx?: ParseContext): TaskPage {
   const data = requireArray(envelopeData(json, STANDARD), STANDARD, 'data');
-  return data.map((rec, i) => parseTaskRecord(requireObject(rec, STANDARD, `data[${i}]`), ctx, `data[${i}]`));
+  const { items, malformed } = parseRecords(
+    data,
+    (rec, at) => parseTaskRecord(requireObject(rec, STANDARD, at), ctx, at),
+    'data',
+    ctx
+  );
+  return { tasks: items, malformed };
 }
 
 /** `POST /tasks` → `data.result[]` with cursor fields. */
 export function parseCursor(json: unknown, ctx?: ParseContext): CursorPage {
   const data = requireObject(envelopeData(json, STANDARD), STANDARD, 'data');
   const result = requireArray(data.result, STANDARD, 'data.result');
-  const tasks = result.map((rec, i) =>
-    parseTaskRecord(requireObject(rec, STANDARD, `data.result[${i}]`), ctx, `data.result[${i}]`)
+  const { items: tasks, malformed } = parseRecords(
+    result,
+    (rec, at) => parseTaskRecord(requireObject(rec, STANDARD, at), ctx, at),
+    'data.result',
+    ctx
   );
   return {
     tasks,
+    malformed,
     count: typeof data.count === 'number' ? data.count : tasks.length,
     nextCursor: optString(data.next_cursor),
     hasMore: data.has_more === true,

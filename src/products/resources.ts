@@ -37,6 +37,7 @@ import {
   validateVoiceCreate,
 } from '../config/validators/resources.js';
 import type { HttpCore } from '../http/core.js';
+import type { TaskPage } from '../codecs/shared.js';
 import { KlingTaskFailedError } from '../http/errors.js';
 import { MediaBudget, resolveMediaSource, type ResolvedMedia } from '../media/source.js';
 import { createTimeoutMs, recordOf, redactList, redactMedia, type ProductApiConfig } from './shared.js';
@@ -106,7 +107,7 @@ abstract class LegacyResourceApi {
     product: Product,
     options: PageOptions,
     maxPageSize: number
-  ): Promise<Task[]> {
+  ): Promise<TaskPage> {
     validatePage(options.pageNum, options.pageSize, maxPageSize);
     const res = await this.core.request({
       method: 'GET',
@@ -181,12 +182,12 @@ export class ElementsApi extends LegacyResourceApi {
   }
 
   /** `GET /v1/general/elements` — the account's custom elements, newest first. */
-  list(options: PageOptions = {}): Promise<Task[]> {
+  list(options: PageOptions = {}): Promise<TaskPage> {
     return this.tasks.listByProduct('element', options);
   }
 
   /** `GET /v1/general/advanced-presets-elements` — the official library. */
-  presets(options: PageOptions = {}): Promise<Task[]> {
+  presets(options: PageOptions = {}): Promise<TaskPage> {
     return this.listAt(RESOURCE_PATHS.elementPresets, 'element', options, 500);
   }
 
@@ -225,7 +226,7 @@ export class VoicesApi extends LegacyResourceApi {
   }
 
   /** `pageSize` 1–1000 on the voice endpoints (App. C §7.10) — enforced in `tasks.listByProduct`. */
-  list(options: PageOptions = {}): Promise<Task[]> {
+  list(options: PageOptions = {}): Promise<TaskPage> {
     return this.tasks.listByProduct('voice', options);
   }
 
@@ -235,7 +236,7 @@ export class VoicesApi extends LegacyResourceApi {
    * NOTE these ids are NOT usable with `audio.tts`, which takes ids from the vendor's separate
    * TTS Voice Guide (`oversea_male1`, …); a presets id there answers `1201 "Voice id not found"`.
    */
-  presets(options: PageOptions = {}): Promise<Task[]> {
+  presets(options: PageOptions = {}): Promise<TaskPage> {
     return this.listAt(RESOURCE_PATHS.voicePresets, 'voice', options, 1000);
   }
 

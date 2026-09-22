@@ -25,6 +25,7 @@ import type {
   WaitOptions,
 } from '../codecs/task.js';
 import { DEFAULT_POLL_INTERVAL, DEFAULT_POLL_TIMEOUT, ERROR_CODES } from '../config/constants.js';
+import type { TaskPage } from '../codecs/shared.js';
 import { TaskReadCoalescer } from '../handlers/coalescer.js';
 import { assertDeadlineMs, assertIntervalMs, poll } from '../handlers/poller.js';
 import type { HttpCore, Logger } from '../http/core.js';
@@ -150,7 +151,7 @@ export class TasksApi {
       const chunk = list.slice(i, i + TASKS_CHUNK_SIZE);
       let page: Task[];
       try {
-        page = await this.#fetchNew(chunk, key, options.signal);
+        page = (await this.#fetchNew(chunk, key, options.signal)).tasks;
       } catch (cause) {
         // The caller's own abort is rethrown unwrapped, as everywhere else on the read path
         // (`HttpCore` attempt, `download`): a cancel is the caller's, not a batch failure, and a
@@ -223,7 +224,7 @@ export class TasksApi {
   }
 
   /** Legacy per-product list (`GET /v1/<product>?pageNum&pageSize`). */
-  async listByProduct(product: LegacyProduct, options: PageOptions = {}): Promise<Task[]> {
+  async listByProduct(product: LegacyProduct, options: PageOptions = {}): Promise<TaskPage> {
     if (standardOf(product) !== 'legacy')
       throw new KlingValidationError(
         'product',
@@ -280,7 +281,7 @@ export class TasksApi {
     options: RequestOptions = {}
   ): Promise<Task | null> {
     if (standardOf(product) === 'new') {
-      const [task] = await this.#fetchNew([externalId], 'external_task_ids', options.signal);
+      const [task] = (await this.#fetchNew([externalId], 'external_task_ids', options.signal)).tasks;
       return task ? { ...task, product } : null;
     }
     try {
@@ -303,14 +304,14 @@ export class TasksApi {
 
   /** One `GET /tasks` request for up to `TASKS_CHUNK_SIZE` ids; the codec's warnings go to the logger. */
   #coalescer(): TaskReadCoalescer {
-    return coalescerFor(this.#core, (ids) => this.#fetchNew(ids, 'task_ids', undefined));
+    return coalescerFor(this.#core, (ids) => this.#fetchNewTasks(ids, 'task_ids', undefined));
   }
 
   async #fetchNew(
     ids: string[],
     key: 'task_ids' | 'external_task_ids',
     signal: AbortSignal | undefined
-  ): Promise<Task[]> {
+  ): Promise<TaskPage> {
     const res = await this.#core.request({
       method: 'GET',
       path: '/tasks',
@@ -319,6 +320,16 @@ export class TasksApi {
       signal,
     });
     return newStd.parseTasks(res.envelope, this.#ctx());
+  }
+
+  /** Just the tasks — for call sites that have nowhere to put `malformed` (the coalescer's fan-out). */
+  async #fetchNewTasks(
+    ids: string[],
+    key: 'task_ids' | 'external_task_ids',
+    signal: AbortSignal | undefined
+  ): Promise<Task[]> {
+    const page = await this.#fetchNew(ids, key, signal);
+    return page.tasks;
   }
 
   /**
