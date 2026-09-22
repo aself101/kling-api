@@ -131,9 +131,29 @@ describe('tasks.get (GET /tasks)', () => {
     expect(err.cause).toBeInstanceOf(KlingAPIError);
   });
 
+  it('an unparseable record is reported as malformed, NOT as missing (ship run #6)', async () => {
+    // Conflating the two would send a consumer hunting for a task that exists and was paid for.
+    const { tasks, warnings } = rig(() =>
+      ok([newRec('good', 'succeeded'), { id: 'weird', status: 'quantum-superposition', create_time: 1, update_time: 2 }])
+    );
+    const r = await tasks.get(['good', 'weird']);
+    expect(r.tasks.map((t) => t.id)).toEqual(['good']);
+    expect(r.missing).toEqual([]);
+    expect(r.malformed).toHaveLength(1);
+    expect(r.malformed[0]).toMatchObject({ reason: expect.stringMatching(/unknown task status/) });
+    expect(warnings.some((w) => w.includes('dropped from the page'))).toBe(true);
+  });
+
+  it('CONTROL — an id the vendor simply does not return is still `missing`, not `malformed`', async () => {
+    const { tasks } = rig(() => ok([newRec('here', 'succeeded')]));
+    const r = await tasks.get(['here', 'nowhere']);
+    expect(r.missing).toEqual(['nowhere']);
+    expect(r.malformed).toEqual([]);
+  });
+
   it('empty input → no request', async () => {
     const { tasks, calls } = rig(() => ok([]));
-    expect(await tasks.get([])).toEqual({ tasks: [], missing: [] });
+    expect(await tasks.get([])).toEqual({ tasks: [], missing: [], malformed: [] });
     expect(calls).toHaveLength(0);
   });
 });

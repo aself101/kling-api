@@ -25,7 +25,7 @@ import type {
   WaitOptions,
 } from '../codecs/task.js';
 import { DEFAULT_POLL_INTERVAL, DEFAULT_POLL_TIMEOUT, ERROR_CODES } from '../config/constants.js';
-import type { TaskPage } from '../codecs/shared.js';
+import type { MalformedRecord, TaskPage } from '../codecs/shared.js';
 import { TaskReadCoalescer } from '../handlers/coalescer.js';
 import { assertDeadlineMs, assertIntervalMs, poll } from '../handlers/poller.js';
 import type { HttpCore, Logger } from '../http/core.js';
@@ -139,19 +139,25 @@ export class TasksApi {
   async get(
     ids: string | string[],
     options: GetOptions = {}
-  ): Promise<{ tasks: Task[]; missing: string[] }> {
+  ): Promise<{ tasks: Task[]; missing: string[]; malformed: MalformedRecord[] }> {
     const list = Array.isArray(ids) ? ids : [ids];
-    if (list.length === 0) return { tasks: [], missing: [] };
+    if (list.length === 0) return { tasks: [], missing: [], malformed: [] };
     const key = options.byExternalId ? 'external_task_ids' : 'task_ids';
     const idOf = (t: Task) => (options.byExternalId ? t.externalId : t.id);
 
     const tasks: Task[] = [];
     const missing: string[] = [];
+    const malformed: MalformedRecord[] = [];
     for (let i = 0; i < list.length; i += TASKS_CHUNK_SIZE) {
       const chunk = list.slice(i, i + TASKS_CHUNK_SIZE);
       let page: Task[];
       try {
-        page = (await this.#fetchNew(chunk, key, options.signal)).tasks;
+        const fetched = await this.#fetchNew(chunk, key, options.signal);
+        page = fetched.tasks;
+        // A record this chunk could not parse is NOT reported as `missing` — the caller asked
+        // for that id and the vendor answered; we simply could not read the answer. Conflating
+        // the two would send a consumer looking for a task that exists.
+        malformed.push(...fetched.malformed);
       } catch (cause) {
         // The caller's own abort is rethrown unwrapped, as everywhere else on the read path
         // (`HttpCore` attempt, `download`): a cancel is the caller's, not a batch failure, and a
@@ -166,9 +172,12 @@ export class TasksApi {
       }
       tasks.push(...page);
       const returned = new Set(page.map(idOf));
-      for (const id of chunk) if (!returned.has(id)) missing.push(id);
+      const unreadable = new Set(
+        malformed.map((m) => (m.raw as Record<string, unknown> | null)?.[options.byExternalId ? 'external_task_id' : 'id'])
+      );
+      for (const id of chunk) if (!returned.has(id) && !unreadable.has(id)) missing.push(id);
     }
-    return { tasks, missing };
+    return { tasks, missing, malformed };
   }
 
   /** New-standard cursor query (`POST /tasks` — a read despite the verb). */
