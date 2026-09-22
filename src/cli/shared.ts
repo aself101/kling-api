@@ -24,13 +24,6 @@ export interface GlobalOptions {
   quiet?: boolean;
 }
 
-export interface CreateOptions {
-  wait?: boolean;
-  download?: boolean;
-  withWatermark?: boolean;
-  callbackUrl?: string;
-  externalTaskId?: string;
-}
 
 /**
  * The credential chain the CLI owns (D2): `--api-key` → `KLING_API_KEY` in the process
@@ -85,6 +78,15 @@ export function makeClient(globals: GlobalOptions): KlingClient {
  */
 export function mediaArg(value: string): MediaSource {
   return /^https:\/\//i.test(value) ? value : { path: resolve(value) };
+}
+
+/** Shared create flags every product command carries. */
+export interface CreateFlagOptions {
+  wait?: boolean;
+  download?: boolean;
+  withWatermark?: boolean;
+  callbackUrl?: string;
+  externalTaskId?: string;
 }
 
 /** Repeatable `id:alias` option into `{ elementId, id }` entries. */
@@ -146,7 +148,7 @@ export async function finishCreate(
   client: KlingClient,
   handle: TaskHandle,
   globals: GlobalOptions,
-  options: CreateOptions
+  options: CreateFlagOptions
 ): Promise<void> {
   const summary = {
     taskId: handle.id,
@@ -303,14 +305,6 @@ export function handler2<A, B, O>(
   return (a, b, options, cmd) => fn(a as A, b as B, options as O, cmd);
 }
 
-/** Shared create flags every product command carries. */
-export interface CreateFlagOptions {
-  wait?: boolean;
-  download?: boolean;
-  withWatermark?: boolean;
-  callbackUrl?: string;
-  externalTaskId?: string;
-}
 
 /** `--multi-shot` / `--no-multi-shot` → tri-state. */
 export const triState = (v: unknown): boolean | undefined =>
