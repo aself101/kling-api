@@ -13,6 +13,7 @@ export {
   DEFAULT_RETRY,
   HttpCore,
   silentLogger,
+  type HttpCoreInternals,
   type HttpRequest,
   type HttpResult,
   type KlingConfig,
@@ -92,6 +93,7 @@ export type {
   OmniElementRef,
   OmniVideoParams,
   TextToVideoParams,
+  TtsParams,
   VideoModel,
   VoiceCreateParams,
 } from './codecs/params.js';

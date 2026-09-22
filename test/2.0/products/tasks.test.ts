@@ -103,6 +103,17 @@ describe('tasks.get (GET /tasks)', () => {
     expect(TASKS_CHUNK_SIZE).toBe(20);
   });
 
+  it("a caller abort mid-chunk is rethrown unwrapped, not wrapped in KlingBatchError (ship run #6)", async () => {
+    const ac = new AbortController();
+    const reason = new Error('caller cancelled');
+    const core = new HttpCore({ apiKey: 'k', retry: { maxAttempts: 1 }, fetch: (async (_u: unknown, init?: RequestInit) => {
+      ac.abort(reason);
+      throw init?.signal?.reason ?? new Error('unreachable');
+    }) as typeof fetch });
+    const tasks = new TasksApi(core, { warn: () => undefined, debug: () => undefined } as never);
+    await expect(tasks.get(['a', 'b'], { signal: ac.signal })).rejects.toBe(reason);
+  });
+
   it('chunk 2 fails → KlingBatchError with chunk-1 tasks, chunk-1 missing, and the 5 never-sent ids as unattempted', async () => {
     const ids = Array.from({ length: 45 }, (_, i) => `t${i}`);
     let n = 0;

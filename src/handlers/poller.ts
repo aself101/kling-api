@@ -19,7 +19,7 @@ import { DEFAULT_POLL_INTERVAL, DEFAULT_POLL_TIMEOUT } from '../config/constants
 import { KlingPollTimeoutError, KlingValidationError } from '../http/errors.js';
 import type { Task } from '../codecs/task.js';
 
-export interface PollOptions<T> {
+export interface PollOptions<T extends Task> {
   /** Completion predicate on the latest value. */
   until: (value: T) => boolean;
   /** Milliseconds between calls, or a function re-evaluated before each sleep. Default 3 000. */

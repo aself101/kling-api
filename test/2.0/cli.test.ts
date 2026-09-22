@@ -5,9 +5,10 @@
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { buildProgram } from '../../src/cli/program.js';
-import { elementArgs, mediaArg, resolveApiKey } from '../../src/cli/shared.js';
+import { KlingValidationError } from '../../src/http/errors.js';
+import { elementArgs, int, mediaArg, num, reportError, resolveApiKey } from '../../src/cli/shared.js';
 
 /** Run the tree with args, capturing commander's help/error output; returns { out, code }. */
 async function run(args: string[]): Promise<{ out: string; code: number | undefined; thrown?: unknown }> {
@@ -104,6 +105,32 @@ describe('kling command tree (D15)', () => {
     const { thrown } = await run(['video', 't2v', '-p', 'x', '-d', 'five', '--api-key', 'k']);
     expect(thrown).toBeInstanceOf(Error);
     expect((thrown as Error).message).toMatch(/duration must be an integer/);
+  });
+});
+
+describe('cli helpers — ship run #6', () => {
+  it('int()/num() reject an empty or whitespace-only value instead of reading it as 0', () => {
+    for (const bad of ['', '   ', '\t']) {
+      expect(() => int('days')(bad)).toThrow(KlingValidationError);
+      expect(() => num('scale')(bad)).toThrow(KlingValidationError);
+    }
+    // control: the parsers still accept what they always did, 0 included.
+    expect(int('days')('0')).toBe(0);
+    expect(int('days')('7')).toBe(7);
+    expect(num('scale')('0.5')).toBe(0.5);
+  });
+
+  it('reportError survives a non-object throw (null/primitive) instead of failing inside the reporter', () => {
+    const err = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      for (const thrown of [null, undefined, 'a string', 42]) {
+        expect(() => reportError(thrown, { json: false } as never)).not.toThrow();
+        expect(() => reportError(thrown, { json: true } as never)).not.toThrow();
+      }
+    } finally {
+      err.mockRestore();
+      process.exitCode = 0;
+    }
   });
 });
 

@@ -68,6 +68,21 @@ describe('KlingClient.tasks and healthCheck (2a₁)', () => {
     expect(await c.healthCheck()).toBe(true);
   });
 
+  it("healthCheck rethrows the CALLER's own abort instead of reporting false (ship run #6)", async () => {
+    // A readiness probe sharing a shutdown signal must not read as "API down".
+    const ac = new AbortController();
+    const hangs = (async (_u: unknown, init?: RequestInit) => {
+      ac.abort(new Error('shutting down'));
+      await new Promise((r) => setTimeout(r, 5));
+      throw init?.signal?.reason ?? new Error('unreachable');
+    }) as typeof fetch;
+    const c = new KlingClient({ apiKey: 'k', fetch: hangs, retry: { maxAttempts: 1 } });
+    await expect(c.healthCheck({ signal: ac.signal })).rejects.toThrow('shutting down');
+    // control: the same failure without a caller abort is still a plain false.
+    const offline = (async () => { throw new TypeError('fetch failed'); }) as typeof fetch;
+    expect(await new KlingClient({ apiKey: 'k', fetch: offline, retry: { maxAttempts: 1 } }).healthCheck()).toBe(false);
+  });
+
   it('healthCheck → false on a 401 and on a network failure (any throw)', async () => {
     const unauthorized = (async () => new Response(JSON.stringify({ code: 1002, message: 'Authentication error' }), { status: 401 })) as typeof fetch;
     expect(await new KlingClient({ apiKey: 'k', fetch: unauthorized, retry: { maxAttempts: 1 } }).healthCheck()).toBe(false);

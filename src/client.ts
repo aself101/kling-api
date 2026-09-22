@@ -113,8 +113,9 @@ export class KlingClient {
 
   /**
    * Cheapest authenticated round trip: `GET /tasks?task_ids=0` (free, new standard).
-   * `true` when it returns a vendor envelope with `code 0`; `false` on ANY throw — an
-   * auth failure, a network failure, a timeout. It answers "can this client reach and
+   * `true` when it returns a vendor envelope with `code 0`; `false` on any throw — an
+   * auth failure, a network failure, a timeout — EXCEPT the caller's own abort, which is
+   * rethrown (a cancelled probe is not a verdict). It answers "can this client reach and
    * authenticate against the API right now", nothing finer; inspect the error from
    * `tasks.get` when you need the reason.
    */
@@ -122,7 +123,10 @@ export class KlingClient {
     try {
       await this.tasks.get(['0'], options);
       return true;
-    } catch {
+    } catch (err) {
+      // The caller's own cancel is not a health verdict: rethrowing keeps D10 uniform across
+      // the surface, and stops a shared shutdown signal reading as "API down" (ship run #6).
+      if (options.signal?.aborted) throw err;
       return false;
     }
   }

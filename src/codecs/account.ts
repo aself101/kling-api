@@ -92,7 +92,7 @@ export interface UnitDeductionEntry extends DeductionEntry {
   unitsAfter?: number;
 }
 
-export interface LedgerPage<T> {
+export interface LedgerPage<T extends DeductionEntry> {
   entries: T[];
   count: number;
   nextCursor?: string;
@@ -117,7 +117,7 @@ function baseEntry(o: JsonObject, path: string, ctx: ParseContext | undefined): 
   return e;
 }
 
-function ledgerPage<T>(json: unknown, mapEntry: (o: JsonObject, path: string) => T): LedgerPage<T> {
+function ledgerPage<T extends DeductionEntry>(json: unknown, mapEntry: (o: JsonObject, path: string) => T): LedgerPage<T> {
   const data = requireObject(envelopeData(json, STANDARD), STANDARD, 'data');
   const result = isObject(data.result) ? data.result : {};
   const detail = result.detail === undefined ? [] : requireArray(result.detail, STANDARD, 'data.result.detail');

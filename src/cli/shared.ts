@@ -98,18 +98,15 @@ export function elementArgs(
   });
 }
 
-export const int = (label: string) => (v: string) => {
-  const n = Number(v);
-  if (!Number.isInteger(n))
-    throw new KlingValidationError(label, `${label} must be an integer, got ${JSON.stringify(v)}`);
-  return n;
+// `Number('')` and `Number('  ')` are 0, which passes both guards — a shell variable that
+// expanded to nothing would submit 0 rather than fail (ship run #5, code-auditor).
+const numeric = (label: string, v: string, kind: 'integer' | 'number'): number => {
+  const ok = v.trim() !== '' && (kind === 'integer' ? Number.isInteger(Number(v)) : Number.isFinite(Number(v)));
+  if (!ok) throw new KlingValidationError(label, `${label} must be ${kind === 'integer' ? 'an integer' : 'a number'}, got ${JSON.stringify(v)}`);
+  return Number(v);
 };
-export const num = (label: string) => (v: string) => {
-  const n = Number(v);
-  if (!Number.isFinite(n))
-    throw new KlingValidationError(label, `${label} must be a number, got ${JSON.stringify(v)}`);
-  return n;
-};
+export const int = (label: string) => (v: string) => numeric(label, v, 'integer');
+export const num = (label: string) => (v: string) => numeric(label, v, 'number');
 export const collect = (v: string, prev: string[] = []) => [...prev, v];
 
 export function print(globals: GlobalOptions, human: string, json: unknown): void {
@@ -215,9 +212,14 @@ export async function finishCreate(
  * write (a `--json` body with `tasks[]` in it) drains through a pipe first — `exit()` on the
  * same tick truncates at the 64 KiB pipe buffer on macOS (ship run #4, measured).
  */
+/** `.cause` off an unknown throw. A primitive or null reaching here must not fail the reporter itself. */
+function causeOf(err: unknown): unknown {
+  return typeof err === 'object' && err !== null ? (err as { cause?: unknown }).cause : undefined;
+}
+
 export function reportError(err: unknown, globals: GlobalOptions): void {
   if (globals.json) {
-    const cause = (err as { cause?: unknown }).cause;
+    const cause = causeOf(err);
     const body =
       err instanceof KlingError
         ? {
@@ -256,9 +258,9 @@ export function reportError(err: unknown, globals: GlobalOptions): void {
     process.stderr.write(`${name}: ${message}${extra ? `\n  ${extra}` : ''}\n`);
     // Walk the cause chain — a KlingBatchError or KlingDownloadError says little without it.
     for (
-      let cause = (err as { cause?: unknown }).cause, depth = 0;
+      let cause = causeOf(err), depth = 0;
       cause instanceof Error && depth < 3;
-      cause = (cause as { cause?: unknown }).cause, depth++
+      cause = causeOf(cause), depth++
     ) {
       const f = fields(cause);
       process.stderr.write(`  caused by ${cause.name}: ${cause.message}${f ? ` (${f})` : ''}\n`);

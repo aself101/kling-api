@@ -15,8 +15,12 @@ export function buildProgram(): Command {
           version?: string;
         }
       ).version ?? version;
-  } catch {
-    // AUDIT-OK(no_empty_catch): a corrupted install should still answer --help; --version reports 0.0.0.
+  } catch (cause) {
+    // AUDIT-OK(no_empty_catch): a corrupted install should still answer --help; --version reports
+    // 0.0.0. The read is still named on stderr so the fallback is diagnosable (ship run #5).
+    process.stderr.write(
+      `[kling:warn] could not read the package manifest for --version: ${cause instanceof Error ? cause.message : String(cause)}\n`
+    );
   }
   const program = new Command('kling')
     .description(

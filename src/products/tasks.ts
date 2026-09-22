@@ -151,6 +151,11 @@ export class TasksApi {
       try {
         page = await this.#fetchNew(chunk, key, options.signal);
       } catch (cause) {
+        // The caller's own abort is rethrown unwrapped, as everywhere else on the read path
+        // (`HttpCore` attempt, `download`): a cancel is the caller's, not a batch failure, and a
+        // consumer matching on `signal.reason` must not have to unwrap a KlingBatchError to see
+        // it (ship run #6 — healthCheck's abort surfaced here as "chunk 1 of 1 failed").
+        if (options.signal?.aborted) throw options.signal.reason ?? cause;
         throw new KlingBatchError(
           `tasks.get: chunk ${i / TASKS_CHUNK_SIZE + 1} of ${Math.ceil(list.length / TASKS_CHUNK_SIZE)} failed`,
           { tasks, missing, unattempted: list.slice(i + TASKS_CHUNK_SIZE) },
